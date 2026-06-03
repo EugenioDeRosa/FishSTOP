@@ -123,6 +123,18 @@ aggiungere modo per integrare altre email nel dataset di addestramento.
 aggiungere selezione per far si di essere comply con tesseract 
 
 
+1. refactor in file py piu piccoli
+2. mettere a posto spf
+3. mettere a posto spf che non mostrano sia allineato che autenticato.
+4. dkim mostra sia allineato che autenticato
+5. dmarc policy da mettere a posto quando è pass o fail
+6. spf non prende bene IPv4
+7. colab integrato per addestrare modello
+8. EDA (exploratory analysis del modello se possibile)
+9. claude.md + claude school
+10. url haus 
+11. aggiungere cose di Cybersecurity SOC Analyst Lab - Analisi e-mail (PhishStrike)
+12.  use an ML model (like Random Forest) to vet the header and URLs, and an NLP model (like BERT) to analyze the body content.
 
-Link extraction + lookalike domain — altissimo valore, copre una delle tecniche di phishing più comuni
-Geolocalizzazione IP — aggiunge contesto immediato alla catena Received senza dipendenze pesanti (ip-api.com è free)
+
+
