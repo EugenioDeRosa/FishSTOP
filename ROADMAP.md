@@ -132,7 +132,7 @@ aggiungere selezione per far si di essere comply con tesseract
 7. colab integrato per addestrare modello
 8. EDA (exploratory analysis del modello se possibile)
 9. claude.md + claude school
-10. url haus 
+10. url haus !!!! 
 11. aggiungere cose di Cybersecurity SOC Analyst Lab - Analisi e-mail (PhishStrike)
 12.  use an ML model (like Random Forest) to vet the header and URLs, and an NLP model (like BERT) to analyze the body content.
 
