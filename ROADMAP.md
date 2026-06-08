@@ -135,6 +135,5 @@ aggiungere selezione per far si di essere comply con tesseract
 10. url haus !!!! 
 11. aggiungere cose di Cybersecurity SOC Analyst Lab - Analisi e-mail (PhishStrike)
 12.  use an ML model (like Random Forest) to vet the header and URLs, and an NLP model (like BERT) to analyze the body content.
-
-
+13. nslookup dei link e controllare se ip è malevolo su VT 
 
