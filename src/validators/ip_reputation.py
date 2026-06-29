@@ -1,5 +1,6 @@
 import json
 from concurrent.futures import ThreadPoolExecutor
+import os
 import dns.resolver
 import requests
 
@@ -192,45 +193,55 @@ def check_domain_reputation(
 # ESEMPIO DI UTILIZZO MASSIVO IN PARALLELO (MULTITHREADING)
 # =====================================================================
 if __name__ == "__main__":
-    import time
-
-    # Configura qui i tuoi dati
-    MY_API_KEY = "IL_TUO_TOKEN_ABUSEIPDB"
-
-    # Lista di test (anche con duplicati per testare le performance)
-    lista_ip = ["8.8.8.8", "1.1.1.1", "142.250.184.238", "9.9.9.9"] * 5
-
-    # 1. Configurazione ottimale del Resolver DNS (bassi timeout)
+    MY_API_KEY = os.getenv("ABUSEIPDB_API_KEY")
+    # 1. Configurazione AGGRESSIVA e ROBUSTA del Resolver DNS
     dns_resolver = dns.resolver.Resolver()
-    dns_resolver.timeout = 1.0  # Singolo tentativo
-    dns_resolver.lifetime = 2.0  # Tempo massimo totale per dominio
+    
+    # Usa DNS pubblici noti per la loro velocità ed evitare blocchi locali
+    dns_resolver.nameservers = ['1.1.1.1', '8.8.8.8', '9.9.9.9'] 
+    
+    # Alziamo leggermente i margini per evitare falsi positivi su domini lenti,
+    # ma poichè andiamo in parallelo, non bloccheremo il programma principale!
+    dns_resolver.timeout = 2.0   # Tempo di attesa per singolo tentativo
+    dns_resolver.lifetime = 4.0  # Tempo massimo totale concesso al dominio
 
-    print(f"Avvio controllo di {len(lista_ip)} IP in parallelo...")
+    # Lista dei domini che ti davano errore
+    lista_domini = [
+        "google.com", 
+        "doclist.bounces.google.com", 
+        "cefla.it"
+    ]
+
+    print(f"Avvio controllo di {len(lista_domini)} domini in parallelo...")
     start_time = time.time()
 
-    risultati = []
+    risultati_domini = []
 
-    # 2. Utilizzo del ThreadPoolExecutor per parallelizzare l'I/O bound
-    # max_workers=20 significa che eseguiamo fino a 20 chiamate HTTP simultanee
-    with ThreadPoolExecutor(max_workers=20) as executor:
-        # Lanciamo tutti i task in background
+    # 2. Esecuzione in parallelo (Asincrona / Non bloccante)
+    # Usando i thread, i timeout di un dominio non rallentano gli altri!
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        # Lanciamo la funzione check_domain_reputation passando l'api_key e il resolver
         futures = [
-            executor.submit(check_ip_reputation, MY_API_KEY, ip)
-            for ip in lista_ip
+            executor.submit(check_domain_reputation, MY_API_KEY, dns_resolver, dominio)
+            for dominio in lista_domini
         ]
 
-        # Raccogliamo i risultati man mano che terminano
+        # Raccogliamo i risultati non appena sono pronti
         for future in futures:
             try:
                 res = future.result()
-                risultati.append(res)
+                risultati_domini.append(res)
             except Exception as e:
-                print(f"Errore imprevisto nel thread: {e}")
+                print(f"Errore imprevisto nel thread DNS: {e}")
 
     end_time = time.time()
 
-    # Mostriamo un estratto dei risultati
-    for r in risultati[:3]:
-        print(f"-> IP: {r['ip']} | Score: {r['abuseConfidenceScore']} | Status: {r['status']}")
+    # Mostriamo i risultati a schermo
+    print("\n--- RISULTATI REPUTAZIONE DOMINI ---")
+    for r in risultati_domini:
+        if r["status"] == "skipped" or r["status"] == "error":
+            print(f"🌐 {r['domain_queried']} ❌ {r['message']}")
+        else:
+            print(f"🌐 {r['domain_queried']} (IP: {r['resolved_ip']}) -> Score: {r['abuseConfidenceScore']}/100 | Status: {r['status']}")
 
-    print(f"\nCompletato! Processati {len(risultati)} IP in {end_time - start_time:.2f} secondi.")
+    print(f"\nCompletato! Processati {len(risultati_domini)} domini in {end_time - start_time:.2f} secondi.")
