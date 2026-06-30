@@ -34,7 +34,13 @@ _resolver.nameservers = [
 _resolver.timeout = 2.0
 _resolver.lifetime = 6.0
 
-
+def _resolve_domain_a(domain: str) -> Optional[str]:
+    """Risolve un dominio usando il resolver di SISTEMA (bypassa dns.resolver/porta 53 custom)."""
+    try:
+        return socket.gethostbyname(domain)
+    except (socket.gaierror, socket.timeout, UnicodeError):
+        return None
+    
 def _extract_address(raw: Optional[str]) -> Optional[str]:
     if not raw:
         return None
@@ -121,25 +127,69 @@ def check_ip_reputation(ip: str) -> dict:
         return {**base, "status": "error", "message": f"Errore AbuseIPDB: {exc}"}
 
 
-def check_domain_reputation(domain: str, resolver: Optional[dns.resolver.Resolver] = None) -> dict:
-    res = resolver or _resolver
+import subprocess
+import re
+import socket
+from typing import Optional
+
+def check_domain_reputation(domain: str, resolver = None) -> dict:
+    """
+    Risolve il dominio emulando NSLOOKUP di sistema.
+    Bypassa completamente i socket interni di Python e le librerie DNS instabili.
+    """
     base = {"domain_queried": domain, "resolved_ip": "", "lookup_method": "error", "abuseConfidenceScore": 0}
     if not domain: return {**base, "status": "skipped", "message": "Nessun dominio"}
     if not ABUSEIPDB_API_KEY: return {**base, "status": "skipped", "message": "API key assente"}
+
+    resolved_ip = None
+
     try:
-        answers = res.resolve(domain, "A")
-        resolved_ip = str(answers[0])
-    except Exception as exc:
-        return {**base, "status": "skipped", "message": f"Dominio non risolvibile: {exc}"}
+        # Eseguiamo letteralmente il comando 'nslookup' come fai da terminale
+        # Impostiamo un timeout di 4 secondi per evitare blocchi infiniti
+        result = subprocess.run(
+            ["nslookup", domain], 
+            stdout=subprocess.PIPE, 
+            stderr=subprocess.PIPE, 
+            text=True, 
+            timeout=4
+        )
+        
+        if result.returncode == 0:
+            output = result.stdout
+            
+            # Estraiamo gli indirizzi IP IPv4 validi dall'output di nslookup.
+            # Saltiamo la prima occorrenza (che di solito è l'IP del server DNS locale stesso)
+            ip_finder = re.findall(r"Address:\s*([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})", output)
+            
+            if len(ip_finder) > 0:
+                # Se l'output ha un'unica stringa 'Address', o prendiamo l'ultimo trovato se mostra prima il server DNS
+                resolved_ip = ip_finder[-1]
+    
+    except subprocess.TimeoutExpired:
+        pass # Se il processo appende, scatta il fallback sotto
+    except Exception:
+        pass
+
+    # Se l'approccio nslookup fallisce per problemi di parsing, facciamo un fallback rapido sul socket standard
+    if not resolved_ip:
+        try:
+            resolved_ip = socket.gethostbyname(domain)
+        except Exception as exc:
+            return {**base, "status": "skipped", "message": f"Nslookup e Socket falliti per il dominio. Errore: {exc}"}
+
+    # Chiamata ad AbuseIPDB con l'IP pulito ottenuto da nslookup
     try:
         data = _abuseipdb_call(resolved_ip)
-        result = _format_abuseipdb(data, resolved_ip)
-        result.update({"domain_queried": domain, "resolved_ip": resolved_ip, "lookup_method": "dns-resolved"})
-        return result
+        result_dict = _format_abuseipdb(data, resolved_ip)
+        result_dict.update({
+            "domain_queried": domain, 
+            "resolved_ip": resolved_ip, 
+            "lookup_method": "system-nslookup-subprocess"
+        })
+        return result_dict
     except Exception as exc:
-        return {**base, "status": "error", "message": f"Errore su IP {resolved_ip}: {exc}"}
-
-
+        return {**base, "status": "error", "message": f"Errore API AbuseIPDB su IP {resolved_ip}: {exc}"}
+    
 def check_file_hash(sha256: str) -> dict:
     base = {"sha256": sha256, "malicious": 0, "suspicious": 0, "total_engines": 0}
     if not sha256: return {**base, "status": "skipped", "message": "No hash"}
