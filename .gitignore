@@ -1,9 +1,9 @@
+.DS_Store
 .env
-models/saved_models/
-data/raw/
-__pycache__/
 .streamlit/secrets.toml
+__pycache__/
+data/custom_dataset.csv
+data/raw/
 data/raw/custom_legitimate/
 data/raw/custom_phishing/
-data/custom_dataset.csv
-.streamlit/secrets.toml
+models/saved_models/

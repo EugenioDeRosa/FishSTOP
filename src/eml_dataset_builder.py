@@ -1,18 +1,20 @@
 """
 eml_dataset_builder.py — Costruisce e gestisce un dataset custom da file .eml
 
-Il testo prodotto replica il preprocessing del dataset Kaggle (xt_combined):
+Il testo prodotto è allineato al preprocessing applicato in train.py a TUTTE
+le fonti (Kaggle, personal_emails, custom_legitimate/custom_phishing):
   - subject + " " + body
-  - lowercase
   - HTML stripping (BeautifulSoup se disponibile, fallback regex)
-  - punteggiatura e caratteri speciali rimossi
+  - lowercase
   - spazi multipli collassati a uno solo
+  (punteggiatura/URL preservati: sono un segnale per il phishing detection)
 
 Il CSV prodotto (data/custom_dataset.csv) viene poi letto da train.py
-come terza fonte dati, concatenata al pool Kaggle + personal_emails.
+come terza fonte dati, concatenata al pool Kaggle + personal_emails, con
+dedup globale per hash prima dello split train/val/test.
 
 Colonne del CSV:
-  xt_combined  — testo preprocessato (allineato al formato Kaggle)
+  xt_combined  — testo preprocessato (allineato alle altre fonti)
   label        — 0 (legittima) | 1 (phishing)
   source_file  — nome del file .eml originale
   text_hash    — SHA-256 del testo per deduplicazione
@@ -83,13 +85,25 @@ def _strip_html(html: str) -> str:
 
 def _preprocess(subject: str, body: str) -> str:
     """
-    Riproduce esattamente il formato xt_combined del dataset Kaggle:
+    Preprocessing MINIMO, allineato a quello applicato in train.py a Kaggle e
+    alle cartelle personal_emails/custom_*: lowercase + collasso spazi soltanto.
+
+    NON rimuove più punteggiatura/URL/simboli: erano un segnale importante per
+    il phishing detection (link sospetti, ripetizioni di simboli, ecc.) e la
+    rimozione era applicata SOLO a questa fonte, creando un preprocessing
+    incoerente tra le diverse fonti del training (il modello rischiava di
+    imparare a distinguere "fonte" invece di "phishing vs legittima").
+
       1. Concatena subject + " " + body
       2. Strip HTML se presente
       3. Lowercase
-      4. Rimuove caratteri non alfanumerici (tranne spazi)
-      5. Collassa spazi multipli
-      6. Strip finale
+      4. Collassa spazi multipli
+      5. Strip finale
+
+    NB: se hai già un data/custom_dataset.csv costruito con la versione
+    precedente di questa funzione, gli hash/testo lì dentro sono stati
+    calcolati con la pulizia "aggressiva" e non sono più coerenti col resto
+    della pipeline — vedi le istruzioni di migrazione per rigenerarlo.
     """
     raw = f"{subject} {body}"
 
@@ -97,7 +111,6 @@ def _preprocess(subject: str, body: str) -> str:
         raw = _strip_html(raw)
 
     raw = raw.lower()
-    raw = re.sub(r"[^a-z0-9\s]", " ", raw)
     raw = re.sub(r"\s+", " ", raw)
     return raw.strip()
 

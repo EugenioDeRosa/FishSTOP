@@ -12,6 +12,8 @@ except ImportError:
     pass  # python-dotenv opzionale — le variabili devono essere già in env
 
 
+import hashlib
+import re
 import pandas as pd
 import numpy as np
 import torch
@@ -60,13 +62,32 @@ class BERTPhishingTrainer:
     # DATA
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        """
+        Normalizzazione UNICA applicata a TUTTE le fonti (Kaggle, personal_emails,
+        custom_legitimate/custom_phishing, custom_dataset.csv) come ultimo step,
+        dopo aver unito tutto in df_combined.
+
+        Prima questa normalizzazione era fatta in modo diverso per ogni fonte
+        (solo .lower() per Kaggle/personal/custom_*, pulizia aggressiva con
+        rimozione di punteggiatura/URL per il CSV custom): il modello rischiava
+        di imparare a riconoscere la "fonte" del dato invece del fenomeno reale.
+        Ora è identica ovunque: lowercase + collasso spazi, punteggiatura e URL
+        preservati perché sono segnali utili per il phishing detection.
+        """
+        return re.sub(r"\s+", " ", str(text).lower()).strip()
+
     def download_and_combine_data(self, personal_eml_folder="data/raw/personal_emails", sample_size=15000):
         """
         Scarica il dataset da Kaggle, normalizza le colonne, esegue il
-        parsing delle email locali e applica il preprocessing del notebook:
-        - dropna
-        - label → int
-        - lowercase only (URL, simboli, punteggiatura preservati come da notebook)
+        parsing delle email locali (personal_emails + custom_legitimate +
+        custom_phishing + custom_dataset.csv) e applica una normalizzazione
+        testuale UNICA a tutte le fonti, seguita da un dedup globale per hash
+        prima dello split train/val/test (evita sia duplicati naturali tra
+        fonti diverse sia il doppio conteggio delle email aggiunte dal tab
+        "Dataset Builder", che vengono salvate sia come .eml su disco sia come
+        riga nel CSV custom).
         """
         print("[*] Interrogazione e recupero del dataset principale da KaggleHub...")
         kaggle_dir = kagglehub.dataset_download("naserabdullahalam/phishing-email-dataset")
@@ -98,37 +119,47 @@ class BERTPhishingTrainer:
         if len(df_kaggle) > sample_size:
             df_kaggle = df_kaggle.sample(n=sample_size, random_state=42).reset_index(drop=True)
 
-        # Preprocessing identico al notebook
         df_kaggle.dropna(subset=['text', 'label'], inplace=True)
         df_kaggle['label'] = df_kaggle['label'].astype(int)
-        df_kaggle['text'] = df_kaggle['text'].apply(lambda x: str(x).lower())
 
         # Integrazione email personali
         parser = EmailParserPipeline()
-        
-        # LOGICA CORRETTA: puntiamo alle sottocartelle dentro data/raw
+
         base_raw_folder = "data/raw"
         personal_legit_folder = os.path.join(base_raw_folder, "custom_legitimate")
         personal_phish_folder = os.path.join(base_raw_folder, "custom_phishing")
-        
+
         df_list = []
-        
-        # 1. Carica le email legittime custom (Label 0)
+
+        # 1. Email personali dell'utente (FIX: il parametro personal_eml_folder
+        #    veniva accettato ma non usato — qualunque cosa ci fosse dentro
+        #    veniva ignorata in silenzio). Assunte LEGITTIME (archivio reale
+        #    dell'utente): se non è il tuo caso, passa label diversa qui sotto.
+        if os.path.exists(personal_eml_folder):
+            df_personal = parser.load_batch_emls(personal_eml_folder)
+            if not df_personal.empty:
+                df_list.append(pd.DataFrame({
+                    'text': df_personal['subject'].fillna('') + ' ' + df_personal['body'].fillna(''),
+                    'label': 0
+                }))
+                print(f"[*] Caricate {len(df_personal)} email personali da '{personal_eml_folder}' (assunte LEGITTIME, Label 0).")
+
+        # 2. Email legittime custom (Label 0) — popolata anche dal Dataset Builder UI
         if os.path.exists(personal_legit_folder):
             df_legit = parser.load_batch_emls(personal_legit_folder)
             if not df_legit.empty:
                 df_list.append(pd.DataFrame({
-                    'text': df_legit['body'].apply(lambda x: str(x).lower()),
+                    'text': df_legit['subject'].fillna('') + ' ' + df_legit['body'].fillna(''),
                     'label': 0
                 }))
                 print(f"[*] Caricate {len(df_legit)} email custom LEGITTIME (Label 0).")
 
-        # 2. Carica le email di phishing custom (Label 1)
+        # 3. Email di phishing custom (Label 1)
         if os.path.exists(personal_phish_folder):
             df_phish = parser.load_batch_emls(personal_phish_folder)
             if not df_phish.empty:
                 df_list.append(pd.DataFrame({
-                    'text': df_phish['body'].apply(lambda x: str(x).lower()),
+                    'text': df_phish['subject'].fillna('') + ' ' + df_phish['body'].fillna(''),
                     'label': 1
                 }))
                 print(f"[*] Caricate {len(df_phish)} email custom di PHISHING (Label 1).")
@@ -140,18 +171,18 @@ class BERTPhishingTrainer:
             df_combined = pd.concat([df_kaggle, df_personal_aligned], ignore_index=True)
             print(f"[*] Integrazione attiva: unione di {len(df_personal_aligned)} email locali totali.")
         else:
-            print("[!] Nessuna email trovata in custom_legitimate o custom_phishing. Si procede solo con Kaggle.")
+            print("[!] Nessuna email trovata in personal_emails/custom_legitimate/custom_phishing. Si procede solo con Kaggle.")
             df_combined = df_kaggle
 
         # ── Integrazione dataset custom (EmlDatasetBuilder) ───────────────
         # Legge data/custom_dataset.csv se esiste — prodotto dal tab
-        # "Dataset Builder" dell'app. Il testo è già preprocessato nel
-        # formato xt_combined, compatibile con il pool Kaggle.
+        # "Dataset Builder" dell'app. NB: le stesse email sono anche salvate
+        # come .eml in custom_legitimate/custom_phishing sopra: l'eventuale
+        # doppione viene rimosso dal dedup globale qualche riga più sotto.
         try:
             custom_builder = EmlDatasetBuilder()
             df_custom = custom_builder.load_for_training()
             if not df_custom.empty:
-                df_custom['text'] = df_custom['text'].apply(lambda x: str(x).lower())
                 df_custom.dropna(subset=['text'], inplace=True)
                 df_combined = pd.concat([df_combined, df_custom], ignore_index=True)
                 s = custom_builder.stats()
@@ -163,6 +194,18 @@ class BERTPhishingTrainer:
                 print("[!] Nessun dato custom trovato in data/custom_dataset.csv — ignorato.")
         except Exception as e:
             print(f"[!] Impossibile caricare il dataset custom: {e} — ignorato.")
+
+        # ── Normalizzazione testuale UNICA per tutte le fonti ──────────────
+        df_combined['text'] = df_combined['text'].apply(self._normalize_text)
+
+        # ── Dedup globale per hash del testo normalizzato ──────────────────
+        before = len(df_combined)
+        text_hash = df_combined['text'].apply(lambda t: hashlib.sha256(t.encode('utf-8')).hexdigest())
+        df_combined = df_combined.loc[~text_hash.duplicated(keep='first')].reset_index(drop=True)
+        removed = before - len(df_combined)
+        if removed:
+            print(f"[*] Dedup globale: rimossi {removed} duplicati su {before} righe totali "
+                  f"(include i doppioni Dataset Builder/CSV descritti sopra).")
 
         print(f"[+] Pool dei dati pronto. Dimensione totale campioni: {len(df_combined)}")
         return df_combined
