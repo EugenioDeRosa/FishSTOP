@@ -24,18 +24,21 @@ class EmailSecurityValidator:
     def check_dmarc(self, from_address: str, spf_result: str, spf_domain: str, dkim_results: list) -> dict:
         return check_dmarc(self.resolver, from_address, spf_result, spf_domain, dkim_results)
 
-    def check_ip_reputation(self, ip: str) -> dict:
-        return check_ip_reputation(ABUSEIPDB_API_KEY, ip)
-
+    
     def check_domain_reputation(self, domain: str) -> dict:
-        return check_domain_reputation(ABUSEIPDB_API_KEY, self.resolver, domain)
-
+        return check_domain_reputation(domain)
     def geolocate_ip(self, ip: str) -> dict:
         return geolocate_ip(ip)
 
     def check_file_hash(self, sha256: str) -> dict:
         return check_file_hash(VIRUSTOTAL_API_KEY, sha256)
+    
+    # 🛠️ CORRETTO: Passa solo l'IP
+    def check_ip_reputation(self, ip: str) -> dict:
+        return check_ip_reputation(ip)
 
+    
+    
     # --- NUOVA FUNZIONE DI OTTIMIZZAZIONE MASSIMA ---
     def pipeline_analisi_veloce(self, sender_ip: str, mail_from: str, domain: str, sha256: str = "") -> dict:
         """
