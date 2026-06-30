@@ -1,13 +1,14 @@
 from concurrent.futures import ThreadPoolExecutor
 import dns.resolver
 
-from src.config import ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY
+from src.config import ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY, URLHAUS_API_KEY
 from .spf            import check_spf
 from .dkim           import check_dkim
 from .dmarc          import check_dmarc
 from .ip_reputation  import check_ip_reputation, check_domain_reputation
 from .geolocation    import geolocate_ip
 from .file_reputation import check_file_hash
+from .urlhaus        import check_urlhaus
 
 class EmailSecurityValidator:
     def __init__(self):
@@ -36,6 +37,9 @@ class EmailSecurityValidator:
     
     def check_ip_reputation(self, ip: str) -> dict:
         return check_ip_reputation(ip)
+
+    def check_urlhaus(self, url: str, host: str = "") -> dict:
+        return check_urlhaus(url, host, URLHAUS_API_KEY)
 
     # 🟢 Anche la pipeline ora ha i suoi 4 spazi di rientro ed è un metodo della classe a tutti gli effetti
     def pipeline_analisi_veloce(self, sender_ip: str, mail_from: str, domain: str, sha256: str = "") -> dict:

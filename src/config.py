@@ -7,7 +7,7 @@ Logica di risoluzione (priorità decrescente):
   3. Stringa vuota come fallback sicuro              (chiave non configurata)
 
 Come usarlo negli altri moduli:
-    from src.config import get_secret, ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY
+    from src.config import get_secret, ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY, URLHAUS_API_KEY
 
 Aggiungere nuove chiavi:
   - Aggiungere la coppia KEY = get_secret("KEY") in fondo al file.
@@ -96,6 +96,7 @@ def print_config_status():
     print(f"  Streamlit secrets OK   : {_is_streamlit_cloud()}")
     print(f"  ABUSEIPDB_API_KEY      : {'✅ presente' if ABUSEIPDB_API_KEY  else '❌ mancante'}")
     print(f"  VIRUSTOTAL_API_KEY     : {'✅ presente' if VIRUSTOTAL_API_KEY else '❌ mancante'}")
+    print(f"  URLHAUS_API_KEY        : {'✅ presente' if URLHAUS_API_KEY else '❌ mancante'}")
     print("=" * 55)
 
 
@@ -106,6 +107,7 @@ def print_config_status():
 
 ABUSEIPDB_API_KEY  = get_secret("ABUSEIPDB_API_KEY")
 VIRUSTOTAL_API_KEY = get_secret("VIRUSTOTAL_API_KEY")
+URLHAUS_API_KEY    = get_secret("URLHAUS_API_KEY")
 # KAGGLE_USERNAME  = get_secret("KAGGLE_USERNAME")   # decommentare se serve
 # KAGGLE_KEY       = get_secret("KAGGLE_KEY")
 

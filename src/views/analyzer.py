@@ -208,6 +208,34 @@ def render():
 
         st.markdown(f"[🔗 Apri report completo su VirusTotal]({vt['permalink']})")
 
+    def _render_urlhaus(rep: dict):
+        status = rep.get("status", "error")
+        message = rep.get("message", "")
+
+        if status == "malicious":
+            st.error(f"URLhaus: SEGNALATO - {message}")
+        elif status == "suspicious":
+            st.warning(f"URLhaus: storico sospetto - {message}")
+        elif status == "not_found":
+            st.success("URLhaus: non presente nel feed malware")
+        elif status == "skipped":
+            st.info(f"URLhaus: {message}")
+            return
+        else:
+            st.warning(f"URLhaus: {message}")
+            return
+
+        if rep.get("threat"):
+            st.caption(f"Threat: `{rep['threat']}`")
+        if rep.get("url_status"):
+            st.caption(f"Stato URLhaus: `{rep['url_status']}`")
+        if rep.get("tags"):
+            st.caption("Tag: " + ", ".join(f"`{tag}`" for tag in rep["tags"][:8]))
+        if rep.get("payloads"):
+            st.caption(f"Elementi collegati nel feed: {len(rep['payloads'])}")
+        if rep.get("permalink"):
+            st.markdown(f"[Apri scheda URLhaus]({rep['permalink']})")
+
     # ── layout ─────────────────────────────────────────────────────────────────
     col_upload, col_results = st.columns([1, 2])
 
@@ -683,6 +711,27 @@ def render():
                             "plain_text":  "📝 testo plain",
                         }
 
+                        urlhaus_results = {}
+                        unique_links = {lnk["url"]: lnk for lnk in links if lnk.get("url")}
+                        with st.spinner("Controllo reputazione link su URLhaus..."):
+                            with ThreadPoolExecutor(max_workers=min(6, max(1, len(unique_links)))) as executor:
+                                futures = {
+                                    executor.submit(
+                                        validator.check_urlhaus,
+                                        lnk["url"],
+                                        lnk.get("host", ""),
+                                    ): url
+                                    for url, lnk in unique_links.items()
+                                }
+                                for future, url in futures.items():
+                                    try:
+                                        urlhaus_results[url] = future.result()
+                                    except Exception as exc:
+                                        urlhaus_results[url] = {
+                                            "status": "error",
+                                            "message": f"Errore lookup URLhaus: {exc}",
+                                        }
+
                         for lnk in links:
                             _ip_badge = " 🔴 **IP diretto**" if lnk["is_ip"] else ""
                             _la_match = any(a["host"] == lnk["host"] for a in lookalike_alerts)
@@ -702,6 +751,11 @@ def render():
                                         f"[🔍 VT](https://www.virustotal.com/gui/domain/{lnk['host']})"
                                         f" · [🌐 WHOIS](https://www.whois.com/whois/{lnk['host']})"
                                     )
+                                urlhaus_rep = urlhaus_results.get(lnk["url"])
+                                if urlhaus_rep:
+                                    expanded = urlhaus_rep.get("status") in ("malicious", "suspicious", "error")
+                                    with st.expander("URLhaus reputation", expanded=expanded):
+                                        _render_urlhaus(urlhaus_rep)
                             st.divider()
 
                 # ── 1e. Corpo testo ────────────────────────────────────────

@@ -2,7 +2,7 @@ import os
 
 import streamlit as st
 
-from src.config import ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY
+from src.config import ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY, URLHAUS_API_KEY
 from src.views.backend import get_model_source
 
 
@@ -18,7 +18,7 @@ def render():
     st.divider()
     st.subheader("API Keys")
 
-    c1, c2 = st.columns(2)
+    c1, c2, c3 = st.columns(3)
     with c1:
         if ABUSEIPDB_API_KEY:
             st.success("AbuseIPDB — configurata")
@@ -29,6 +29,11 @@ def render():
             st.success("VirusTotal — configurata")
         else:
             st.error("VirusTotal — mancante")
+    with c3:
+        if URLHAUS_API_KEY:
+            st.success("URLhaus — configurata")
+        else:
+            st.info("URLhaus — lookup pubblico")
 
     st.markdown(
         "Imposta le chiavi in un file `.env` nella root del progetto "
