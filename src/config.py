@@ -18,16 +18,37 @@ Aggiungere nuove chiavi:
 import os
 
 # ── 1. Carica .env se presente (solo in sviluppo locale) ──────────────────
-# python-dotenv è opzionale: se non installato si usa solo l'ambiente di sistema.
+# python-dotenv è opzionale: se non installato si usa un parser locale minimale.
 # override=False → le variabili già presenti nell'env di sistema hanno precedenza.
+_env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
+
+
+def _load_env_fallback(path: str) -> bool:
+    """Carica KEY=VALUE da .env senza dipendenze esterne, rispettando env già presenti."""
+    if not os.path.exists(path):
+        return False
+
+    with open(path, "r", encoding="utf-8-sig") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip("\"'")
+            if key and not os.environ.get(key):
+                os.environ[key] = value
+
+    return True
+
+
 try:
     from dotenv import load_dotenv
-    # Cerca .env nella root del progetto (due livelli sopra questo file: src/config.py → /)
-    _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
     load_dotenv(dotenv_path=_env_path, override=False)
-    _DOTENV_LOADED = os.path.exists(_env_path)
+    _DOTENV_LOADED = _load_env_fallback(_env_path)
 except ImportError:
-    _DOTENV_LOADED = False
+    _DOTENV_LOADED = _load_env_fallback(_env_path)
 
 
 # ── 2. Rilevamento ambiente ────────────────────────────────────────────────

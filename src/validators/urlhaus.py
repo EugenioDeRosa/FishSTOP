@@ -7,13 +7,14 @@ un host sono presenti nel suo feed di malware URL.
 
 from __future__ import annotations
 
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import requests
 
 
 URLHAUS_URL_ENDPOINT = "https://urlhaus-api.abuse.ch/v1/url/"
 URLHAUS_HOST_ENDPOINT = "https://urlhaus-api.abuse.ch/v1/host/"
+URLHAUS_WEB_BASE = "https://urlhaus.abuse.ch"
 
 _session = requests.Session()
 _session.headers.update({"Accept": "application/json"})
@@ -33,6 +34,12 @@ def _host_from_url(url: str) -> str:
     return (parsed.hostname or "").lower()
 
 
+def _host_permalink(host: str) -> str:
+    if not host:
+        return ""
+    return f"{URLHAUS_WEB_BASE}/host/{quote(host, safe='')}/"
+
+
 def _base(url: str, host: str = "") -> dict:
     return {
         "status": "skipped",
@@ -46,6 +53,7 @@ def _base(url: str, host: str = "") -> dict:
         "payloads": [],
         "source": "",
         "permalink": "",
+        "host_permalink": _host_permalink(host or _host_from_url(url)),
         "message": "",
     }
 
@@ -89,6 +97,8 @@ def _format_host_result(data: dict, base: dict) -> dict:
         "query_status": data.get("query_status", "ok"),
         "source": "host",
         "host": data.get("host") or base["host"],
+        "permalink": _host_permalink(data.get("host") or base["host"]),
+        "host_permalink": _host_permalink(data.get("host") or base["host"]),
         "payloads": urls[:10],
         "message": (
             f"Host presente su URLhaus: {len(urls)} URL note"
@@ -161,6 +171,7 @@ def check_urlhaus(url: str, host: str = "", api_key: str = "") -> dict:
             "status": "not_found",
             "query_status": "no_results",
             "message": "URL/host non presente su URLhaus",
+            "permalink": base.get("host_permalink", ""),
         }
 
     except requests.exceptions.Timeout:

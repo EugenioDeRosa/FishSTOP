@@ -11,7 +11,7 @@ st.set_page_config(
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.views import analyzer, settings, train
+from src.views import analyzer, dataset_sources, settings, train
 
 
 if "page" not in st.session_state:
@@ -24,7 +24,7 @@ def render_home():
     st.divider()
     st.markdown("### Seleziona una sezione")
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     with c1:
         if st.button("⚙️ Settings", use_container_width=True, type="primary"):
             st.session_state.page = "settings"
@@ -36,6 +36,10 @@ def render_home():
     with c3:
         if st.button("🔍 Analyze EML", use_container_width=True, type="primary"):
             st.session_state.page = "analyze"
+            st.rerun()
+    with c4:
+        if st.button("🌐 Public Datasets", use_container_width=True, type="primary"):
+            st.session_state.page = "dataset_sources"
             st.rerun()
 
 
@@ -71,5 +75,7 @@ elif page == "settings":
     settings.render()
 elif page == "train":
     train.render()
+elif page == "dataset_sources":
+    dataset_sources.render()
 elif page == "analyze":
     analyzer.render()
