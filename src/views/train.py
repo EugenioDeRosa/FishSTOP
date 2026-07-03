@@ -1,368 +1,347 @@
+import json
 import os
+import shutil
+import zipfile
+from datetime import datetime, timezone
+from io import BytesIO
+from pathlib import Path
+
+import pandas as pd
 import streamlit as st
 
 from src.eml_dataset_builder import EmlDatasetBuilder
-from src.train import BERTPhishingTrainer
-from src.views.backend import get_model_source
+
+
+PUBLIC_DATASET = Path("data/processed/fishstop_train_balanced.csv")
+PUBLIC_DATASET_FALLBACK = Path("data/processed/fishstop_train.csv")
+COMPANY_MODEL_DIR = Path("models/company_model")
+
+
+def _normalize_training_df(df: pd.DataFrame, source_name: str) -> pd.DataFrame:
+    if df.empty:
+        return pd.DataFrame(columns=["text", "label", "source"])
+
+    text_col = "text" if "text" in df.columns else "xt_combined"
+    if text_col not in df.columns or "label" not in df.columns:
+        return pd.DataFrame(columns=["text", "label", "source"])
+
+    out = df[[text_col, "label"]].rename(columns={text_col: "text"}).copy()
+    out["text"] = out["text"].astype(str)
+    out["label"] = pd.to_numeric(out["label"], errors="coerce")
+    out = out.dropna(subset=["text", "label"])
+    out["label"] = out["label"].astype(int)
+    out = out[out["text"].str.len() > 30]
+    out = out[out["label"].isin([0, 1])]
+    out["source"] = source_name
+    return out[["text", "label", "source"]]
+
+
+def _build_export_df(include_public: bool, include_custom: bool) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+
+    if include_public:
+        public_path = PUBLIC_DATASET if PUBLIC_DATASET.exists() else PUBLIC_DATASET_FALLBACK
+        if public_path.exists():
+            frames.append(_normalize_training_df(pd.read_csv(public_path), public_path.stem))
+
+    if include_custom:
+        custom_df = EmlDatasetBuilder().load_for_training()
+        frames.append(_normalize_training_df(custom_df, "custom_eml"))
+
+    if not frames:
+        return pd.DataFrame(columns=["text", "label", "source"])
+
+    df = pd.concat(frames, ignore_index=True)
+    df = df.drop_duplicates(subset=["text"]).sample(frac=1, random_state=42).reset_index(drop=True)
+    return df
+
+
+def _csv_bytes(df: pd.DataFrame) -> bytes:
+    return df.to_csv(index=False).encode("utf-8")
+
+
+def _colab_notebook_bytes(csv_name: str = "fishstop_train.csv") -> bytes:
+    code = f'''!pip install -q transformers datasets evaluate accelerate scikit-learn pandas matplotlib seaborn
+
+from google.colab import drive
+drive.mount("/content/drive")
+
+import os
+import numpy as np
+import pandas as pd
+from datasets import Dataset
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support, classification_report, confusion_matrix
+from sklearn.model_selection import train_test_split
+from transformers import AutoTokenizer, AutoModelForSequenceClassification
+from transformers import TrainingArguments, Trainer, DataCollatorWithPadding
+
+CSV_PATH = "/content/drive/MyDrive/{csv_name}"
+MODEL_NAME = "bert-base-uncased"
+OUTPUT_DIR = "/content/fishstop_bert_model"
+
+df = pd.read_csv(CSV_PATH)
+df = df[["text", "label"]].dropna()
+df["label"] = df["label"].astype(int)
+df["text"] = df["text"].astype(str)
+df = df[df["text"].str.len() > 30].reset_index(drop=True)
+
+print("Shape:", df.shape)
+print("\\nLabel distribution:")
+print(df["label"].value_counts())
+
+train_val_df, test_df = train_test_split(
+    df,
+    test_size=0.20,
+    random_state=42,
+    stratify=df["label"],
+)
+
+train_df, val_df = train_test_split(
+    train_val_df,
+    test_size=0.125,
+    random_state=42,
+    stratify=train_val_df["label"],
+)
+
+print("Train:", train_df.shape)
+print("Val:", val_df.shape)
+print("Test:", test_df.shape)
+
+train_ds = Dataset.from_pandas(train_df.reset_index(drop=True))
+val_ds = Dataset.from_pandas(val_df.reset_index(drop=True))
+test_ds = Dataset.from_pandas(test_df.reset_index(drop=True))
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
+
+def tokenize(batch):
+    return tokenizer(batch["text"], truncation=True, max_length=512)
+
+train_tok = train_ds.map(tokenize, batched=True).remove_columns(["text"])
+val_tok = val_ds.map(tokenize, batched=True).remove_columns(["text"])
+test_tok = test_ds.map(tokenize, batched=True).remove_columns(["text"])
+
+def compute_metrics(eval_pred):
+    logits, labels = eval_pred
+    preds = np.argmax(logits, axis=1)
+    precision, recall, f1, _ = precision_recall_fscore_support(
+        labels,
+        preds,
+        average="binary",
+        zero_division=0,
+    )
+    acc = accuracy_score(labels, preds)
+    return {{"accuracy": acc, "precision": precision, "recall": recall, "f1": f1}}
+
+training_args = TrainingArguments(
+    output_dir=OUTPUT_DIR,
+    eval_strategy="epoch",
+    save_strategy="epoch",
+    logging_strategy="epoch",
+    learning_rate=2e-5,
+    num_train_epochs=5,
+    weight_decay=0.01,
+    per_device_train_batch_size=16,
+    per_device_eval_batch_size=16,
+    load_best_model_at_end=True,
+    metric_for_best_model="f1",
+    greater_is_better=True,
+    save_total_limit=2,
+    report_to="none",
+)
+
+data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+
+trainer = Trainer(
+    model=model,
+    args=training_args,
+    train_dataset=train_tok,
+    eval_dataset=val_tok,
+    tokenizer=tokenizer,
+    data_collator=data_collator,
+    compute_metrics=compute_metrics,
+)
+
+trainer.train()
+
+metrics = trainer.evaluate(test_tok)
+print("\\nTest metrics:", metrics)
+
+pred_out = trainer.predict(test_tok)
+y_true = pred_out.label_ids
+y_pred = np.argmax(pred_out.predictions, axis=1)
+print("\\nClassification report:")
+print(classification_report(y_true, y_pred, target_names=["Legittima", "Phishing"], zero_division=0))
+print("\\nConfusion matrix:")
+print(confusion_matrix(y_true, y_pred))
+
+trainer.save_model(OUTPUT_DIR)
+tokenizer.save_pretrained(OUTPUT_DIR)
+
+with open(os.path.join(OUTPUT_DIR, "training_meta.json"), "w", encoding="utf-8") as f:
+    import json
+    json.dump({{
+        "trained_at": pd.Timestamp.utcnow().isoformat(),
+        "base_model": MODEL_NAME,
+        "csv_path": CSV_PATH,
+        "n_train": len(train_df),
+        "n_val": len(val_df),
+        "n_test": len(test_df),
+        "metrics": metrics,
+    }}, f, indent=2)
+
+!cd /content && zip -r fishstop_bert_model.zip fishstop_bert_model
+!cp /content/fishstop_bert_model.zip /content/drive/MyDrive/fishstop_bert_model.zip
+
+print("\\nFatto. Scarica da Drive: fishstop_bert_model.zip")
+'''
+
+    notebook = {
+        "cells": [
+            {
+                "cell_type": "markdown",
+                "metadata": {},
+                "source": [
+                    "# FishStop Colab Training\\n",
+                    "Carica `fishstop_train.csv` in `MyDrive`, esegui tutto, poi scarica `fishstop_bert_model.zip` e importalo in FishStop.\\n",
+                ],
+            },
+            {
+                "cell_type": "code",
+                "execution_count": None,
+                "metadata": {},
+                "outputs": [],
+                "source": code.splitlines(keepends=True),
+            },
+        ],
+        "metadata": {
+            "accelerator": "GPU",
+            "kernelspec": {"display_name": "Python 3", "language": "python", "name": "python3"},
+            "language_info": {"name": "python"},
+        },
+        "nbformat": 4,
+        "nbformat_minor": 5,
+    }
+    return json.dumps(notebook, indent=2).encode("utf-8")
+
+
+def _safe_extract_model_zip(uploaded_zip) -> tuple[bool, str]:
+    raw = uploaded_zip.read()
+    with zipfile.ZipFile(BytesIO(raw)) as archive:
+        names = archive.namelist()
+        if not names:
+            return False, "Zip vuoto."
+
+        root_prefix = ""
+        if all(name.startswith("fishstop_bert_model/") for name in names if name.strip()):
+            root_prefix = "fishstop_bert_model/"
+
+        required = {"config.json", "tokenizer_config.json"}
+        archive_basenames = {Path(name.removeprefix(root_prefix)).name for name in names}
+        if not required.issubset(archive_basenames):
+            return False, "Zip non valido: mancano config.json o tokenizer_config.json."
+
+        temp_dir = COMPANY_MODEL_DIR.parent / "_company_model_import"
+        if temp_dir.exists():
+            shutil.rmtree(temp_dir)
+        temp_dir.mkdir(parents=True, exist_ok=True)
+
+        for member in archive.infolist():
+            rel = member.filename.removeprefix(root_prefix)
+            if not rel or rel.endswith("/"):
+                continue
+            dest = (temp_dir / rel).resolve()
+            if temp_dir.resolve() not in dest.parents:
+                shutil.rmtree(temp_dir)
+                return False, "Zip non valido: percorso interno non sicuro."
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with archive.open(member) as src, open(dest, "wb") as dst:
+                shutil.copyfileobj(src, dst)
+
+    if COMPANY_MODEL_DIR.exists():
+        backup = COMPANY_MODEL_DIR.with_name(
+            f"company_model_backup_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
+        )
+        COMPANY_MODEL_DIR.rename(backup)
+    temp_dir.rename(COMPANY_MODEL_DIR)
+    return True, f"Modello importato in {COMPANY_MODEL_DIR}."
 
 
 def render():
-    model_source = get_model_source()
-    st.header("🗃️ Dataset Builder — Aggiungi Email al Pool di Addestramento")
+    st.header("Colab Training")
     st.markdown(
-        "Carica file `.eml` in batch, assegna la label corretta e arricchisci il "
-        "dataset custom che verrà usato al prossimo ciclo di training."
+        "Prepara il CSV, apri il notebook in Google Colab con GPU, poi importa qui lo zip del modello allenato."
     )
 
     builder = EmlDatasetBuilder()
-    stats   = builder.stats()
+    stats = builder.stats()
+    public_path = PUBLIC_DATASET if PUBLIC_DATASET.exists() else PUBLIC_DATASET_FALLBACK
 
-    st.subheader("📊 Stato Dataset Custom")
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Totale campioni", stats["total"])
-    m2.metric("✅ Legittime",    stats["legitimate"])
-    m3.metric("🚨 Phishing",     stats["phishing"])
-    if stats["last_added"]:
-        st.caption(f"Ultimo aggiornamento: {stats['last_added']}")
-    st.divider()
+    st.subheader("1. Dataset")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Custom totali", stats["total"])
+    c2.metric("Legittime custom", stats["legitimate"])
+    c3.metric("Phishing custom", stats["phishing"])
 
-    st.subheader("📥 Carica nuovi file .eml")
-    up_col, reset_col = st.columns([5, 1])
-    with up_col:
-        uploaded_emls = st.file_uploader(
-            "Trascina qui uno o più file .eml",
-            type=["eml"],
-            accept_multiple_files=True,
-            key=f"builder_uploader_{st.session_state.get('builder_uploader_gen', 0)}",
-        )
-    with reset_col:
-        st.markdown("&nbsp;", unsafe_allow_html=True)
-        if st.button("🗑️ Reset", use_container_width=True, type="secondary", help="Svuota l'uploader e azzera tutte le label assegnate"):
-            raw_cache_now = st.session_state.get("builder_raw_cache", {})
-            for fname in list(raw_cache_now.keys()):
-                st.session_state.pop(f"label_{fname}", None)
-            st.session_state.pop("builder_raw_cache", None)
-            st.session_state["builder_uploader_gen"] = (
-                st.session_state.get("builder_uploader_gen", 0) + 1
-            )
-            st.rerun()
-
-    if uploaded_emls:
-        n_uploaded = len(uploaded_emls)
-        st.markdown(f"**{n_uploaded} file caricati.** Assegna la label prima di procedere.")
-
-        cache_key = "builder_raw_cache"
-        if cache_key not in st.session_state:
-            st.session_state[cache_key] = {}
-        raw_cache: dict[str, bytes] = st.session_state[cache_key]
-
-        for upl in uploaded_emls:
-            if upl.name not in raw_cache:
-                raw_cache[upl.name] = upl.read()
-
-        with st.container(border=True):
-            bc1, bc2, bc3 = st.columns([2, 1, 1])
-            with bc1:
-                st.markdown("**🏷️ Assegna la stessa label a tutti i file**")
-                st.caption("Sovrascrive le selezioni individuali sotto.")
-            with bc2:
-                if st.button("✅ Tutti Legittimi", use_container_width=True):
-                    for u in uploaded_emls:
-                        st.session_state[f"label_{u.name}"] = 0
-                    st.rerun()
-            with bc3:
-                if st.button("🚨 Tutti Phishing", use_container_width=True):
-                    for u in uploaded_emls:
-                        st.session_state[f"label_{u.name}"] = 1
-                    st.rerun()
-
-        st.divider()
-
-        import email as _email_mod
-
-        PREVIEW_THRESHOLD = 50
-
-        assignments: dict[str, int] = {}
-
-        def _quick_preview(raw: bytes) -> tuple[str, str, str]:
-            try:
-                msg = _email_mod.message_from_bytes(raw)
-                subject = str(msg.get("Subject") or "—").strip()
-                sender  = str(msg.get("From")    or "—").strip()
-                body_pv = ""
-                for part in msg.walk():
-                    if part.get_content_type() == "text/plain":
-                        pl = part.get_payload(decode=True)
-                        if pl:
-                            lines    = [l.strip() for l in pl.decode("utf-8", errors="ignore").splitlines() if l.strip()]
-                            body_pv  = " ".join(lines[:2])[:160]
-                            break
-                return sender, subject, body_pv
-            except Exception:
-                return "—", "—", ""
-
-        def _render_file_row(upl_name: str, raw: bytes) -> int:
-            sender, subject, body_pv = _quick_preview(raw)
-
-            session_key = f"label_{upl_name}"
-            existing = st.session_state.get(session_key)
-            if existing is None:
-                default_idx = 0
-            elif isinstance(existing, tuple):
-                default_idx = existing[1]
-            else:
-                default_idx = int(existing)
-
-            with st.container(border=True):
-                c1, c2 = st.columns([3, 1])
-                with c1:
-                    st.markdown(f"**📧 {upl_name}**")
-                    st.caption(f"From: {sender}")
-                    st.caption(f"Subject: {subject}")
-                    if body_pv:
-                        st.caption(f"Body: {body_pv}…")
-                with c2:
-                    label_choice = st.radio(
-                        "Label",
-                        options=[("✅ Legittima", 0), ("🚨 Phishing", 1)],
-                        format_func=lambda x: x[0],
-                        key=session_key,
-                        index=default_idx,
-                    )
-            return label_choice[1]
-
-        if n_uploaded <= PREVIEW_THRESHOLD:
-            for upl in uploaded_emls:
-                assignments[upl.name] = _render_file_row(upl.name, raw_cache[upl.name])
-        else:
-            st.info(
-                f"ℹ️ {n_uploaded} file caricati. "
-                "L'anteprima dettagliata è collassata per migliorare le prestazioni. "
-                "Usa i bottoni **Tutti Legittimi / Tutti Phishing** per assegnare la label in blocco."
-            )
-            with st.expander(f"📋 Mostra anteprima di tutti i {n_uploaded} file", expanded=False):
-                for upl in uploaded_emls:
-                    assignments[upl.name] = _render_file_row(upl.name, raw_cache[upl.name])
-            for upl in uploaded_emls:
-                if upl.name not in assignments:
-                    val = st.session_state.get(f"label_{upl.name}", 0)
-                    assignments[upl.name] = val[1] if isinstance(val, tuple) else int(val)
-
-        st.divider()
-
-        if st.button("💾 Aggiungi al Dataset", type="primary", use_container_width=True):
-            batch_items = [
-                (raw_cache[upl.name], upl.name, assignments.get(upl.name, 0))
-                for upl in uploaded_emls
-                if upl.name in raw_cache
-            ]
-
-            progress_bar = st.progress(0, text="Avvio processing…")
-            status_placeholder = st.empty()
-
-            def _ui_progress(done: int, total: int) -> None:
-                pct  = int(done / total * 100)
-                progress_bar.progress(pct, text=f"Processing… {done}/{total}")
-
-            results = builder.add_batch(batch_items, progress_callback=_ui_progress)
-
-            progress_bar.progress(100, text="Completato ✅")
-
-            added = skipped = errors = 0
-            error_lines: list[str] = []
-
-            for res in results:
-                lbl       = assignments.get(res.get("message", "").split("'")[1] if "'" in res.get("message","") else "", 1)
-                label_str = "Phishing 🚨" if lbl == 1 else "Legittima ✅"
-                if res["status"] == "added":
-                    added += 1
-                elif res["status"] == "duplicate":
-                    skipped += 1
-                else:
-                    errors += 1
-                    error_lines.append(res["message"])
-
-            st.success(f"✅ **{added} aggiunte** | ⚠️ {skipped} duplicate | ❌ {errors} errori")
-            if error_lines:
-                with st.expander(f"❌ Dettaglio {errors} errori"):
-                    for line in error_lines:
-                        st.caption(line)
-
-            new_stats = builder.stats()
-            st.info(
-                f"📊 Dataset: **{new_stats['total']} campioni totali** "
-                f"({new_stats['legitimate']} legittime, {new_stats['phishing']} phishing)"
-            )
-
-            st.session_state.pop(cache_key, None)
-            for upl in uploaded_emls:
-                st.session_state.pop(f"label_{upl.name}", None)
-
-            st.rerun()
-
-    st.divider()
-    st.subheader("📋 Campioni nel Dataset Custom")
-    df_view = builder.load_df()
-
-    if df_view.empty:
-        st.info("Il dataset è vuoto. Carica dei file .eml per iniziare.")
+    include_public = st.checkbox(
+        "Includi dataset pubblico bilanciato",
+        value=public_path.exists(),
+        disabled=not public_path.exists(),
+    )
+    if public_path.exists():
+        st.caption(f"Dataset pubblico trovato: `{public_path}`")
     else:
-        filter_label = st.selectbox(
-            "Filtra per label",
-            options=["Tutti", "✅ Legittime (0)", "🚨 Phishing (1)"],
+        st.caption("Dataset pubblico non trovato. Puoi crearlo dalla sezione Public Datasets.")
+
+    include_custom = st.checkbox("Includi dataset custom EML", value=stats["total"] > 0)
+    export_df = _build_export_df(include_public=include_public, include_custom=include_custom)
+
+    if export_df.empty:
+        st.warning("Nessun dato disponibile per esportare il training CSV.")
+    else:
+        d1, d2, d3 = st.columns(3)
+        d1.metric("Righe export", len(export_df))
+        d2.metric("Legittime", int((export_df["label"] == 0).sum()))
+        d3.metric("Phishing", int((export_df["label"] == 1).sum()))
+
+        st.download_button(
+            "Scarica fishstop_train.csv",
+            data=_csv_bytes(export_df),
+            file_name="fishstop_train.csv",
+            mime="text/csv",
+            use_container_width=True,
         )
-        if filter_label == "✅ Legittime (0)":
-            df_view = df_view[df_view["label"] == 0]
-        elif filter_label == "🚨 Phishing (1)":
-            df_view = df_view[df_view["label"] == 1]
 
-        display_df = df_view[["source_file", "label", "added_at", "text_hash", "xt_combined"]].copy()
-        display_df["xt_combined"] = display_df["xt_combined"].str[:80] + "…"
-        display_df["text_hash"]   = display_df["text_hash"].str[:12] + "…"
-        display_df["label"]       = display_df["label"].map({0: "✅ Legittima", 1: "🚨 Phishing"})
-        st.dataframe(display_df, width="stretch", hide_index=True)
-
-        st.markdown("**🗑️ Rimuovi un campione**")
-        hash_to_remove = st.text_input("Incolla il text_hash (12+ caratteri)", placeholder="es. 3a7f2c1b9e04…")
-        if st.button("Rimuovi", type="secondary"):
-            if not hash_to_remove or len(hash_to_remove) < 8:
-                st.warning("Hash troppo corto.")
-            else:
-                full_hashes = df_view["text_hash"].tolist()
-                matches = [h for h in full_hashes if h.startswith(hash_to_remove)]
-                if not matches:
-                    st.error("Nessun campione trovato.")
-                elif len(matches) > 1:
-                    st.error(f"Prefisso ambiguo — {len(matches)} match. Inserisci più caratteri.")
-                else:
-                    if builder.remove_by_hash(matches[0]):
-                        st.success(f"✅ Rimosso (`{matches[0][:12]}…`)")
-                        st.rerun()
-                    else:
-                        st.error("Rimozione fallita.")
-
-        st.markdown("---")
-        st.markdown("**🔴 Reset completo dataset**")
-
-        if not st.session_state.get("confirm_reset_dataset"):
-            if st.button("🔴 Cancella tutto il dataset", type="secondary", use_container_width=True):
-                st.session_state["confirm_reset_dataset"] = True
-                st.rerun()
-        else:
-            st.warning(
-                f"⚠️ Stai per cancellare **{len(df_view)} campioni** e tutti i file .eml nelle cartelle "
-                f"`custom_legitimate` e `custom_phishing`. L'operazione è **irreversibile**."
-            )
-            col_yes, col_no = st.columns(2)
-            with col_yes:
-                if st.button("✅ Sì, cancella tutto", type="primary", use_container_width=True):
-                    import shutil
-                    import csv as _csv
-                    with open(builder.csv_path, "w", newline="", encoding="utf-8") as f:
-                        _csv.DictWriter(f, fieldnames=["xt_combined", "label", "source_file", "text_hash", "added_at"]).writeheader()
-                    for folder in [builder.legit_folder, builder.phishing_folder]:
-                        if os.path.isdir(folder):
-                            shutil.rmtree(folder)
-                        os.makedirs(folder, exist_ok=True)
-                    st.session_state.pop("confirm_reset_dataset", None)
-                    st.success("✅ Dataset resettato.")
-                    st.rerun()
-            with col_no:
-                if st.button("❌ Annulla", use_container_width=True):
-                    st.session_state.pop("confirm_reset_dataset", None)
-                    st.rerun()
+        with st.expander("Anteprima export", expanded=False):
+            st.dataframe(export_df.head(200), hide_index=True, width="stretch")
 
     st.divider()
+    st.subheader("2. Notebook Colab")
+    st.download_button(
+        "Scarica notebook Colab",
+        data=_colab_notebook_bytes(),
+        file_name="fishstop_colab_training.ipynb",
+        mime="application/x-ipynb+json",
+        use_container_width=True,
+    )
+    st.markdown(
+        "Carica `fishstop_train.csv` in Google Drive, cartella `MyDrive`. "
+        "Apri il notebook in Colab, attiva GPU, esegui tutto e scarica `fishstop_bert_model.zip`."
+    )
 
-    # ── Addestra il modello aziendale ──────────────────────────────────
-    st.subheader("🧠 Addestra il Tuo Modello")
-
-    company_path = os.path.join("models", "company_model")
-    meta_path    = os.path.join(company_path, "training_meta.json")
-    last_meta    = None
-    if os.path.exists(meta_path):
-        import json as _json
+    st.divider()
+    st.subheader("3. Import modello")
+    uploaded_model = st.file_uploader("Carica fishstop_bert_model.zip", type=["zip"])
+    if uploaded_model and st.button("Importa modello aziendale", type="primary", use_container_width=True):
         try:
-            with open(meta_path) as _f:
-                last_meta = _json.load(_f)
-        except Exception:
-            pass
+            ok, message = _safe_extract_model_zip(uploaded_model)
+        except zipfile.BadZipFile:
+            ok, message = False, "File zip non valido."
+        except Exception as exc:
+            ok, message = False, f"Import fallito: {exc}"
 
-    if model_source == "company":
-        st.success("✅ **Modello aziendale attivo** — l'app sta usando il tuo modello personalizzato.")
-    else:
-        st.info("ℹ️ **Modello base attivo** (Kaggle-BERT). Addestra il tuo modello per personalizzarlo.")
-
-    if last_meta:
-        st.caption(f"Ultimo training: {last_meta.get('trained_at','—')[:19].replace('T',' ')} UTC — "
-                   f"{last_meta.get('n_train',0)+last_meta.get('n_val',0)+last_meta.get('n_test',0)} campioni totali")
-        m = last_meta.get("metrics") or {}
-        if m:
-            mc1, mc2, mc3, mc4 = st.columns(4)
-            mc1.metric("Accuracy",  f"{m.get('accuracy',0):.2%}")
-            mc2.metric("F1",        f"{m.get('f1',0):.2%}")
-            mc3.metric("Precision", f"{m.get('precision',0):.2%}")
-            mc4.metric("Recall",    f"{m.get('recall',0):.2%}")
-
-    st.markdown("---")
-
-    cur_stats = builder.stats()
-    n_legit    = cur_stats["legitimate"]
-    n_phishing = cur_stats["phishing"]
-    n_total    = cur_stats["total"]
-
-    tc1, tc2 = st.columns(2)
-    with tc1:
-        num_epochs = st.slider("Numero di epoche", min_value=1, max_value=10, value=5)
-    with tc2:
-        st.markdown("**Dataset disponibile**")
-        st.caption(f"✅ Legittime: **{n_legit}** &nbsp;|&nbsp; 🚨 Phishing: **{n_phishing}** &nbsp;|&nbsp; Totale: **{n_total}**")
-        MIN = 20
-        if n_legit < MIN or n_phishing < MIN:
-            st.warning(f"⚠️ Servono almeno **{MIN} campioni per classe**. "
-                       f"Mancano: {max(0, MIN-n_legit)} legittime, {max(0, MIN-n_phishing)} phishing.")
-        elif max(n_legit, n_phishing) / max(min(n_legit, n_phishing), 1) > 5:
-            st.warning("⚠️ Dataset sbilanciato — considera di aggiungere più email della classe minoritaria.")
+        if ok:
+            st.success(message)
+            st.info("Riavvia l'app per caricare il modello aziendale.")
         else:
-            st.success("✅ Dataset pronto per il training.")
-
-    can_train = False
-    if st.button("🚀 Avvia Training", type="primary",
-                 disabled=not can_train,
-                 use_container_width=True):
-        progress_bar = st.progress(0)
-        status_text  = st.empty()
-
-        def _ui_progress(step: str, pct: int):
-            progress_bar.progress(pct)
-            status_text.caption(f"⏳ {step}")
-
-        with st.spinner("Training in corso… non chiudere questa pagina."):
-            try:
-                trainer_obj = BERTPhishingTrainer()
-                result = trainer_obj.finetune_on_custom(
-                    base_model_path="./models/saved_models",
-                    output_dir="./models/company_model",
-                    num_epochs=num_epochs,
-                    progress_callback=_ui_progress,
-                )
-            except Exception as _exc:
-                result = {"status": "error", "message": str(_exc), "metrics": None}
-
-        progress_bar.progress(100)
-        status_text.empty()
-
-        if result["status"] == "ok":
-            st.success(f"✅ **Training completato!** {result['message']}")
-            m = result.get("metrics") or {}
-            if m:
-                rc1, rc2, rc3, rc4 = st.columns(4)
-                rc1.metric("Accuracy",  f"{m.get('accuracy',0):.2%}")
-                rc2.metric("F1",        f"{m.get('f1',0):.2%}")
-                rc3.metric("Precision", f"{m.get('precision',0):.2%}")
-                rc4.metric("Recall",    f"{m.get('recall',0):.2%}")
-            st.info("🔄 Riavvia l'app (`streamlit run`) per caricare il nuovo modello aziendale.")
-        elif result["status"] == "insufficient_data":
-            st.warning(f"⚠️ {result['message']}")
-        else:
-            st.error(f"❌ Errore durante il training: {result['message']}")
+            st.error(message)

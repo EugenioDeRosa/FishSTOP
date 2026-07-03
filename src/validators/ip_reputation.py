@@ -1,6 +1,7 @@
 import re
 import json
 import socket
+import ipaddress
 import urllib.request
 import urllib.parse
 import urllib.error
@@ -119,6 +120,11 @@ def _format_vt_file(data: dict, base: dict) -> dict:
 def check_ip_reputation(ip: str) -> dict:
     base = {"ip": ip, "abuseConfidenceScore": 0, "totalReports": 0, "numDistinctUsers": 0, "isWhitelisted": False}
     if not ip: return {**base, "status": "skipped", "message": "Nessun IP"}
+    try:
+        if not ipaddress.ip_address(ip.strip("[]")).is_global:
+            return {**base, "status": "skipped", "message": "IP non pubblico geolocalizzabile"}
+    except ValueError:
+        return {**base, "status": "skipped", "message": "IP non valido"}
     if not ABUSEIPDB_API_KEY: return {**base, "status": "skipped", "message": "API key assente"}
     try:
         data = _abuseipdb_call(ip)

@@ -45,8 +45,9 @@ def _load_env_fallback(path: str) -> bool:
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(dotenv_path=_env_path, override=False)
-    _DOTENV_LOADED = _load_env_fallback(_env_path)
+    _DOTENV_LOADED = load_dotenv(dotenv_path=_env_path, override=False)
+    if not _DOTENV_LOADED:
+        _DOTENV_LOADED = _load_env_fallback(_env_path)
 except ImportError:
     _DOTENV_LOADED = _load_env_fallback(_env_path)
 

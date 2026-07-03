@@ -12,8 +12,9 @@ Coordina tutti i sotto-moduli dell'analyzer:
   - html_utils       : stripping HTML per body_clean
 """
 
-import re
 import email
+import ipaddress
+import re
 from email import policy
 from typing import Optional
 
@@ -28,6 +29,23 @@ def _extract_domain(email_or_addr: str) -> str:
     """Restituisce la porzione dominio di un indirizzo email, in minuscolo."""
     m = re.search(r"@([\w.\-]+)", email_or_addr or "")
     return m.group(1).lower() if m else ""
+
+
+def _decode_text_part(part) -> str:
+    payload = part.get_payload(decode=True)
+    if not payload:
+        return ""
+    charset = part.get_content_charset() or "utf-8"
+    return payload.decode(charset, errors="replace")
+
+
+def _is_public_ip(value: str | None) -> bool:
+    if not value:
+        return False
+    try:
+        return ipaddress.ip_address(value.strip("[]")).is_global
+    except ValueError:
+        return False
 
 
 class EmlSOCAnalyzer:
@@ -114,6 +132,7 @@ class EmlSOCAnalyzer:
         # ── 7. Authentication-Results ─────────────────────────────────────
         auth_raw     = self._header(msg, "Authentication-Results") or ""
         arc_auth_raw = report["arc_authentication_results"] or ""
+        report["authentication_results_raw"] = auth_raw
         report["auth_results"]     = parse_auth_results(auth_raw)
         report["arc_auth_results"] = parse_auth_results(arc_auth_raw)
 
@@ -134,7 +153,7 @@ class EmlSOCAnalyzer:
             is_attach = "attachment" in disp.lower()
 
             if is_attach or filename:
-                raw_payload = part.get_payload(decode=False)
+                raw_payload = part.get_payload(decode=True)
                 attachments_info.append(analyze_attachment(
                     filename=filename,
                     content_type=ct,
@@ -142,15 +161,13 @@ class EmlSOCAnalyzer:
                     raw_payload=raw_payload,
                 ))
             elif ct == "text/plain":
-                payload = part.get_payload(decode=True)
-                if payload:
-                    charset = part.get_content_charset() or "utf-8"
-                    body_parts.append(payload.decode(charset, errors="ignore"))
+                text = _decode_text_part(part)
+                if text:
+                    body_parts.append(text)
             elif ct == "text/html":
-                payload = part.get_payload(decode=True)
-                if payload:
-                    charset = part.get_content_charset() or "utf-8"
-                    html_parts.append(payload.decode(charset, errors="ignore"))
+                text = _decode_text_part(part)
+                if text:
+                    html_parts.append(text)
 
         raw_body = "\n".join(body_parts) if body_parts else "\n".join(html_parts)
         report["body"]      = raw_body.strip()
@@ -208,25 +225,21 @@ class EmlSOCAnalyzer:
           3. Primo IP pubblico nell'ultimo hop Received
           4. Fallback: sender_ip dall'hop [1]
         """
-        _private = re.compile(
-            r'^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.)'
-        )
-
         all_rcvd_spf = msg.get_all("Received-SPF") or []
         for rcvd_spf in reversed(all_rcvd_spf):
             m = re.search(r"client-ip=([\d.a-fA-F:]+)", str(rcvd_spf), re.IGNORECASE)
-            if m and not _private.match(m.group(1)):
+            if m and _is_public_ip(m.group(1)):
                 return m.group(1)
 
         auth = str(msg.get("Authentication-Results") or "")
         m = re.search(r"smtp\.remote-ip=([\d.]+)", auth, re.IGNORECASE)
-        if m and not _private.match(m.group(1)):
+        if m and _is_public_ip(m.group(1)):
             return m.group(1)
 
         if hops:
             last_hop = hops[-1]
             for ip in (last_hop.get("all_ips") or []):
-                if ip and not _private.match(ip):
+                if _is_public_ip(ip):
                     return ip
 
         return (hops[1].get("sender_ip") if len(hops) > 1 else None)

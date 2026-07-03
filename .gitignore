@@ -7,3 +7,5 @@ data/raw/
 data/raw/custom_legitimate/
 data/raw/custom_phishing/
 models/saved_models/
+models/
+data/training_sources/

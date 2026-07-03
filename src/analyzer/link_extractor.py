@@ -54,7 +54,7 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
             url = "http://" + url
         try:
             parsed = urlparse(url)
-            host   = parsed.netloc.lower().split(":")[0]
+            host = (parsed.hostname or "").lower()
             scheme = parsed.scheme.lower()
         except Exception:
             return

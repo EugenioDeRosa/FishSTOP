@@ -60,6 +60,21 @@ def _extract_valid_ips(text: str) -> List[str]:
     return list(valid_ips.keys())
 
 
+def _is_global_ip(ip: str) -> bool:
+    try:
+        return ipaddress.ip_address(ip.strip("[]")).is_global
+    except ValueError:
+        return False
+
+
+def _preferred_sender_ip(*ip_groups: List[str]) -> Optional[str]:
+    ips = [ip for group in ip_groups for ip in group]
+    for ip in ips:
+        if _is_global_ip(ip):
+            return ip
+    return ips[0] if ips else None
+
+
 # ── Funzioni Principali Esposte ──────────────────────────────────────────────
 
 
@@ -96,10 +111,7 @@ def parse_received_hop(raw: str) -> Dict[str, Any]:
 
         # Cerca prima l'IP dentro la parentesi (comportamento standard MTA)
         parenthesis_ips = _extract_valid_ips(parenthetical)
-        if parenthesis_ips:
-            hop["sender_ip"] = parenthesis_ips[0]
-        else:
-            hop["sender_ip"] = all_ips[0] if all_ips else None
+        hop["sender_ip"] = _preferred_sender_ip(parenthesis_ips, all_ips)
 
         # Identificazione del sender_domain dichiarato (eshewing IP/helo-name)
         parts = [p.strip("()[]:,") for p in parenthetical.split() if p.strip("()[]:,")]
@@ -115,7 +127,7 @@ def parse_received_hop(raw: str) -> Dict[str, Any]:
             hop["sender_domain"] = None
     else:
         hop["from_host"] = None
-        hop["sender_ip"] = all_ips[0] if all_ips else None
+        hop["sender_ip"] = _preferred_sender_ip(all_ips)
         hop["sender_domain"] = None
 
     # Parsing della sezione 'BY'

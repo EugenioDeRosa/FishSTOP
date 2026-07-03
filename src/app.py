@@ -1,5 +1,5 @@
-import os
 import sys
+from pathlib import Path
 
 import streamlit as st
 
@@ -9,12 +9,20 @@ st.set_page_config(
     layout="wide",
 )
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.views import analyzer, dataset_sources, settings, train
 
+PAGES = {
+    "settings": settings.render,
+    "train": train.render,
+    "dataset_sources": dataset_sources.render,
+    "analyze": analyzer.render,
+}
 
-if "page" not in st.session_state:
+if st.session_state.get("page") not in {"home", *PAGES}:
     st.session_state.page = "home"
 
 
@@ -30,7 +38,7 @@ def render_home():
             st.session_state.page = "settings"
             st.rerun()
     with c2:
-        if st.button("🗃️ Train Dataset", use_container_width=True, type="primary"):
+        if st.button("Colab Training", use_container_width=True, type="primary"):
             st.session_state.page = "train"
             st.rerun()
     with c3:
@@ -68,14 +76,7 @@ with st.sidebar:
     st.caption("FishStop — Email Security Platform")
 
 
-page = st.session_state.page
-if page == "home":
+if st.session_state.page == "home":
     render_home()
-elif page == "settings":
-    settings.render()
-elif page == "train":
-    train.render()
-elif page == "dataset_sources":
-    dataset_sources.render()
-elif page == "analyze":
-    analyzer.render()
+else:
+    PAGES[st.session_state.page]()

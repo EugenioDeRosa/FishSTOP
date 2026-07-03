@@ -56,6 +56,8 @@ NAZARIO_URLS = [
 
 ENRON_URL = "https://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz"
 KAGGLE_DATASET = "naserabdullahalam/phishing-email-dataset"
+KAGGLE_PHISHING_LEGITIMATE_DATASET = "kuladeep19/phishing-and-legitimate-emails-dataset"
+KAGGLE_COMBINED_OVERLAP_SOURCES = {"enron", "nazario", "spamassassin"}
 
 
 @dataclass
@@ -190,11 +192,37 @@ def _rows_from_mbox(path: Path, label: int, source: str) -> Iterable[dict]:
 def _row(text: str, label: int, source: str, source_file: str) -> dict:
     return {
         "text": text,
-        "label": int(label),
+        "label": _normalize_label(label),
         "source": source,
         "source_file": source_file,
         "text_hash": text_hash(text) if text else "",
     }
+
+
+def _normalize_dataset_frame(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    if "text" not in df:
+        df["text"] = ""
+    if "label" not in df:
+        df["label"] = 0
+    if "source" not in df:
+        df["source"] = "unknown"
+    if "source_file" not in df:
+        df["source_file"] = ""
+
+    df["text"] = df["text"].fillna("").astype(str)
+    df["label"] = df["label"].apply(_normalize_label).astype(int)
+
+    if "text_hash" not in df:
+        df["text_hash"] = ""
+    df["text_hash"] = df["text_hash"].fillna("").astype(str)
+    missing_hash = df["text_hash"].eq("") & df["text"].ne("")
+    df.loc[missing_hash, "text_hash"] = df.loc[missing_hash, "text"].apply(text_hash)
+
+    df = df[df["text"].str.len() > 0]
+    df = df[df["text_hash"].str.len() > 0]
+    df = df.drop_duplicates(subset=["text_hash"], keep="first")
+    return df[["text", "label", "source", "source_file", "text_hash"]].reset_index(drop=True)
 
 
 def _append_rows(
@@ -222,16 +250,17 @@ def _append_rows(
 def _load_existing(output_csv: Path) -> tuple[list[dict], set[str]]:
     if not output_csv.exists():
         return [], set()
-    df = pd.read_csv(output_csv)
+    df = _normalize_dataset_frame(pd.read_csv(output_csv))
     rows = df.to_dict("records")
-    hashes = set(df.get("text_hash", pd.Series(dtype=str)).dropna().astype(str))
+    hashes = set(df["text_hash"].dropna().astype(str))
     return rows, hashes
 
 
 def _save_rows(rows: list[dict], output_csv: Path) -> None:
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     columns = ["text", "label", "source", "source_file", "text_hash"]
-    pd.DataFrame(rows, columns=columns).to_csv(output_csv, index=False, quoting=csv.QUOTE_MINIMAL)
+    df = _normalize_dataset_frame(pd.DataFrame(rows, columns=columns))
+    df.to_csv(output_csv, index=False, quoting=csv.QUOTE_MINIMAL)
 
 
 def add_spamassassin(
@@ -304,41 +333,81 @@ def add_kaggle(
     progress: Callable[[str], None] | None = None,
     min_chars: int = 40,
 ) -> BuildResult:
+    return add_kaggle_dataset(
+        dataset_slug=KAGGLE_DATASET,
+        source_name="kaggle_phishing_email_dataset",
+        result_source="kaggle",
+        output_csv=output_csv,
+        progress=progress,
+        min_chars=min_chars,
+    )
+
+
+def _normalize_label(value) -> int:
+    try:
+        return 1 if float(value) >= 0.5 else 0
+    except Exception:
+        raw_label = str(value).lower().strip()
+        if any(token in raw_label for token in ["phish", "spam", "malicious", "fraud", "scam"]):
+            return 1
+        return 0
+
+
+def add_kaggle_dataset(
+    dataset_slug: str,
+    source_name: str,
+    result_source: str,
+    output_csv: Path = DEFAULT_OUTPUT_CSV,
+    progress: Callable[[str], None] | None = None,
+    min_chars: int = 40,
+) -> BuildResult:
     _ensure_dirs()
     try:
         import kagglehub
     except ImportError as exc:
-        return BuildResult("kaggle", 0, 0, 0, 1, f"kagglehub non installato: {exc}")
+        return BuildResult(result_source, 0, 0, 0, 1, f"kagglehub non installato: {exc}")
 
     all_rows, hashes = _load_existing(output_csv)
     if progress:
-        progress(f"Download Kaggle: {KAGGLE_DATASET}")
-    dataset_dir = Path(kagglehub.dataset_download(KAGGLE_DATASET))
-    csv_files = list(dataset_dir.glob("*.csv"))
+        progress(f"Download Kaggle: {dataset_slug}")
+    dataset_dir = Path(kagglehub.dataset_download(dataset_slug))
+    csv_files = list(dataset_dir.rglob("*.csv"))
     if not csv_files:
-        return BuildResult("kaggle", len(all_rows), 0, 0, 1, "Nessun CSV trovato nel dataset Kaggle")
+        return BuildResult(result_source, len(all_rows), 0, 0, 1, "Nessun CSV trovato nel dataset Kaggle")
 
-    df = pd.read_csv(csv_files[0])
+    csv_path = max(csv_files, key=lambda path: path.stat().st_size)
+    df = pd.read_csv(csv_path)
     df.columns = [c.lower().strip() for c in df.columns]
     text_col = next((c for c in df.columns if any(k in c for k in ["text", "body", "email"])), None)
     label_col = next((c for c in df.columns if any(k in c for k in ["label", "class", "target"])), None)
     if not text_col or not label_col:
-        return BuildResult("kaggle", len(all_rows), 0, 0, 1, "Colonne text/label non riconosciute nel CSV Kaggle")
+        return BuildResult(result_source, len(all_rows), 0, 0, 1, "Colonne text/label non riconosciute nel CSV Kaggle")
 
     rows = []
     for idx, record in df.iterrows():
         text = normalize_text(str(record[text_col]))
-        try:
-            label = int(record[label_col])
-        except Exception:
-            raw_label = str(record[label_col]).lower()
-            label = 1 if "phish" in raw_label or "spam" in raw_label else 0
-        rows.append(_row(text, label, "kaggle_phishing_email_dataset", f"kaggle#{idx}"))
+        label = _normalize_label(record[label_col])
+        rows.append(_row(text, label, source_name, f"{csv_path.name}#{idx}"))
 
     added_rows, skipped, errors = _append_rows(rows, hashes, min_chars)
     all_rows.extend(added_rows)
     _save_rows(all_rows, output_csv)
-    return BuildResult("kaggle", len(all_rows), len(added_rows), skipped, errors, "Kaggle importato")
+    return BuildResult(result_source, len(all_rows), len(added_rows), skipped, errors, "Kaggle importato")
+
+
+def add_kaggle_phishing_legitimate(
+    output_csv: Path = DEFAULT_OUTPUT_CSV,
+    progress: Callable[[str], None] | None = None,
+    min_chars: int = 40,
+) -> BuildResult:
+    return add_kaggle_dataset(
+        dataset_slug=KAGGLE_PHISHING_LEGITIMATE_DATASET,
+        source_name="kaggle_phishing_and_legitimate_emails",
+        result_source="kaggle_phishing_legitimate",
+        output_csv=output_csv,
+        progress=progress,
+        min_chars=min_chars,
+    )
 
 
 def add_enron_sample(
@@ -385,7 +454,7 @@ def balance_dataset(
     random_state: int = 42,
 ) -> dict:
     output_csv = output_csv or input_csv.with_name(f"{input_csv.stem}_balanced.csv")
-    df = pd.read_csv(input_csv)
+    df = _normalize_dataset_frame(pd.read_csv(input_csv))
     if df.empty:
         output_csv.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(output_csv, index=False)
@@ -393,26 +462,122 @@ def balance_dataset(
 
     counts = df["label"].value_counts()
     target = per_class or int(counts.min())
-    balanced = (
-        df.groupby("label", group_keys=False)
-        .apply(lambda x: x.sample(n=min(len(x), target), random_state=random_state))
-        .sample(frac=1, random_state=random_state)
-        .reset_index(drop=True)
-    )
+    sampled_parts = []
+    for label in [0, 1]:
+        class_rows = df[df["label"] == label]
+        sampled_parts.append(class_rows.sample(n=min(len(class_rows), target), random_state=random_state))
+    balanced = pd.concat(sampled_parts, ignore_index=True)
+    balanced = balanced.sample(frac=1, random_state=random_state).reset_index(drop=True)
+    balanced = _normalize_dataset_frame(balanced)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     balanced.to_csv(output_csv, index=False)
     return {"rows": len(balanced), "per_class": target, "output": str(output_csv)}
 
 
+def build_balanced_public_dataset(
+    selected_sources: list[str],
+    output_csv: Path = PROCESSED_DIR / "fishstop_train_balanced.csv",
+    staging_csv: Path = DEFAULT_OUTPUT_CSV,
+    include_hard_ham: bool = True,
+    max_enron: int = 10000,
+    progress: Callable[[str], None] | None = None,
+) -> dict:
+    _ensure_dirs()
+    if not selected_sources:
+        return {"status": "error", "message": "Seleziona almeno una fonte.", "results": []}
+
+    selected_sources = list(dict.fromkeys(selected_sources))
+    skipped_overlap: list[str] = []
+    if "kaggle" in selected_sources:
+        skipped_overlap = [source for source in selected_sources if source in KAGGLE_COMBINED_OVERLAP_SOURCES]
+        selected_sources = [source for source in selected_sources if source not in KAGGLE_COMBINED_OVERLAP_SOURCES]
+
+    for csv_path in {staging_csv, output_csv}:
+        if csv_path.exists():
+            csv_path.unlink()
+
+    source_steps = {
+        "kaggle": lambda: add_kaggle(output_csv=staging_csv, progress=progress),
+        "kaggle_phishing_legitimate": lambda: add_kaggle_phishing_legitimate(output_csv=staging_csv, progress=progress),
+        "nazario": lambda: add_nazario(output_csv=staging_csv, progress=progress),
+        "spamassassin": lambda: add_spamassassin(output_csv=staging_csv, include_hard_ham=include_hard_ham, progress=progress),
+        "enron": lambda: add_enron_sample(output_csv=staging_csv, max_messages=max_enron, progress=progress),
+    }
+
+    results: list[BuildResult] = []
+    for source in skipped_overlap:
+        results.append(
+            BuildResult(
+                source,
+                0,
+                0,
+                0,
+                0,
+                "Fonte saltata: gia inclusa nel Kaggle Phishing Email Dataset combinato.",
+            )
+        )
+
+    for source in selected_sources:
+        step = source_steps.get(source)
+        if step is None:
+            results.append(BuildResult(source, 0, 0, 0, 1, "Fonte non riconosciuta"))
+            continue
+        if progress:
+            progress(f"Import fonte: {source}")
+        results.append(step())
+
+    stats = dataset_stats(staging_csv)
+    if stats["legitimate"] == 0 or stats["phishing"] == 0:
+        return {
+            "status": "error",
+            "message": "Servono almeno una fonte legittima e una fonte phishing per creare un bilanciato 50/50.",
+            "results": results,
+            "stats": stats,
+        }
+
+    balanced = balance_dataset(staging_csv, output_csv=output_csv)
+    return {
+        "status": "ok",
+        "message": f"Creato dataset bilanciato 50/50 con {balanced['per_class']} email per classe.",
+        "results": results,
+        "stats": dataset_stats(output_csv),
+        "output": balanced["output"],
+    }
+
+
 def dataset_stats(csv_path: Path = DEFAULT_OUTPUT_CSV) -> dict:
     if not csv_path.exists():
-        return {"exists": False, "rows": 0, "legitimate": 0, "phishing": 0, "sources": {}}
-    df = pd.read_csv(csv_path)
+        return {
+            "exists": False,
+            "rows": 0,
+            "legitimate": 0,
+            "phishing": 0,
+            "duplicates": 0,
+            "missing_label": False,
+            "sources": {},
+        }
+    raw_df = pd.read_csv(csv_path)
+    if "label" not in raw_df:
+        duplicate_count = int(raw_df.duplicated(subset=["text_hash"]).sum()) if "text_hash" in raw_df else 0
+        sources = raw_df["source"].value_counts().to_dict() if "source" in raw_df else {}
+        return {
+            "exists": True,
+            "rows": len(raw_df),
+            "legitimate": 0,
+            "phishing": 0,
+            "duplicates": duplicate_count,
+            "missing_label": True,
+            "sources": sources,
+        }
+
+    df = _normalize_dataset_frame(raw_df)
     sources = df["source"].value_counts().to_dict() if "source" in df else {}
     return {
         "exists": True,
         "rows": len(df),
-        "legitimate": int((df["label"] == 0).sum()) if "label" in df else 0,
-        "phishing": int((df["label"] == 1).sum()) if "label" in df else 0,
+        "legitimate": int((df["label"] == 0).sum()),
+        "phishing": int((df["label"] == 1).sum()),
+        "duplicates": max(len(raw_df) - len(df), 0),
+        "missing_label": False,
         "sources": sources,
     }

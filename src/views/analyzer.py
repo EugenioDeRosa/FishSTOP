@@ -202,6 +202,88 @@ def _auth_status_box(title: str, status: str):
         st.info(f"{title}: {status.upper()}")
 
 
+def _status_from_received_spf(raw: str) -> str:
+    if not raw:
+        return "none"
+    match = re.match(r"\s*([a-zA-Z0-9_-]+)", raw)
+    return match.group(1).lower() if match else "unknown"
+
+
+def _auth_from_eml_header(soc: dict, protocol: str) -> dict:
+    protocol = protocol.upper()
+    auth_results = soc.get("auth_results") or {}
+    arc_auth_results = soc.get("arc_auth_results") or {}
+    auth_raw = soc.get("authentication_results_raw") or ""
+    arc_auth_raw = soc.get("arc_authentication_results") or ""
+
+    if auth_results.get(protocol):
+        result = auth_results[protocol]
+        return {
+            "status": result.get("status") or "unknown",
+            "identity": result.get("identity") or "",
+            "raw": result.get("raw") or auth_raw,
+            "source": "Authentication-Results",
+            "source_raw": auth_raw,
+        }
+
+    if arc_auth_results.get(protocol):
+        result = arc_auth_results[protocol]
+        return {
+            "status": result.get("status") or "unknown",
+            "identity": result.get("identity") or "",
+            "raw": result.get("raw") or arc_auth_raw,
+            "source": "ARC-Authentication-Results",
+            "source_raw": arc_auth_raw,
+        }
+
+    if protocol == "SPF" and soc.get("received_spf_raw"):
+        raw = soc.get("received_spf_raw") or ""
+        return {
+            "status": _status_from_received_spf(raw),
+            "identity": "",
+            "raw": raw,
+            "source": "Received-SPF",
+            "source_raw": raw,
+        }
+
+    if protocol == "DKIM" and soc.get("dkim_signature_raw"):
+        raw = soc.get("dkim_signature_raw") or ""
+        return {
+            "status": "present",
+            "identity": "",
+            "raw": raw,
+            "source": "DKIM-Signature",
+            "source_raw": raw,
+        }
+
+    return {
+        "status": "none",
+        "identity": "",
+        "raw": "",
+        "source": "Header EML",
+        "source_raw": "",
+    }
+
+
+def _email_auth_from_eml(soc: dict) -> dict:
+    return {
+        "spf": _auth_from_eml_header(soc, "SPF"),
+        "dkim": _auth_from_eml_header(soc, "DKIM"),
+        "dmarc": _auth_from_eml_header(soc, "DMARC"),
+    }
+
+
+def _render_auth_evidence(result: dict) -> None:
+    st.caption(f"Fonte: `{result.get('source') or '-'}`")
+    if result.get("identity"):
+        st.caption(f"Identita: `{result['identity']}`")
+    raw = result.get("source_raw") or result.get("raw") or ""
+    if raw:
+        st.code(raw, language="text")
+    else:
+        st.caption("Nessuna stringa trovata nell'EML per questo controllo.")
+
+
 def _safe_urlhaus_lookup(validator, url: str, host: str) -> dict:
     lookup = getattr(validator, "check_urlhaus", None)
     if callable(lookup):
@@ -253,20 +335,7 @@ def render():
             links = soc.get("links", [])
             attachments = soc.get("attachments", [])
             lookalike_alerts = soc.get("lookalike_alerts", [])
-
-            with st.spinner("Verifica autenticazione email..."):
-                spf_live = validator.check_spf(
-                    sender_ip=soc.get("injection_sender_ip") or "",
-                    mail_from=soc.get("return_path") or soc.get("from_") or "",
-                    helo_domain=(soc.get("injection_server") or {}).get("from_host") or "",
-                )
-                dkim_live = validator.check_dkim(soc.get("raw_eml_bytes") or b"")
-                dmarc_live = validator.check_dmarc(
-                    from_address=soc.get("from_") or "",
-                    spf_result=spf_live.get("status") or "",
-                    spf_domain=spf_live.get("domain") or "",
-                    dkim_results=dkim_live.get("signatures") or [],
-                )
+            eml_auth = _email_auth_from_eml(soc)
 
             st.subheader("Executive Triage")
             c1, c2, c3, c4, c5 = st.columns(5)
@@ -308,9 +377,9 @@ def render():
                     st.write(f"**Message-ID:** `{soc.get('message_id') or '-'}`")
                 with right:
                     st.markdown("#### Signal Matrix")
-                    _auth_status_box("SPF", spf_live.get("status", "unknown"))
-                    _auth_status_box("DKIM", dkim_live.get("status", "unknown"))
-                    _auth_status_box("DMARC", dmarc_live.get("status", "unknown"))
+                    _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"))
+                    _auth_status_box("DKIM", eml_auth["dkim"].get("status", "unknown"))
+                    _auth_status_box("DMARC", eml_auth["dmarc"].get("status", "unknown"))
                     if lookalike_alerts:
                         st.error(f"Lookalike domains: {len(lookalike_alerts)}")
                     else:
@@ -384,30 +453,14 @@ def render():
                 st.markdown("#### Autenticazione")
                 col_spf, col_dkim, col_dmarc = st.columns(3)
                 with col_spf:
-                    _auth_status_box("SPF", spf_live.get("status", "unknown"))
-                    st.caption(f"Sender IP: `{spf_live.get('sender_ip') or '-'}`")
-                    st.caption(f"Domain: `{spf_live.get('domain') or '-'}`")
-                    if spf_live.get("record"):
-                        with st.expander("Record SPF"):
-                            st.code(spf_live["record"], language="text")
+                    _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"))
+                    _render_auth_evidence(eml_auth["spf"])
                 with col_dkim:
-                    _auth_status_box("DKIM", dkim_live.get("status", "unknown"))
-                    st.caption(dkim_live.get("message", ""))
-                    for sig in dkim_live.get("signatures") or []:
-                        result = sig.get("result")
-                        line = f"d=`{sig.get('d_domain', '?')}` s=`{sig.get('selector', '?')}`"
-                        if result == "pass":
-                            st.success(line)
-                        else:
-                            st.error(line)
+                    _auth_status_box("DKIM", eml_auth["dkim"].get("status", "unknown"))
+                    _render_auth_evidence(eml_auth["dkim"])
                 with col_dmarc:
-                    _auth_status_box("DMARC", dmarc_live.get("status", "unknown"))
-                    st.caption(f"Policy: `{dmarc_live.get('policy', '-')}`")
-                    st.caption(f"SPF aligned: `{dmarc_live.get('spf_aligned')}`")
-                    st.caption(f"DKIM aligned: `{dmarc_live.get('dkim_aligned')}`")
-                    if dmarc_live.get("record"):
-                        with st.expander("Record DMARC"):
-                            st.code(dmarc_live["record"], language="text")
+                    _auth_status_box("DMARC", eml_auth["dmarc"].get("status", "unknown"))
+                    _render_auth_evidence(eml_auth["dmarc"])
 
                 st.markdown("#### Routing")
                 hops = soc.get("received_hops", [])
@@ -423,7 +476,11 @@ def render():
                     title = f"Hop {idx}: {hop.get('from_host') or '?'} -> {hop.get('by_host') or '?'}"
                     with st.expander(title):
                         st.write(f"**Sender IP:** `{hop.get('sender_ip') or '-'}`")
-                        st.write(f"**TLS:** `{hop.get('tls_version') or '-'}` `{hop.get('tls_cipher') or ''}`")
+                        tls_version = hop.get("tls_version")
+                        tls_cipher = hop.get("tls_cipher")
+                        if tls_version or tls_cipher:
+                            tls_label = " ".join(part for part in (tls_version, tls_cipher) if part)
+                            st.write(f"**TLS:** `{tls_label}`")
                         all_ips = hop.get("all_ips") or ([hop["sender_ip"]] if hop.get("sender_ip") else [])
                         for ip in all_ips:
                             with st.container(border=True):

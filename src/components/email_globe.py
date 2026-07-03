@@ -13,7 +13,7 @@ Utilizzo in app.py:
         render_email_globe(soc, validator)
 """
 
-import re
+import ipaddress
 import json
 from concurrent.futures import ThreadPoolExecutor
 
@@ -23,11 +23,11 @@ import streamlit.components.v1 as components
 
 # ── Helpers ────────────────────────────────────────────────────────────────
 
-def _is_private(ip: str) -> bool:
-    return bool(re.match(
-        r"^(10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|127\.|::1$|fc|fd)",
-        ip or "",
-    ))
+def _is_geolocatable_ip(ip: str) -> bool:
+    try:
+        return ipaddress.ip_address((ip or "").strip("[]")).is_global
+    except ValueError:
+        return False
 
 
 def _score_to_risk(score) -> str:
@@ -67,7 +67,8 @@ def _build_globe_html(hops_data: list[dict]) -> str:
 
     # Serializza i dati hop per JavaScript
     js_hops = []
-    for h in hops_data:
+    total_hops = len(hops_data)
+    for route_index, h in enumerate(hops_data):
         coords = h["coords"]
         if coords is None:
             continue
@@ -86,13 +87,27 @@ def _build_globe_html(hops_data: list[dict]) -> str:
             "ip":        hop.get("sender_ip") or "—",
             "fromHost":  hop.get("from_host") or "—",
             "byHost":    hop.get("by_host") or "—",
-            "tls":       hop.get("tls_version") or "—",
+            "tls":       " ".join(part for part in (hop.get("tls_version"), hop.get("tls_cipher")) if part),
+            "hopNumber":  total_hops - route_index,
+            "routeIndex": route_index + 1,
+            "senderDomain": hop.get("sender_domain") or "",
+            "forAddress": hop.get("for_address") or "",
+            "allIps":     hop.get("all_ips") or [],
+            "raw":        hop.get("raw") or "",
             "city":      geo.get("city", ""),
             "country":   geo.get("country", ""),
+            "region":    geo.get("region", ""),
+            "timezone":  geo.get("timezone", ""),
             "isp":       geo.get("isp", ""),
+            "org":       geo.get("org", ""),
+            "asn":       geo.get("asn", ""),
             "isProxy":   bool(geo.get("is_proxy")),
             "isHosting": bool(geo.get("is_hosting")),
             "score":     score,
+            "reports":   rep.get("totalReports", 0) if rep.get("status") == "ok" else None,
+            "usageType": rep.get("usageType", "") if rep.get("status") == "ok" else "",
+            "domain":    rep.get("domain", "") if rep.get("status") == "ok" else "",
+            "lastReport": rep.get("lastReportedAt", "") if rep.get("status") == "ok" else "",
             "roleLabel": {
                 "sender":    "Closest to sender",
                 "injection": "Injection server",
@@ -102,9 +117,25 @@ def _build_globe_html(hops_data: list[dict]) -> str:
         })
 
     # I Received header sono in ordine inverso: [0]=recipient … [-1]=sender.
-    # Invertiamo così gli archi sul globo vanno da sender → recipient,
-    # che è il percorso reale dell'email.
+    # Invertiamo così gli archi sul globo vanno da sender → recipient.
     js_hops = list(reversed(js_hops))
+
+    # Se più hop hanno la stessa città/coordinate, i marker si coprono.
+    # Li separiamo solo graficamente; il tooltip conserva IP e dati reali.
+    coordinate_groups: dict[tuple[float, float], list[int]] = {}
+    for idx, hop in enumerate(js_hops):
+        key = (round(hop["lat"], 3), round(hop["lon"], 3))
+        coordinate_groups.setdefault(key, []).append(idx)
+
+    for indexes in coordinate_groups.values():
+        if len(indexes) == 1:
+            continue
+        spread = 0.45
+        for pos, idx in enumerate(indexes):
+            offset = (pos - (len(indexes) - 1) / 2) * spread
+            js_hops[idx]["lat"] = js_hops[idx]["lat"] + offset * 0.35
+            js_hops[idx]["lon"] = js_hops[idx]["lon"] + offset
+
     hops_json = json.dumps(js_hops)
 
     return f"""<!DOCTYPE html>
@@ -123,11 +154,11 @@ def _build_globe_html(hops_data: list[dict]) -> str:
   canvas:active {{ cursor:grabbing; }}
 
   #tooltip {{
-    position:absolute; pointer-events:none;
+    position:absolute; pointer-events:auto;
     background:rgba(13,17,23,.92); border:1px solid rgba(255,255,255,.12);
     border-radius:8px; padding:10px 14px;
     font-size:12px; color:#e6edf3; line-height:1.7;
-    max-width:240px; display:none; z-index:99;
+    max-width:280px; display:none; z-index:99;
   }}
   #tooltip .tt-title {{
     font-weight:600; font-size:13px;
@@ -175,7 +206,7 @@ def _build_globe_html(hops_data: list[dict]) -> str:
     <div><span style="background:#888780"></span>Sconosciuto</div>
   </div>
   <div id="controls">
-    <button id="btn-play" title="Pausa/riprendi rotazione">&#9646;&#9646;</button>
+    <button id="btn-play" title="Avvia/ferma rotazione">&#9654;</button>
     <button id="btn-fit"  title="Centra sul percorso">&#x2316;</button>
   </div>
 </div>
@@ -185,14 +216,14 @@ def _build_globe_html(hops_data: list[dict]) -> str:
 <script>
 const HOPS = {hops_json};
 
-const W = document.getElementById('globe-wrap').offsetWidth;
 const H = 520;
-const R = Math.min(W, H) / 2 - 20;
 
+const wrap = document.getElementById('globe-wrap');
 const canvas = document.getElementById('globe');
-canvas.width  = W;
-canvas.height = H;
 const ctx = canvas.getContext('2d');
+
+let W = 720;
+let R = Math.min(W, H) / 2 - 20;
 
 const proj = d3.geoOrthographic()
   .scale(R)
@@ -202,11 +233,12 @@ const proj = d3.geoOrthographic()
 const path = d3.geoPath(proj, ctx);
 
 let world = null;
-let rotating = true;
+let rotating = false;
 let rotateSpeed = 0.18;
 let lambda = 0, phi = 0;
 let dragStart = null, dragLambda, dragPhi;
 let hoverIdx = null;
+let pinnedIdx = null;
 let animFrame = null;
 
 const tooltip  = document.getElementById('tooltip');
@@ -215,6 +247,24 @@ const btnFit   = document.getElementById('btn-fit');
 
 function toRad(d) {{ return d * Math.PI / 180; }}
 function toDeg(r) {{ return r * 180 / Math.PI; }}
+
+function resizeGlobe() {{
+  const measured = wrap.getBoundingClientRect().width || wrap.offsetWidth || 720;
+  W = Math.max(320, Math.floor(measured));
+  R = Math.min(W, H) / 2 - 20;
+  canvas.width = W;
+  canvas.height = H;
+  proj.scale(R).translate([W / 2, H / 2]);
+}}
+
+function centerOnRoute() {{
+  if (HOPS.length === 0) return;
+  const avgLon = HOPS.reduce((s,h)=>s+h.lon,0)/HOPS.length;
+  const avgLat = HOPS.reduce((s,h)=>s+h.lat,0)/HOPS.length;
+  lambda = -avgLon;
+  phi    = -avgLat;
+  proj.rotate([lambda, phi]);
+}}
 
 function greatCirclePoints(lon1, lat1, lon2, lat2, n) {{
   const pts = [];
@@ -288,8 +338,8 @@ function drawGlobe() {{
     );
     if (!visible && dotProduct(h.lon, h.lat) < 0) return;
 
-    const isHover = hoverIdx === i;
-    const r = isHover ? 11 : 8;
+    const isHover = hoverIdx === i || pinnedIdx === i;
+    const r = isHover ? 12 : (HOPS.length === 1 ? 10 : 8);
 
     ctx.beginPath();
     ctx.arc(px[0], px[1], r + 3, 0, 2*Math.PI);
@@ -349,6 +399,63 @@ function animate(ts) {{
   animFrame = requestAnimationFrame(animate);
 }}
 
+function escapeHtml(value) {{
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}}
+
+function shortRaw(value) {{
+  const raw = String(value || '').replace(/\\s+/g, ' ').trim();
+  return raw.length > 260 ? raw.slice(0, 260) + '…' : raw;
+}}
+
+function renderHopTooltip(h, px, sticky=false) {{
+  const score = h.score !== null ? h.score + '/100' : 'N/D';
+  const reports = h.reports !== null && h.reports !== undefined ? h.reports : 'N/D';
+  const riskCls = 'risk-' + h.risk;
+  const loc = [h.city, h.region, h.country].filter(Boolean).join(', ') || '—';
+  const tlsRow = h.tls ? `<div class="tt-row"><span class="tt-label">TLS</span><span>${{escapeHtml(h.tls)}}</span></div>` : '';
+  const domainRow = h.senderDomain ? `<div class="tt-row"><span class="tt-label">HELO</span><span>${{escapeHtml(h.senderDomain)}}</span></div>` : '';
+  const forRow = h.forAddress ? `<div class="tt-row"><span class="tt-label">For</span><span>${{escapeHtml(h.forAddress)}}</span></div>` : '';
+  const orgRow = h.org ? `<div class="tt-row"><span class="tt-label">Org</span><span>${{escapeHtml(h.org)}}</span></div>` : '';
+  const asnRow = h.asn ? `<div class="tt-row"><span class="tt-label">ASN</span><span>${{escapeHtml(h.asn)}}</span></div>` : '';
+  const usageRow = h.usageType ? `<div class="tt-row"><span class="tt-label">Uso</span><span>${{escapeHtml(h.usageType)}}</span></div>` : '';
+  const lastRow = h.lastReport ? `<div class="tt-row"><span class="tt-label">Ultima</span><span>${{escapeHtml(h.lastReport)}}</span></div>` : '';
+  const allIps = (h.allIps || []).length ? escapeHtml((h.allIps || []).join(', ')) : '—';
+  const badges = (h.isProxy ? '<span style="color:#E24B4A"> ⚠ Proxy/VPN</span>' : '')
+               + (h.isHosting ? '<span style="color:#EF9F27"> ☁ Datacenter</span>' : '');
+  const rawRow = h.raw ? `<details style="margin-top:6px"><summary style="cursor:pointer;color:#8b949e">Raw Received</summary><div style="font-family:monospace;font-size:11px;line-height:1.45;margin-top:4px">${{escapeHtml(shortRaw(h.raw))}}</div></details>` : '';
+
+  tooltip.innerHTML = `
+    <div class="tt-title">${{sticky ? '[fissato] ' : ''}}${{escapeHtml(h.roleLabel)}} · Hop ${{h.hopNumber}}</div>
+    <div class="tt-row"><span class="tt-label">IP</span><span style="font-family:monospace">${{escapeHtml(h.ip)}}</span></div>
+    <div class="tt-row"><span class="tt-label">From</span><span>${{escapeHtml(h.fromHost)}}</span></div>
+    <div class="tt-row"><span class="tt-label">By</span><span>${{escapeHtml(h.byHost)}}</span></div>
+    ${{domainRow}}
+    ${{forRow}}
+    ${{tlsRow}}
+    <div class="tt-row"><span class="tt-label">Luogo</span><span>${{escapeHtml(loc)}}</span></div>
+    <div class="tt-row"><span class="tt-label">ISP</span><span>${{escapeHtml(h.isp || '—')}}</span></div>
+    ${{orgRow}}
+    ${{asnRow}}
+    ${{usageRow}}
+    <div class="tt-row"><span class="tt-label">Abuse</span><span class="${{riskCls}}">${{escapeHtml(score)}} · ${{escapeHtml(reports)}} report</span></div>
+    ${{lastRow}}
+    <div class="tt-row"><span class="tt-label">Tutti IP</span><span style="font-family:monospace">${{allIps}}</span></div>
+    ${{badges}}
+    ${{rawRow}}
+  `;
+  let tx = px[0] + 16, ty = px[1] - 10;
+  if (tx + 280 > W) tx = px[0] - 280;
+  tooltip.style.left = tx + 'px';
+  tooltip.style.top = ty + 'px';
+  tooltip.style.display = 'block';
+}}
+
 // Drag
 canvas.addEventListener('mousedown', e => {{
   rotating = false;
@@ -377,33 +484,10 @@ window.addEventListener('mousemove', e => {{
       const d = Math.hypot(px[0]-mx, px[1]-my);
       if (d < 14) found = i;
     }});
-    if (found !== hoverIdx) {{
-      hoverIdx = found;
+    hoverIdx = found;
+    if (pinnedIdx === null) {{
       if (found >= 0) {{
-        const h = HOPS[found];
-        const score = h.score !== null ? h.score+'/100' : 'N/D';
-        const riskCls = 'risk-'+h.risk;
-        const loc = [h.city, h.country].filter(Boolean).join(', ') || '—';
-        const badges = (h.isProxy ? '<span style="color:#E24B4A"> ⚠ Proxy/VPN</span>' : '')
-                     + (h.isHosting ? '<span style="color:#EF9F27"> ☁ Datacenter</span>' : '');
-        tooltip.innerHTML = `
-          <div class="tt-title">${{h.roleLabel}}</div>
-          <div class="tt-row"><span class="tt-label">IP</span><span style="font-family:monospace">${{h.ip}}</span></div>
-          <div class="tt-row"><span class="tt-label">From</span><span>${{h.fromHost}}</span></div>
-          <div class="tt-row"><span class="tt-label">By</span><span>${{h.byHost}}</span></div>
-          <div class="tt-row"><span class="tt-label">TLS</span><span>${{h.tls}}</span></div>
-          <div class="tt-row"><span class="tt-label">Luogo</span><span>${{loc}}</span></div>
-          <div class="tt-row"><span class="tt-label">ISP</span><span>${{h.isp||'—'}}</span></div>
-          <div class="tt-row"><span class="tt-label">Abuse</span><span class="${{riskCls}}">${{score}}</span></div>
-          ${{badges}}
-        `;
-        const px = proj([h.lon, h.lat]);
-        const rect2 = canvas.getBoundingClientRect();
-        let tx = px[0] + 16, ty = px[1] - 10;
-        if (tx + 260 > W) tx = px[0] - 260;
-        tooltip.style.left = tx+'px';
-        tooltip.style.top  = ty+'px';
-        tooltip.style.display = 'block';
+        renderHopTooltip(HOPS[found], proj([HOPS[found].lon, HOPS[found].lat]));
       }} else {{
         tooltip.style.display = 'none';
       }}
@@ -414,7 +498,27 @@ window.addEventListener('mousemove', e => {{
 window.addEventListener('mouseup', e => {{
   if (dragStart) {{
     dragStart = null;
-    rotating = true;
+  }}
+}});
+
+canvas.addEventListener('click', e => {{
+  const rect = canvas.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  let found = -1;
+  HOPS.forEach((h, i) => {{
+    const px = proj([h.lon, h.lat]);
+    if (!px) return;
+    if (dotProduct(h.lon, h.lat) < 0) return;
+    if (Math.hypot(px[0] - mx, px[1] - my) < 16) found = i;
+  }});
+
+  pinnedIdx = found >= 0 ? found : null;
+  if (pinnedIdx !== null) {{
+    const h = HOPS[pinnedIdx];
+    renderHopTooltip(h, proj([h.lon, h.lat]), true);
+  }} else {{
+    tooltip.style.display = 'none';
   }}
 }});
 
@@ -438,7 +542,7 @@ canvas.addEventListener('touchmove', e => {{
 }}, {{passive:false}});
 
 canvas.addEventListener('touchend', () => {{
-  dragStart = null; rotating = true;
+  dragStart = null;
 }});
 
 // Pulsanti
@@ -448,22 +552,21 @@ btnPlay.addEventListener('click', () => {{
 }});
 
 btnFit.addEventListener('click', () => {{
-  if (HOPS.length === 0) return;
-  const avgLon = HOPS.reduce((s,h)=>s+h.lon,0)/HOPS.length;
-  const avgLat = HOPS.reduce((s,h)=>s+h.lat,0)/HOPS.length;
-  lambda = -avgLon;
-  phi    = -avgLat;
-  proj.rotate([lambda, phi]);
+  centerOnRoute();
 }});
 
 // Centra inizialmente sul percorso
-if (HOPS.length > 0) {{
-  const avgLon = HOPS.reduce((s,h)=>s+h.lon,0)/HOPS.length;
-  const avgLat = HOPS.reduce((s,h)=>s+h.lat,0)/HOPS.length;
-  lambda = -avgLon;
-  phi    = -avgLat;
-  proj.rotate([lambda, phi]);
-}}
+resizeGlobe();
+centerOnRoute();
+
+window.addEventListener('resize', () => {{
+  resizeGlobe();
+  centerOnRoute();
+}});
+
+setTimeout(() => {{ resizeGlobe(); centerOnRoute(); }}, 150);
+setTimeout(() => {{ resizeGlobe(); centerOnRoute(); }}, 650);
+setTimeout(() => {{ resizeGlobe(); centerOnRoute(); }}, 1500);
 
 // Carica topologia mondo
 d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
@@ -504,7 +607,7 @@ def render_email_globe(soc: dict, validator) -> None:
     # Geolocalizza + reputazione in parallelo
     def _fetch(hop: dict):
         ip = hop.get("sender_ip") or ""
-        if not ip or _is_private(ip):
+        if not _is_geolocatable_ip(ip):
             return {"status": "skipped"}, {"status": "skipped"}
         return validator.geolocate_ip(ip), validator.check_ip_reputation(ip)
 
@@ -555,9 +658,16 @@ def render_email_globe(soc: dict, validator) -> None:
                 unsafe_allow_html=True,
             )
 
+    skipped = len(hops_data) - len(located)
+    if skipped:
+        st.caption(
+            f"{skipped} hop non sono sul globo perché hanno IP privati, riservati "
+            "o non geolocalizzabili; restano visibili nel dettaglio Routing sotto."
+        )
+
     st.markdown("")
     # Render globo
     globe_html = _build_globe_html(hops_data)
     components.html(globe_html, height=530, scrolling=False)
 
-    st.caption("Trascina per ruotare · ❚❚ pausa · ⌖ centra sul percorso · passa il mouse su un marker per i dettagli")
+    st.caption("Trascina per ruotare. Passa su un marker per l'anteprima, cliccalo per fissare tutti i dettagli.")

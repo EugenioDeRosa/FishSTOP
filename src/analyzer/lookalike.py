@@ -10,7 +10,7 @@ Espone:
                                     omoglifi, typosquatting)
 """
 
-import re
+import ipaddress
 import unicodedata
 
 from .constants import KNOWN_BRANDS, HOMOGLYPH_MAP
@@ -60,9 +60,11 @@ def strip_public_suffix(domain: str) -> str:
 
 def is_ip_url(host: str) -> bool:
     """True se l'host è un indirizzo IPv4 o IPv6."""
-    ipv4 = re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", host)
-    ipv6 = host.startswith("[") and host.endswith("]")
-    return bool(ipv4 or ipv6)
+    try:
+        ipaddress.ip_address((host or "").strip("[]"))
+        return True
+    except ValueError:
+        return False
 
 
 def check_lookalike_domains(
@@ -146,7 +148,7 @@ def check_lookalike_domains(
             # Tecnica 3: Typosquatting — prefissi ingannatori
             for prefix in ("secure-", "login-", "verify-", "account-",
                            "update-", "signin-", "support-", "my-", "auth-"):
-                candidate = host_norm.lstrip("www.")
+                candidate = host_norm.removeprefix("www.")
                 if candidate.startswith(prefix):
                     inner = candidate[len(prefix):]
                     if levenshtein(strip_public_suffix(inner), brand_sld) <= 1:

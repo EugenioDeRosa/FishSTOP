@@ -1,4 +1,5 @@
 import ipaddress
+
 import requests
 
 _IPAPI_FIELDS = (
@@ -7,64 +8,81 @@ _IPAPI_FIELDS = (
 )
 IPAPI_ENDPOINT = "http://ip-api.com/json/{ip}?fields=" + _IPAPI_FIELDS
 
-# Riutilizziamo la sessione passata o ne creiamo una interna
 _session = requests.Session()
 _session.headers.update({"User-Agent": "FishStop/1.0", "Accept": "application/json"})
 
-def _is_private(ip: str) -> bool:
+
+def _is_geolocatable_ip(ip: str) -> bool:
     try:
-        return ipaddress.ip_address(ip).is_private
+        return ipaddress.ip_address((ip or "").strip("[]")).is_global
     except ValueError:
-        return False  # Stringa non valida, verrà intercettata dall'API o dal blocco try
+        return False
+
 
 def geolocate_ip(ip: str) -> dict:
     base = {
-        "ip": ip, "country": "", "country_code": "", "region": "",
-        "city": "", "zip": "", "lat": None, "lon": None,
-        "timezone": "", "isp": "", "org": "", "asn": "",
-        "is_proxy": False, "is_hosting": False,
+        "ip": ip,
+        "country": "",
+        "country_code": "",
+        "region": "",
+        "city": "",
+        "zip": "",
+        "lat": None,
+        "lon": None,
+        "timezone": "",
+        "isp": "",
+        "org": "",
+        "asn": "",
+        "is_proxy": False,
+        "is_hosting": False,
     }
 
     if not ip:
         return {**base, "status": "skipped", "message": "Nessun IP fornito"}
 
-    if _is_private(ip):
-        return {**base, "status": "skipped",
-                "message": f"`{ip}` è un indirizzo privato/riservato — nessuna geo disponibile"}
+    if not _is_geolocatable_ip(ip):
+        return {
+            **base,
+            "status": "skipped",
+            "message": f"`{ip}` non e' un indirizzo pubblico geolocalizzabile",
+        }
 
-    url = IPAPI_ENDPOINT.format(ip=ip)
     try:
-        # requests gestisce internamente pooling e timeout in modo efficiente
-        resp = _session.get(url, timeout=5)
+        resp = _session.get(IPAPI_ENDPOINT.format(ip=ip), timeout=5)
         resp.raise_for_status()
         data = resp.json()
     except requests.exceptions.RequestException as exc:
         return {**base, "status": "error", "message": f"Errore ip-api.com: {exc}"}
 
     if data.get("status") != "success":
-        return {**base, "status": "skipped",
-                "message": f"ip-api.com: {data.get('message', 'risposta non valida')} per `{ip}`"}
+        return {
+            **base,
+            "status": "skipped",
+            "message": f"ip-api.com: {data.get('message', 'risposta non valida')} per `{ip}`",
+        }
+
+    city = data.get("city", "")
+    region = data.get("regionName", "")
+    country = data.get("country", "")
+    country_code = data.get("countryCode", "")
+    proxy_note = " - Proxy/VPN rilevato" if data.get("proxy") else ""
+    hosting_note = " - Datacenter/Hosting" if data.get("hosting") else ""
 
     return {
-        "status":       "ok",
-        "ip":           data.get("query", ip),
-        "country":      data.get("country", ""),
-        "country_code": data.get("countryCode", ""),
-        "region":       data.get("regionName", ""),
-        "city":         data.get("city", ""),
-        "zip":          data.get("zip", ""),
-        "lat":          data.get("lat"),
-        "lon":          data.get("lon"),
-        "timezone":     data.get("timezone", ""),
-        "isp":          data.get("isp", ""),
-        "org":          data.get("org", ""),
-        "asn":          data.get("as", ""),
-        "is_proxy":     bool(data.get("proxy")),
-        "is_hosting":   bool(data.get("hosting")),
-        "message":      (
-            f"{data.get('city','')}, {data.get('regionName','')}, "
-            f"{data.get('country','')} ({data.get('countryCode','')})"
-            + (" — ⚠️ Proxy/VPN rilevato" if data.get("proxy") else "")
-            + (" — ☁️ Datacenter/Hosting" if data.get("hosting") else "")
-        ),
+        "status": "ok",
+        "ip": data.get("query", ip),
+        "country": country,
+        "country_code": country_code,
+        "region": region,
+        "city": city,
+        "zip": data.get("zip", ""),
+        "lat": data.get("lat"),
+        "lon": data.get("lon"),
+        "timezone": data.get("timezone", ""),
+        "isp": data.get("isp", ""),
+        "org": data.get("org", ""),
+        "asn": data.get("as", ""),
+        "is_proxy": bool(data.get("proxy")),
+        "is_hosting": bool(data.get("hosting")),
+        "message": f"{city}, {region}, {country} ({country_code}){proxy_note}{hosting_note}",
     }
