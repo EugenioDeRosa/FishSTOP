@@ -19,6 +19,7 @@ from email import policy
 from typing import Optional
 
 from .attachment      import analyze_attachment
+from .body_context    import select_body_for_ai
 from .html_utils      import strip_html
 from .link_extractor  import extract_links
 from .lookalike       import check_lookalike_domains, is_ip_url
@@ -183,6 +184,9 @@ class EmlSOCAnalyzer:
         report["body_source"]        = "text/plain" if body_parts else ("text/html" if html_parts else "empty")
         report["html_strip_applied"] = (not bool(body_parts)) and bool(html_parts)
         report["attachments"]        = attachments_info
+        report.update(select_body_for_ai(report["body_clean"]))
+        report["body_clean_full"] = report["body_clean"]
+        report["body_extracted"] = report.get("body_ai") or report["body_clean"]
 
         # ── 10. Link e lookalike ──────────────────────────────────────────
         report["links"] = extract_links(

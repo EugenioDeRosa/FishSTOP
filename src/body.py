@@ -11,6 +11,11 @@ import re
 from typing import Optional
 
 try:
+    from src.analyzer.body_context import select_body_for_ai
+except ImportError:
+    from analyzer.body_context import select_body_for_ai
+
+try:
     from bs4 import BeautifulSoup
     _BS4_AVAILABLE = True
 except ImportError:
@@ -110,10 +115,12 @@ def extract_body_parts(msg) -> dict:
     else:
         source = "empty"
 
-    return {
+    result = {
         "body":               raw_body.strip(),
         "body_html":          body_html,
         "body_clean":         body_clean,
         "body_source":        source,
         "html_strip_applied": (not bool(body_parts)) and bool(html_parts),
     }
+    result.update(select_body_for_ai(body_clean))
+    return result

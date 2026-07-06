@@ -580,7 +580,7 @@ def render():
 
             with content_tab:
                 st.markdown("#### Analisi AI del contenuto")
-                clean_body = soc.get("body_clean") or soc.get("body") or ""
+                clean_body = soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
                 email_text = f"Subject: {soc.get('subject') or ''}\n\n{clean_body}".strip()
 
                 if model_source == "company":
@@ -612,14 +612,27 @@ def render():
                 st.markdown("#### Corpo estratto")
                 source = soc.get("body_source", "unknown")
                 st.caption(f"Sorgente: `{source}`")
+                ai_context = soc.get("body_context", "normal")
+                body_display = soc.get("body_extracted") or soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
+                full_body = soc.get("body_clean_full") or soc.get("body_clean") or soc.get("body") or ""
+                if ai_context == "forwarded":
+                    st.info("Email inoltrata: viene mostrato e analizzato il contenuto inoltrato.")
+                elif ai_context == "reply":
+                    st.info("Risposta email: viene mostrata e analizzata solo la risposta corrente.")
                 if soc.get("html_strip_applied"):
-                    clean_tab, html_tab = st.tabs(["Testo pulito", "HTML grezzo"])
+                    clean_tab, full_tab, html_tab = st.tabs(["Body estratto", "Conversazione completa", "HTML grezzo"])
                     with clean_tab:
-                        st.text_area("Input testuale", soc.get("body_clean") or "", height=280)
+                        st.text_area("Body", body_display, height=280)
+                    with full_tab:
+                        st.text_area("Body completo", full_body, height=280)
                     with html_tab:
                         st.code(soc.get("body_html") or "", language="html")
                 else:
-                    st.text_area("Body", soc.get("body_clean") or soc.get("body") or "", height=280)
+                    body_tab, full_tab = st.tabs(["Body estratto", "Conversazione completa"])
+                    with body_tab:
+                        st.text_area("Body", body_display, height=280)
+                    with full_tab:
+                        st.text_area("Body completo", full_body, height=280)
 
             with raw_tab:
                 st.markdown("#### Report strutturato")
