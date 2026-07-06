@@ -39,6 +39,7 @@ ROOT = Path("data")
 SOURCES_DIR = ROOT / "training_sources"
 PROCESSED_DIR = ROOT / "processed"
 DEFAULT_OUTPUT_CSV = PROCESSED_DIR / "fishstop_train.csv"
+FINAL_COLUMNS = ["text", "label", "source", "source_file", "text_hash"]
 
 SPAMASSASSIN_URLS = {
     "easy_ham": "https://spamassassin.apache.org/old/publiccorpus/20030228_easy_ham.tar.bz2",
@@ -57,6 +58,7 @@ NAZARIO_URLS = [
 ENRON_URL = "https://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz"
 KAGGLE_DATASET = "naserabdullahalam/phishing-email-dataset"
 KAGGLE_PHISHING_LEGITIMATE_DATASET = "kuladeep19/phishing-and-legitimate-emails-dataset"
+KAGGLE_SUBHAJOURNAL_PHISHING_EMAILS_DATASET = "subhajournal/phishingemails"
 KAGGLE_COMBINED_OVERLAP_SOURCES = {"enron", "nazario", "spamassassin"}
 
 
@@ -108,6 +110,20 @@ def normalize_text(text: str) -> str:
 
 def text_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def template_hash(text: str) -> str:
+    """
+    Fingerprint piu aggressiva del testo per rimuovere quasi-duplicati:
+    stesso template con URL, email, numeri o tracking id diversi.
+    """
+    text = normalize_text(text)
+    text = re.sub(r"https?://\S+|www\.\S+", " URL ", text)
+    text = re.sub(r"[a-z0-9._%+\-]+@[a-z0-9.\-]+", " EMAIL ", text)
+    text = re.sub(r"\b\d+\b", " NUM ", text)
+    text = re.sub(r"[^a-z]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return hashlib.sha256(text.encode("utf-8")).hexdigest() if text else ""
 
 
 def _extract_email_text(raw: bytes) -> str:
@@ -222,7 +238,37 @@ def _normalize_dataset_frame(df: pd.DataFrame) -> pd.DataFrame:
     df = df[df["text"].str.len() > 0]
     df = df[df["text_hash"].str.len() > 0]
     df = df.drop_duplicates(subset=["text_hash"], keep="first")
-    return df[["text", "label", "source", "source_file", "text_hash"]].reset_index(drop=True)
+    return df[FINAL_COLUMNS].reset_index(drop=True)
+
+
+def _dedupe_templates(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
+    """
+    Deduplica quasi-duplicati/template entro la stessa label.
+    Se la stessa fingerprint appare con label diverse, scarta tutte le righe
+    coinvolte: meglio perdere campioni ambigui che insegnare segnali contraddittori.
+    """
+    df = _normalize_dataset_frame(df)
+    if df.empty:
+        return df, {"template_duplicates": 0, "label_conflicts": 0}
+
+    working = df.copy()
+    working["_template_hash"] = working["text"].apply(template_hash)
+    before = len(working)
+
+    label_counts = working.groupby("_template_hash")["label"].nunique()
+    conflict_hashes = set(label_counts[label_counts > 1].index)
+    if conflict_hashes:
+        working = working[~working["_template_hash"].isin(conflict_hashes)]
+
+    after_conflicts = len(working)
+    working = working.drop_duplicates(subset=["label", "_template_hash"], keep="first")
+    template_duplicates = after_conflicts - len(working)
+
+    stats = {
+        "template_duplicates": int(template_duplicates),
+        "label_conflicts": int(before - after_conflicts),
+    }
+    return working[FINAL_COLUMNS].reset_index(drop=True), stats
 
 
 def _append_rows(
@@ -258,8 +304,7 @@ def _load_existing(output_csv: Path) -> tuple[list[dict], set[str]]:
 
 def _save_rows(rows: list[dict], output_csv: Path) -> None:
     output_csv.parent.mkdir(parents=True, exist_ok=True)
-    columns = ["text", "label", "source", "source_file", "text_hash"]
-    df = _normalize_dataset_frame(pd.DataFrame(rows, columns=columns))
+    df = _normalize_dataset_frame(pd.DataFrame(rows, columns=FINAL_COLUMNS))
     df.to_csv(output_csv, index=False, quoting=csv.QUOTE_MINIMAL)
 
 
@@ -379,7 +424,7 @@ def add_kaggle_dataset(
     df = pd.read_csv(csv_path)
     df.columns = [c.lower().strip() for c in df.columns]
     text_col = next((c for c in df.columns if any(k in c for k in ["text", "body", "email"])), None)
-    label_col = next((c for c in df.columns if any(k in c for k in ["label", "class", "target"])), None)
+    label_col = next((c for c in df.columns if any(k in c for k in ["label", "class", "target", "type"])), None)
     if not text_col or not label_col:
         return BuildResult(result_source, len(all_rows), 0, 0, 1, "Colonne text/label non riconosciute nel CSV Kaggle")
 
@@ -404,6 +449,21 @@ def add_kaggle_phishing_legitimate(
         dataset_slug=KAGGLE_PHISHING_LEGITIMATE_DATASET,
         source_name="kaggle_phishing_and_legitimate_emails",
         result_source="kaggle_phishing_legitimate",
+        output_csv=output_csv,
+        progress=progress,
+        min_chars=min_chars,
+    )
+
+
+def add_kaggle_subhajournal_phishingemails(
+    output_csv: Path = DEFAULT_OUTPUT_CSV,
+    progress: Callable[[str], None] | None = None,
+    min_chars: int = 40,
+) -> BuildResult:
+    return add_kaggle_dataset(
+        dataset_slug=KAGGLE_SUBHAJOURNAL_PHISHING_EMAILS_DATASET,
+        source_name="kaggle_subhajournal_phishingemails",
+        result_source="kaggle_subhajournal_phishingemails",
         output_csv=output_csv,
         progress=progress,
         min_chars=min_chars,
@@ -454,11 +514,11 @@ def balance_dataset(
     random_state: int = 42,
 ) -> dict:
     output_csv = output_csv or input_csv.with_name(f"{input_csv.stem}_balanced.csv")
-    df = _normalize_dataset_frame(pd.read_csv(input_csv))
+    df, dedupe_info = _dedupe_templates(pd.read_csv(input_csv))
     if df.empty:
         output_csv.parent.mkdir(parents=True, exist_ok=True)
         df.to_csv(output_csv, index=False)
-        return {"rows": 0, "per_class": 0, "output": str(output_csv)}
+        return {"rows": 0, "per_class": 0, "output": str(output_csv), **dedupe_info}
 
     counts = df["label"].value_counts()
     target = per_class or int(counts.min())
@@ -468,10 +528,16 @@ def balance_dataset(
         sampled_parts.append(class_rows.sample(n=min(len(class_rows), target), random_state=random_state))
     balanced = pd.concat(sampled_parts, ignore_index=True)
     balanced = balanced.sample(frac=1, random_state=random_state).reset_index(drop=True)
-    balanced = _normalize_dataset_frame(balanced)
+    balanced, balanced_dedupe_info = _dedupe_templates(balanced)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     balanced.to_csv(output_csv, index=False)
-    return {"rows": len(balanced), "per_class": target, "output": str(output_csv)}
+    return {
+        "rows": len(balanced),
+        "per_class": min(int((balanced["label"] == 0).sum()), int((balanced["label"] == 1).sum())),
+        "output": str(output_csv),
+        "template_duplicates": dedupe_info["template_duplicates"] + balanced_dedupe_info["template_duplicates"],
+        "label_conflicts": dedupe_info["label_conflicts"] + balanced_dedupe_info["label_conflicts"],
+    }
 
 
 def build_balanced_public_dataset(
@@ -499,6 +565,7 @@ def build_balanced_public_dataset(
     source_steps = {
         "kaggle": lambda: add_kaggle(output_csv=staging_csv, progress=progress),
         "kaggle_phishing_legitimate": lambda: add_kaggle_phishing_legitimate(output_csv=staging_csv, progress=progress),
+        "kaggle_subhajournal_phishingemails": lambda: add_kaggle_subhajournal_phishingemails(output_csv=staging_csv, progress=progress),
         "nazario": lambda: add_nazario(output_csv=staging_csv, progress=progress),
         "spamassassin": lambda: add_spamassassin(output_csv=staging_csv, include_hard_ham=include_hard_ham, progress=progress),
         "enron": lambda: add_enron_sample(output_csv=staging_csv, max_messages=max_enron, progress=progress),
@@ -538,7 +605,11 @@ def build_balanced_public_dataset(
     balanced = balance_dataset(staging_csv, output_csv=output_csv)
     return {
         "status": "ok",
-        "message": f"Creato dataset bilanciato 50/50 con {balanced['per_class']} email per classe.",
+        "message": (
+            f"Creato dataset bilanciato 50/50 con {balanced['per_class']} email per classe. "
+            f"Quasi-duplicati rimossi: {balanced.get('template_duplicates', 0)}; "
+            f"conflitti label rimossi: {balanced.get('label_conflicts', 0)}."
+        ),
         "results": results,
         "stats": dataset_stats(output_csv),
         "output": balanced["output"],
@@ -571,6 +642,7 @@ def dataset_stats(csv_path: Path = DEFAULT_OUTPUT_CSV) -> dict:
         }
 
     df = _normalize_dataset_frame(raw_df)
+    deduped_df, dedupe_info = _dedupe_templates(raw_df)
     sources = df["source"].value_counts().to_dict() if "source" in df else {}
     return {
         "exists": True,
@@ -578,6 +650,9 @@ def dataset_stats(csv_path: Path = DEFAULT_OUTPUT_CSV) -> dict:
         "legitimate": int((df["label"] == 0).sum()),
         "phishing": int((df["label"] == 1).sum()),
         "duplicates": max(len(raw_df) - len(df), 0),
+        "template_duplicates": dedupe_info["template_duplicates"],
+        "label_conflicts": dedupe_info["label_conflicts"],
+        "rows_after_template_dedupe": len(deduped_df),
         "missing_label": False,
         "sources": sources,
     }

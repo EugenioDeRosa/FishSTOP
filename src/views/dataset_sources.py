@@ -26,8 +26,19 @@ SOURCE_OPTIONS = {
     },
     "kaggle_phishing_legitimate": {
         "label": "Kaggle Phishing and Legitimate Emails",
-        "caption": "10.000 email con text, label, phishing_type, severity e confidence.",
+        "caption": (
+            "10.000 email con text, label, phishing_type, severity e confidence "
+            "(6.000 phishing, 4.000 legittime nella copia locale). Usalo come fonte aggiuntiva opzionale."
+        ),
         "url": "https://www.kaggle.com/datasets/kuladeep19/phishing-and-legitimate-emails-dataset",
+    },
+    "kaggle_subhajournal_phishingemails": {
+        "label": "Kaggle Phishing Email Detection",
+        "caption": (
+            "18.650 email con Email Text e Email Type: 11.322 Safe Email, 7.328 Phishing Email. "
+            "Fonte opzionale: contiene duplicati/quasi-duplicati, quindi viene filtrata dalla deduplica template."
+        ),
+        "url": "https://www.kaggle.com/datasets/subhajournal/phishingemails",
     },
     "nazario": {
         "label": "Nazario Phishing Corpus",
@@ -49,11 +60,13 @@ SOURCE_OPTIONS = {
 
 def _render_stats(csv_path: Path) -> None:
     stats = dataset_stats(csv_path)
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("Totale righe", stats["rows"])
     c2.metric("Legittime", stats["legitimate"])
     c3.metric("Phishing", stats["phishing"])
     c4.metric("Doppioni", stats.get("duplicates", 0))
+    c5.metric("Quasi doppioni", stats.get("template_duplicates", 0))
+    c6.metric("Conflitti label", stats.get("label_conflicts", 0))
 
     if stats.get("missing_label"):
         st.warning("Il CSV esistente non contiene la colonna `label`: rigeneralo con il pulsante qui sotto.")
@@ -101,7 +114,7 @@ def render() -> None:
     st.header("Public Dataset Builder")
     st.markdown(
         "Seleziona le fonti pubbliche da includere e genera in un clic un CSV bilanciato "
-        "50/50 tra email legittime e phishing."
+        "50/50 tra email legittime e phishing, con deduplica esatta e rimozione dei quasi-duplicati/template."
     )
 
     output_csv = Path(st.text_input("CSV bilanciato finale", value=str(BALANCED_OUTPUT_CSV)))
@@ -118,7 +131,7 @@ def render() -> None:
     selected_sources: list[str] = []
     kaggle_selected = False
     for key, option in SOURCE_OPTIONS.items():
-        default = key in {"kaggle", "kaggle_phishing_legitimate"}
+        default = key == "kaggle"
         disabled_by_combined = kaggle_selected and key in KAGGLE_COMBINED_OVERLAP_SOURCES
         checked = st.checkbox(
             option["label"],
