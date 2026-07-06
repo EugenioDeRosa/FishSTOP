@@ -1,126 +1,302 @@
-# 🛡️ FishStop — Phishing Email Detection
+# FishSTOP
 
-FishStop è un tool SOC per l'analisi e il triage di email sospette in formato `.eml`. Combina analisi degli header (SPF / DKIM / DMARC), ispezione degli allegati tramite magic bytes e classificazione AI con BERT fine-tuned su dataset di phishing.
+FishSTOP e una piattaforma locale per il triage SOC di email sospette in formato `.eml`.
+Il progetto combina parsing forense dell'email, controlli di autenticazione, reputazione di link/allegati, analisi del contenuto con BERT e spiegazione locale con Phi-4 mini tramite Ollama.
 
----
+Il flusso principale e pensato per una tesi: carichi un file `.eml`, il sistema estrae header, body, link e allegati, produce indicatori tecnici e restituisce una valutazione leggibile per l'analista.
 
-## Struttura del progetto
+## Funzionalita principali
 
+- Analisi di file `.eml` con estrazione di mittente, destinatari, oggetto, body, header e raw EML pulito.
+- Controlli SPF, DKIM e DMARC da header e record DNS.
+- Rilevamento di mismatch tra `From`, `Reply-To` e `Return-Path`.
+- Parsing della catena `Received` con visualizzazione del percorso email.
+- Geolocalizzazione IP e reputazione tramite AbuseIPDB.
+- Estrazione URL dal body, rilevamento link diretti a IP e controllo reputazione URL con VirusTotal.
+- Analisi degli allegati con estensione, MIME type, magic bytes, hash SHA-256 e lookup VirusTotal.
+- Rilevamento di domini lookalike/typosquatting rispetto a brand noti.
+- Classificazione AI del contenuto con BERT fine-tuned.
+- Spiegazione locale con Phi-4 mini: prima valuta oggetto e body, poi usa SPF/DKIM/DMARC, link, allegati e flag SOC come conferma o indebolimento della tesi.
+- Sezioni Streamlit per analisi EML, settings, training e gestione fonti dataset pubbliche.
+
+## Architettura
+
+```text
+FishSTOP/
+|-- src/
+|   |-- app.py                         # Entry point Streamlit
+|   |-- config.py                      # Lettura .env / Streamlit secrets
+|   |-- train.py                       # Training BERT base e modello aziendale
+|   |-- parser.py                      # Parsing batch di file .eml
+|   |-- public_dataset_builder.py      # Import dataset pubblici
+|   |-- eml_dataset_builder.py         # Dataset custom da EML locali
+|   |-- analyzer/
+|   |   |-- soc_analyzer.py            # Analisi SOC completa del file EML
+|   |   |-- attachment.py              # Metadati, magic bytes e hash allegati
+|   |   |-- body_context.py            # Estrazione body utile per AI
+|   |   |-- html_utils.py              # Pulizia HTML
+|   |   |-- link_extractor.py          # Estrazione URL
+|   |   |-- llm_context_analyzer.py    # Prompt e streaming Phi-4 mini/Ollama
+|   |   |-- lookalike.py               # Domini simili a brand noti
+|   |   `-- received_parser.py         # Parsing header Received
+|   |-- validators/
+|   |   |-- spf.py                     # Controllo SPF
+|   |   |-- dkim.py                    # Controllo DKIM
+|   |   |-- dmarc.py                   # Controllo DMARC
+|   |   |-- file_reputation.py         # VirusTotal file e URL
+|   |   |-- geolocation.py             # ip-api.com
+|   |   `-- ip_reputation.py           # AbuseIPDB e reputazione domini/IP
+|   |-- views/
+|   |   |-- analyzer.py                # Dashboard principale di analisi
+|   |   |-- backend.py                 # Caricamento parser, validator e modelli
+|   |   |-- dataset_sources.py         # Fonti dataset pubbliche
+|   |   |-- settings.py                # Stato configurazione e API key
+|   |   `-- train.py                   # UI training modello aziendale
+|   `-- components/
+|       `-- email_globe.py             # Visualizzazione percorso email
+|-- data/
+|   |-- raw/                           # File EML temporanei/locali
+|   `-- custom_dataset.csv             # Dataset aziendale opzionale
+|-- models/
+|   |-- saved_models/                  # Modello BERT base fine-tuned
+|   `-- company_model/                 # Modello aziendale fine-tuned
+|-- notebooks/
+|-- requirements.txt
+|-- run_clean.ps1
+|-- Architecture.md
+|-- ROADMAP.md
+`-- README.md
 ```
-fishstop/
-├── src/
-│   ├── app.py          # Interfaccia Streamlit
-│   ├── analyzer.py     # Parsing SOC degli header .eml
-│   ├── validators.py   # Validazione SPF / DKIM / DMARC live
-│   ├── parser.py       # Pipeline parsing batch di file .eml
-│   └── train.py        # Fine-tuning BERT per classificazione phishing
-├── models/
-│   └── saved_models/   # Modello BERT addestrato (generato da train.py)
-├── data/
-│   └── raw/
-│       └── personal_emails/  # Email .eml personali per arricchire il training
-├── logs/               # Log di training HuggingFace
-├── requirements.txt
-└── README.md
-```
 
----
+## Requisiti
 
-## Setup ambiente (Mac)
+- Python 3.10 o superiore consigliato.
+- Ambiente virtuale Python.
+- Ollama installato se si vuole usare la spiegazione Phi-4 mini.
+- Connessione internet per lookup DNS, AbuseIPDB, VirusTotal, ip-api.com, Kaggle e download modelli Hugging Face.
 
-```bash
-# Crea l'ambiente virtuale
-python3 -m venv .venv
+Dipendenze principali:
 
-# Attivalo
-source .venv/bin/activate
+- `streamlit`
+- `torch`
+- `transformers`
+- `datasets`
+- `scikit-learn`
+- `pandas`
+- `beautifulsoup4`
+- `lxml`
+- `dnspython`
+- `dkimpy`
+- `pyspf`
+- `kagglehub`
+- `folium`
 
-# Aggiorna pip e installa le dipendenze
-pip install --upgrade pip
+## Installazione
+
+Da PowerShell, nella root del progetto:
+
+```powershell
+cd C:\Users\DEROSAEU\Documents\Progetti\FishSTOP
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
----
+Su macOS/Linux:
+
+```bash
+cd /path/to/FishSTOP
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+## Configurazione
+
+Le chiavi API sono opzionali, ma abilitano le funzioni di reputazione esterna.
+Crea un file `.env` nella root del progetto:
+
+```env
+ABUSEIPDB_API_KEY=la_tua_chiave_abuseipdb
+VIRUSTOTAL_API_KEY=la_tua_chiave_virustotal
+```
+
+Priorita di lettura:
+
+1. Variabili d'ambiente e file `.env` locale.
+2. `st.secrets` se l'app viene eseguita su Streamlit Cloud.
+3. Fallback vuoto: la funzione viene saltata senza bloccare l'app.
+
+## Phi-4 mini con Ollama
+
+FishSTOP usa Phi-4 mini per generare una spiegazione locale e sintetica del caso.
+Il modello viene interrogato su:
+
+```text
+http://localhost:11434/api/chat
+```
+
+Per abilitarlo:
+
+```powershell
+ollama pull phi4-mini:latest
+ollama serve
+```
+
+La logica del prompt e in `src/analyzer/llm_context_analyzer.py`.
+Il comportamento richiesto e:
+
+1. prima analizzare solo oggetto e body per urgenza, denaro, coordinate bancarie, promozioni, credenziali, impersonificazioni e richieste anomale;
+2. poi usare SPF, DKIM, DMARC, link, allegati, VirusTotal e flag SOC solo per rafforzare o indebolire la tesi basata sul contenuto.
+
+Se Ollama non e attivo, il resto della dashboard continua a funzionare.
 
 ## Avvio dell'app
 
-```bash
-./.venv/bin/streamlit run src/app.py
+Metodo rapido su Windows:
+
+```powershell
+.\run_clean.ps1
 ```
 
-Apri il browser su `http://localhost:8501`, trascina un file `.eml` e ottieni il triage completo.
+Lo script ferma eventuali processi Streamlit precedenti del progetto, rimuove le cache Python fuori da `.venv` e avvia l'app.
 
----
+Avvio manuale:
 
-## Training del modello BERT
-
-Il modello viene addestrato su 15.000 email dal dataset Kaggle `naserabdullahalam/phishing-email-dataset`, con supporto opzionale per email `.eml` locali nella cartella `data/raw/personal_emails/`.
-
-```bash
-./.venv/bin/python src/train.py
+```powershell
+.\.venv\Scripts\streamlit.exe run src\app.py
 ```
 
-Il modello fine-tuned viene salvato in `models/saved_models/` e caricato automaticamente dall'app.
+Su macOS/Linux:
 
-**Parametri di training:**
+```bash
+streamlit run src/app.py
+```
 
-| Parametro | Valore |
-|---|---|
-| Modello base | `bert-base-uncased` |
-| Epoche | 5 |
-| Learning rate | 2e-5 |
-| Weight decay | 0.01 |
-| Optimizer | AdamW |
-| Batch size (GPU/Mac) | 16 |
-| Batch size (CPU) | 4 × grad_accum 4 = 16 effettivo |
-| Split | 70% train / 10% val / 20% test |
-| Best model metric | F1 |
+Poi apri:
 
----
+```text
+http://localhost:8501
+```
+
+## Uso della dashboard
+
+1. Apri `Analyze EML`.
+2. Carica un file `.eml`.
+3. Leggi la sezione `Executive Triage` per severity, flag e spiegazione Phi-4 mini.
+4. Usa le tab:
+   - `Overview`: snapshot email e matrice segnali.
+   - `Identita`: From, Reply-To, Return-Path, domini e reputazione.
+   - `Auth & Routing`: SPF, DKIM, DMARC, header raw, hop Received e mappa.
+   - `Link Intel`: URL estratte e reputazione VirusTotal.
+   - `Allegati`: metadati, anomalie, hash e VirusTotal.
+   - `AI & Body`: classificazione BERT e corpo estratto.
+   - `Raw`: report strutturato e raw EML pulito.
+
+## Training del modello
+
+Il training principale usa BERT (`bert-base-uncased`) per classificare email legittime e phishing.
+
+Avvio da terminale:
+
+```powershell
+python src\train.py
+```
+
+Il modello base viene salvato in:
+
+```text
+models/saved_models/
+```
+
+Il modello aziendale, addestrato sul dataset custom, viene salvato in:
+
+```text
+models/company_model/
+```
+
+L'app carica il modello aziendale se presente; altrimenti usa il modello base o il fallback Hugging Face.
+
+## Dataset
+
+FishSTOP supporta piu sorgenti dati:
+
+- dataset Kaggle tramite `kagglehub`;
+- email `.eml` locali;
+- dataset custom in `data/custom_dataset.csv`;
+- fonti pubbliche gestite dalla pagina `Public Datasets`.
+
+La logica di costruzione dataset si trova in:
+
+- `src/public_dataset_builder.py`
+- `src/eml_dataset_builder.py`
+- `src/parser.py`
+
+## Test e controlli rapidi
+
+Controllo sintattico dei file principali:
+
+```powershell
+$env:PYTHONDONTWRITEBYTECODE='1'
+python -m py_compile src\app.py src\views\analyzer.py src\analyzer\llm_context_analyzer.py
+```
+
+Se vengono aggiunti test in `tests/`, si possono eseguire con:
+
+```powershell
+pytest
+```
+
+## Note di sicurezza
+
+- I file `.eml` vengono analizzati localmente.
+- Le chiamate esterne avvengono solo per servizi configurati o pubblici: DNS, AbuseIPDB, VirusTotal, ip-api.com, Kaggle/Hugging Face.
+- Le chiavi API non devono essere committate: usa `.env` locale o Streamlit secrets.
+- Phi-4 mini gira localmente tramite Ollama, quindi la spiegazione LLM non richiede invio del contenuto email a provider cloud.
 
 ## Troubleshooting
 
-Se il training si interrompe con errori legati ad `accelerate` o `transformers`:
+Se Streamlit non parte:
 
-```bash
-./.venv/bin/pip install --upgrade "accelerate>=1.1.0" "transformers[torch]"
+```powershell
+.\run_clean.ps1
 ```
 
-Se `dkimpy` o `pyspf` non sono disponibili, i controlli DKIM e SPF degradano automaticamente a una verifica di presenza (nessun crash).
+Se Phi-4 mini non risponde:
 
----
-
-## Aggiornare il repository
-
-```bash
-git add .
-git commit -m "descrizione delle modifiche"
-git push origin main
+```powershell
+ollama list
+ollama pull phi4-mini:latest
+ollama serve
 ```
 
----
+Se VirusTotal o AbuseIPDB risultano mancanti, controlla `.env` o la pagina `Settings`.
 
-## Dipendenze principali
+Se il training fallisce per dipendenze Hugging Face:
 
-- `streamlit` — interfaccia web
-- `transformers` + `torch` — modello BERT
-- `datasets` — gestione dataset HuggingFace
-- `scikit-learn` — metriche di valutazione
-- `dnspython` — lookup DNS per SPF / DMARC
-- `dkimpy` — verifica crittografica DKIM *(opzionale)*
-- `pyspf` — valutazione record SPF *(opzionale)*
-- `kagglehub` — download automatico del dataset
-
-Installa tutto con:
-
-```bash
-pip install -r requirements.txt
+```powershell
+pip install --upgrade "accelerate>=1.1.0" "transformers[torch]"
 ```
 
+Se DKIM/SPF non sono disponibili, installa o aggiorna:
 
+```powershell
+pip install --upgrade dkimpy pyspf dnspython
+```
 
-#todo
-1. abbassare il rischio dei domini lookalike 
-2. sample_1043 spf error (softfail, da modellare, cosi come permerror ecc. )
-3. sample_1043 lookalike Falsi positivi, sito corto come t.co sembra altri
-4. usare cursor?
+## Stato progetto
+
+Build attuale:
+
+```text
+dev-2026-07-06-phi4-vt-lookalike
+```
+
+Il progetto e in evoluzione e contiene componenti sperimentali legati alla tesi, in particolare:
+
+- calibrazione dei falsi positivi sui domini lookalike;
+- raffinamento della severita dei risultati SPF softfail/permerror;
+- miglioramento progressivo del dataset custom;
+- confronto tra classificazione BERT e spiegazione Phi-4 mini.
