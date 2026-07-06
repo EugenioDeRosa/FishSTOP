@@ -277,7 +277,8 @@ def _render_auth_evidence(result: dict) -> None:
     st.caption(f"Fonte: `{result.get('source') or '-'}`")
     if result.get("identity"):
         st.caption(f"Identita: `{result['identity']}`")
-    raw = result.get("source_raw") or result.get("raw") or ""
+    raw = result.get("raw") or ""
+    st.caption("Stringa esaminata")
     if raw:
         st.code(raw, language="text")
     else:

@@ -27,7 +27,12 @@ _TLS_RE = re.compile(
 
 # Authentication-Results standard RFC 8601
 _AUTH_FIELD_RE = re.compile(
-    r"\b(spf|dkim|dmarc)\s*=\s*([a-zA-Z0-9_-]+)(?:\s+(?:header\.[a-zA-Z0-9_-]+|smtp\.[a-zA-Z0-9_-]+)\s*=\s*([^\s;]+))?",
+    r"\b(spf|dkim|dmarc)\s*=\s*([a-zA-Z0-9_-]+)",
+    re.IGNORECASE,
+)
+
+_AUTH_IDENTITY_RE = re.compile(
+    r"\b(?:header|smtp)\.[a-zA-Z0-9_-]+\s*=\s*([^\s;]+)",
     re.IGNORECASE,
 )
 
@@ -159,14 +164,18 @@ def parse_auth_results(raw: str) -> Dict[str, Dict[str, str]]:
     if not raw:
         return results
 
-    for m in _AUTH_FIELD_RE.finditer(raw):
+    matches = list(_AUTH_FIELD_RE.finditer(raw))
+    for index, m in enumerate(matches):
         proto = m.group(1).upper()
         status = m.group(2).lower()
-        identity = m.group(3) or ""
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
+        segment = raw[m.start():next_start].strip(" ;\n\t")
+        identity_match = _AUTH_IDENTITY_RE.search(segment)
+        identity = identity_match.group(1) if identity_match else ""
 
         results[proto] = {
             "status": status,
             "identity": identity.strip("<>\"'"),
-            "raw": m.group(0).strip(),
+            "raw": segment,
         }
     return results

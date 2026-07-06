@@ -1,5 +1,4 @@
 from concurrent.futures import ThreadPoolExecutor
-import dns.resolver
 
 from src.config import ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY, URLHAUS_API_KEY
 from .spf            import check_spf
@@ -12,19 +11,17 @@ from .urlhaus        import check_urlhaus
 
 class EmailSecurityValidator:
     def __init__(self):
-        self.resolver = dns.resolver.Resolver(configure=True)  # forza lettura da /etc/resolv.conf di sistema
-        self.resolver.timeout = 4.0
-        self.resolver.lifetime = 8.0
+        pass
 
     # 🟢 Tutti i metodi sotto sono ora rientrati di 4 spazi: appartengono CORRETTAMENTE alla classe!
     def check_spf(self, sender_ip: str, mail_from: str, helo_domain: str = "") -> dict:
-        return check_spf(self.resolver, sender_ip, mail_from, helo_domain)
+        return check_spf(None, sender_ip, mail_from, helo_domain)
 
     def check_dkim(self, raw_eml_bytes: bytes) -> dict:
         return check_dkim(raw_eml_bytes)
 
     def check_dmarc(self, from_address: str, spf_result: str, spf_domain: str, dkim_results: list) -> dict:
-        return check_dmarc(self.resolver, from_address, spf_result, spf_domain, dkim_results)
+        return check_dmarc(None, from_address, spf_result, spf_domain, dkim_results)
     
     def check_domain_reputation(self, domain: str) -> dict:
         return check_domain_reputation(domain)  

@@ -130,15 +130,16 @@ class EmlSOCAnalyzer:
         report["received_spf_raw"] = self._header(msg, "Received-SPF")
 
         # ── 7. Authentication-Results ─────────────────────────────────────
-        auth_raw     = self._header(msg, "Authentication-Results") or ""
-        arc_auth_raw = report["arc_authentication_results"] or ""
+        auth_raw     = "\n".join(self._headers(msg, "Authentication-Results"))
+        arc_auth_raw = "\n".join(self._headers(msg, "ARC-Authentication-Results"))
         report["authentication_results_raw"] = auth_raw
         report["auth_results"]     = parse_auth_results(auth_raw)
         report["arc_auth_results"] = parse_auth_results(arc_auth_raw)
 
         # ── 8. Firma DKIM ─────────────────────────────────────────────────
-        report["dkim_signature_present"] = bool(msg.get("DKIM-Signature"))
-        report["dkim_signature_raw"]     = self._header(msg, "DKIM-Signature")
+        dkim_headers = self._headers(msg, "DKIM-Signature")
+        report["dkim_signature_present"] = bool(dkim_headers)
+        report["dkim_signature_raw"]     = "\n".join(dkim_headers)
 
         # ── 9. Body e allegati ────────────────────────────────────────────
         body_parts       = []
@@ -203,6 +204,14 @@ class EmlSOCAnalyzer:
         if val is None:
             return None
         return re.sub(r"\s+", " ", str(val)).strip()
+
+    @staticmethod
+    def _headers(msg, name: str) -> list[str]:
+        return [
+            re.sub(r"\s+", " ", str(val)).strip()
+            for val in (msg.get_all(name) or [])
+            if val is not None
+        ]
 
     @staticmethod
     def _extract_address(raw: Optional[str]) -> Optional[str]:

@@ -30,8 +30,12 @@ _FOR_RE  = re.compile(r"for\s+<([^>]+)>", re.IGNORECASE)
 _TLS_RE  = re.compile(r"version=(TLS[\w.]+)\s+cipher=([\w\-]+)", re.IGNORECASE)
 
 _AUTH_FIELD_RE = re.compile(
-    r"(spf|dkim|dmarc)\s*=\s*([\w]+)"
-    r"(?:[^;]*?smtp\.\w+=([^\s;]+))?",
+    r"\b(spf|dkim|dmarc)\s*=\s*([\w]+)",
+    re.IGNORECASE,
+)
+
+_AUTH_IDENTITY_RE = re.compile(
+    r"\b(?:header|smtp)\.\w+\s*=\s*([^\s;]+)",
     re.IGNORECASE,
 )
 
@@ -124,11 +128,19 @@ def parse_received_hop(raw: str) -> dict:
 def parse_auth_results(raw: str) -> dict:
     """Parses an Authentication-Results header into a protocol → result dict."""
     results: dict = {}
-    for m in _AUTH_FIELD_RE.finditer(raw):
+    matches = list(_AUTH_FIELD_RE.finditer(raw))
+    for index, m in enumerate(matches):
         proto    = m.group(1).upper()
         status   = m.group(2).lower()
-        identity = m.group(3) or ""
-        results[proto] = {"status": status, "identity": identity, "raw": m.group(0).strip()}
+        next_start = matches[index + 1].start() if index + 1 < len(matches) else len(raw)
+        segment = raw[m.start():next_start].strip(" ;\n\t")
+        identity_match = _AUTH_IDENTITY_RE.search(segment)
+        identity = identity_match.group(1) if identity_match else ""
+        results[proto] = {
+            "status": status,
+            "identity": identity.strip("<>\"'"),
+            "raw": segment,
+        }
     return results
 
 
