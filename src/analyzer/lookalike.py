@@ -16,6 +16,25 @@ import unicodedata
 from .constants import KNOWN_BRANDS, HOMOGLYPH_MAP
 
 
+KNOWN_URL_SHORTENERS: set[str] = {
+    "t.co",
+    "bit.ly",
+    "tinyurl.com",
+    "goo.gl",
+    "ow.ly",
+    "buff.ly",
+    "cutt.ly",
+    "is.gd",
+    "s.id",
+    "rebrand.ly",
+    "lnkd.in",
+    "youtu.be",
+    "aka.ms",
+}
+
+MIN_EDIT_DISTANCE_SLD_LEN = 4
+
+
 def levenshtein(a: str, b: str) -> int:
     """Distanza di edit (Levenshtein) tra due stringhe, O(n·m) spazio O(n)."""
     if a == b:
@@ -56,6 +75,18 @@ def strip_public_suffix(domain: str) -> str:
     if len(parts) >= 2:
         return parts[-2]
     return domain
+
+
+def _registered_domain(domain: str) -> str:
+    parts = (domain or "").lower().rstrip(".").split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return domain or ""
+
+
+def _is_known_shortener(host: str) -> bool:
+    registered = _registered_domain(host)
+    return registered in KNOWN_URL_SHORTENERS
 
 
 def is_ip_url(host: str) -> bool:
@@ -116,7 +147,7 @@ def check_lookalike_domains(
         host = link["host"]
         url  = link["url"]
 
-        if not host or is_ip_url(host):
+        if not host or is_ip_url(host) or _is_known_shortener(host):
             continue
 
         host_norm = normalize_homoglyphs(host)
@@ -131,12 +162,17 @@ def check_lookalike_domains(
                 break
 
             # Tecnica 1: Levenshtein sull'SLD
-            dist = levenshtein(host_sld, brand_sld)
-            if 0 < dist <= edit_distance_threshold:
-                _alert(url, host, brand, "edit_distance",
-                       f"SLD `{host_sld}` dista {dist} edit da `{brand_sld}` "
-                       f"(brand: {brand})", dist)
-                continue
+            if (
+                len(host_sld) >= MIN_EDIT_DISTANCE_SLD_LEN
+                and len(brand_sld) >= MIN_EDIT_DISTANCE_SLD_LEN
+                and abs(len(host_sld) - len(brand_sld)) <= edit_distance_threshold
+            ):
+                dist = levenshtein(host_sld, brand_sld)
+                if 0 < dist <= edit_distance_threshold:
+                    _alert(url, host, brand, "edit_distance",
+                           f"SLD `{host_sld}` dista {dist} edit da `{brand_sld}` "
+                           f"(brand: {brand})", dist)
+                    continue
 
             # Tecnica 2: Omografia Unicode
             if host_norm != host.lower() and levenshtein(host_norm, brand_norm) <= edit_distance_threshold:

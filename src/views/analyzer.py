@@ -1,8 +1,10 @@
+import json
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
 import streamlit as st
+import streamlit.components.v1 as components
 import torch
 
 from src.analyzer.llm_context_analyzer import stream_phi4_email_analysis
@@ -85,11 +87,44 @@ def _render_flag(flag: dict):
         st.caption(label)
 
 
+def _copyable_value(label: str, value: str | None, key: str):
+    value = str(value or "-")
+    js_value = json.dumps(value)
+    element_id = f"copy_{re.sub(r'[^a-zA-Z0-9_]', '_', key)}"
+    text_col, button_col = st.columns([0.86, 0.14], vertical_alignment="center")
+    with text_col:
+        st.write(f"**{label}:** `{value}`")
+    with button_col:
+        components.html(
+            f"""
+            <button id="{element_id}"
+              style="width: 100%; padding: 6px 8px; border: 1px solid #d0d7de;
+                     border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">
+              Copy
+            </button>
+            <script>
+              const button_{element_id} = document.getElementById("{element_id}");
+              button_{element_id}.onclick = async () => {{
+                try {{
+                  await navigator.clipboard.writeText({js_value});
+                  button_{element_id}.innerText = "Copied";
+                  setTimeout(() => button_{element_id}.innerText = "Copy", 1200);
+                }} catch (err) {{
+                  button_{element_id}.innerText = "Copy failed";
+                  setTimeout(() => button_{element_id}.innerText = "Copy", 1200);
+                }}
+              }};
+            </script>
+            """,
+            height=38,
+        )
+
+
 def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
         "Analisi testuale locale con Ollama: valuta contenuto, urgenza, soldi, IBAN, "
-        "pagamenti, credenziali e moduli esterni. Non usa SPF/DKIM/DMARC."
+        "pagamenti, credenziali e moduli esterni; poi usa SPF/DKIM/DMARC, link e allegati solo come contesto."
     )
 
     result_key = f"{analysis_key}_result"
@@ -105,11 +140,63 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
 
     if auto_run:
         placeholder = st.empty()
-        placeholder.info("Phi-4 mini analysis will stream here after the page finishes loading.")
+        placeholder.markdown(_phi4_loading_html(), unsafe_allow_html=True)
         return placeholder
 
     st.info("L'analisi Phi-4 mini parte automaticamente nel riquadro Executive Triage.")
     return None
+
+
+def _phi4_loading_html() -> str:
+    return """
+    <div style="
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 14px;
+        border: 1px solid #d0d7de;
+        border-radius: 8px;
+        background: #f6f8fa;
+        color: #57606a;
+        font-size: 0.95rem;
+    ">
+        <span>Phi-4 mini sta analizzando contenuto e indicatori tecnici</span>
+        <span class="phi4-typing-dots" aria-label="caricamento">
+            <span></span><span></span><span></span>
+        </span>
+    </div>
+    <style>
+        .phi4-typing-dots {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+        .phi4-typing-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: #57606a;
+            opacity: 0.35;
+            animation: phi4TypingPulse 1.2s infinite ease-in-out;
+        }
+        .phi4-typing-dots span:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+        .phi4-typing-dots span:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+        @keyframes phi4TypingPulse {
+            0%, 80%, 100% {
+                transform: translateY(0);
+                opacity: 0.35;
+            }
+            40% {
+                transform: translateY(-3px);
+                opacity: 1;
+            }
+        }
+    </style>
+    """
 
 
 def _stream_phi4_analysis(soc: dict, analysis_key: str, placeholder):
@@ -123,6 +210,7 @@ def _stream_phi4_analysis(soc: dict, analysis_key: str, placeholder):
 
     last_text = ""
     try:
+        placeholder.markdown(_phi4_loading_html(), unsafe_allow_html=True)
         for event in stream_phi4_email_analysis(soc):
             if event.get("status") == "stream":
                 last_text = event.get("text") or last_text
@@ -490,11 +578,11 @@ def render():
                 left, right = st.columns([1, 1])
                 with left:
                     st.markdown("#### Email Snapshot")
-                    st.write(f"**From:** `{soc.get('from_') or '-'}`")
-                    st.write(f"**To:** `{soc.get('to') or '-'}`")
-                    st.write(f"**Subject:** `{soc.get('subject') or '-'}`")
+                    _copyable_value("From", soc.get("from_"), "overview_from")
+                    _copyable_value("To", soc.get("to"), "overview_to")
+                    _copyable_value("Subject", soc.get("subject"), "overview_subject")
                     st.write(f"**Date:** `{soc.get('date') or '-'}`")
-                    st.write(f"**Message-ID:** `{soc.get('message_id') or '-'}`")
+                    _copyable_value("Message-ID", soc.get("message_id"), "overview_message_id")
                 with right:
                     st.markdown("#### Signal Matrix")
                     _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"))
@@ -517,8 +605,8 @@ def render():
                 c1, c2 = st.columns(2)
                 with c1:
                     st.write(f"**Delivered-To:** `{soc.get('delivered_to') or '-'}`")
-                    st.write(f"**Return-Path:** `{soc.get('return_path') or '-'}`")
-                    st.write(f"**Reply-To:** `{soc.get('reply_to') or '-'}`")
+                    _copyable_value("Return-Path", soc.get("return_path"), "identity_return_path")
+                    _copyable_value("Reply-To", soc.get("reply_to"), "identity_reply_to")
                     st.write(f"**Errors-To:** `{soc.get('errors_to') or '-'}`")
                 with c2:
                     st.write(f"**Content-Type:** `{soc.get('content_type') or '-'}`")

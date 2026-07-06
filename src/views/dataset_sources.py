@@ -40,6 +40,14 @@ SOURCE_OPTIONS = {
         ),
         "url": "https://www.kaggle.com/datasets/subhajournal/phishingemails",
     },
+    "github_phishing_pot": {
+        "label": "GitHub Phishing Pot",
+        "caption": (
+            "Raccolta di campioni reali di phishing in formato .eml da honeypot. "
+            "Contiene solo email malevole: viene importata sempre con label 1."
+        ),
+        "url": "https://github.com/rf-peixoto/phishing_pot",
+    },
     "nazario": {
         "label": "Nazario Phishing Corpus",
         "caption": "Email phishing reali in formato mbox/raw. Non selezionare insieme al Kaggle combinato.",

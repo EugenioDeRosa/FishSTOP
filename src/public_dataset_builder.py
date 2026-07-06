@@ -21,6 +21,7 @@ import re
 import tarfile
 import tempfile
 import urllib.request
+import zipfile
 from dataclasses import dataclass
 from email import policy
 from email.parser import BytesParser
@@ -60,6 +61,7 @@ KAGGLE_DATASET = "naserabdullahalam/phishing-email-dataset"
 KAGGLE_PHISHING_LEGITIMATE_DATASET = "kuladeep19/phishing-and-legitimate-emails-dataset"
 KAGGLE_SUBHAJOURNAL_PHISHING_EMAILS_DATASET = "subhajournal/phishingemails"
 KAGGLE_COMBINED_OVERLAP_SOURCES = {"enron", "nazario", "spamassassin"}
+PHISHING_POT_ZIP_URL = "https://github.com/rf-peixoto/phishing_pot/archive/refs/heads/main.zip"
 
 
 @dataclass
@@ -153,7 +155,13 @@ def _extract_email_text(raw: bytes) -> str:
             if not raw_payload:
                 continue
             charset = part.get_content_charset() or "utf-8"
-            payload = raw_payload.decode(charset, errors="ignore")
+            try:
+                payload = raw_payload.decode(charset, errors="ignore")
+            except LookupError:
+                try:
+                    payload = raw_payload.decode("utf-8", errors="ignore")
+                except Exception:
+                    payload = raw_payload.decode("latin-1", errors="ignore")
 
         if content_type == "text/plain":
             plain_parts.append(str(payload))
@@ -187,6 +195,17 @@ def _rows_from_tar_emails(archive_path: Path, label: int, source: str) -> Iterab
             raw = extracted.read()
             text = _extract_email_text(raw)
             yield _row(text, label, source, member.name)
+
+
+def _rows_from_phishing_pot_zip(archive_path: Path) -> Iterable[dict]:
+    with zipfile.ZipFile(archive_path) as archive:
+        for name in archive.namelist():
+            normalized = name.replace("\\", "/")
+            if "/email/" not in normalized or not normalized.lower().endswith(".eml"):
+                continue
+            raw = archive.read(name)
+            text = _extract_email_text(raw)
+            yield _row(text, 1, "github_phishing_pot", normalized)
 
 
 def _rows_from_mbox(path: Path, label: int, source: str) -> Iterable[dict]:
@@ -470,6 +489,35 @@ def add_kaggle_subhajournal_phishingemails(
     )
 
 
+def add_github_phishing_pot(
+    output_csv: Path = DEFAULT_OUTPUT_CSV,
+    progress: Callable[[str], None] | None = None,
+    min_chars: int = 40,
+) -> BuildResult:
+    _ensure_dirs()
+    all_rows, hashes = _load_existing(output_csv)
+    archive = _download(
+        PHISHING_POT_ZIP_URL,
+        SOURCES_DIR / "phishing" / "phishing_pot" / "phishing_pot_main.zip",
+        progress,
+    )
+    rows, skipped, errors = _append_rows(
+        _rows_from_phishing_pot_zip(archive),
+        hashes,
+        min_chars,
+    )
+    all_rows.extend(rows)
+    _save_rows(all_rows, output_csv)
+    return BuildResult(
+        "github_phishing_pot",
+        len(all_rows),
+        len(rows),
+        skipped,
+        errors,
+        "GitHub Phishing Pot importato come phishing.",
+    )
+
+
 def add_enron_sample(
     output_csv: Path = DEFAULT_OUTPUT_CSV,
     max_messages: int = 10000,
@@ -566,6 +614,7 @@ def build_balanced_public_dataset(
         "kaggle": lambda: add_kaggle(output_csv=staging_csv, progress=progress),
         "kaggle_phishing_legitimate": lambda: add_kaggle_phishing_legitimate(output_csv=staging_csv, progress=progress),
         "kaggle_subhajournal_phishingemails": lambda: add_kaggle_subhajournal_phishingemails(output_csv=staging_csv, progress=progress),
+        "github_phishing_pot": lambda: add_github_phishing_pot(output_csv=staging_csv, progress=progress),
         "nazario": lambda: add_nazario(output_csv=staging_csv, progress=progress),
         "spamassassin": lambda: add_spamassassin(output_csv=staging_csv, include_hard_ham=include_hard_ham, progress=progress),
         "enron": lambda: add_enron_sample(output_csv=staging_csv, max_messages=max_enron, progress=progress),

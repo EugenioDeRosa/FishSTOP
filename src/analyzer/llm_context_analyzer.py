@@ -8,8 +8,10 @@ OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "phi4-mini:latest"
 
 SYSTEM_MESSAGE = (
-    "You are a SOC phishing and scam text classifier. "
-    "Your job is to decide whether the email text looks suspicious, not to produce a generic summary. "
+    "You are a SOC phishing and scam classifier. "
+    "You must always decide whether the email looks suspicious by judging the subject/body first. "
+    "Only after that content thesis is formed may you use technical indicators as supporting or weakening evidence. "
+    "Never let SPF, DKIM, DMARC, links, attachments, sender IPs, or reputation data create the initial thesis. "
     "Answer with one concise English paragraph and no JSON."
 )
 
@@ -29,8 +31,13 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
 
     money_words = (
         "iban", "coordinate bancarie", "dati bancari", "conto bancario", "bank account",
+        "sort code", "routing number", "swift", "bic", "account number",
+        "bank details", "billing details", "pay now", "rimborso", "refund",
         "wire transfer", "bonifico", "pagamento", "payment", "fattura", "invoice",
-        "saldo", "cambio conto", "nuovo conto", "new bank details",
+        "saldo", "cambio conto", "nuovo conto", "new bank details", "$", "€",
+        "won you", "you have won", "has won", "winner", "lottery", "prize",
+        "donation", "charity donor", "inheritance", "fund", "million", "usd",
+        "dollar", "claim your", "beneficiary",
     )
     credential_words = (
         "password", "credenzial", "credentials", "login", "accesso", "sign in",
@@ -38,6 +45,8 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
     )
     urgency_words = (
         "urgente", "urgent", "entro oggi", "immediately", "as soon as possible",
+        "scadenza", "last warning", "final notice", "sospensione",
+        "locked", "limited", "act now", "within 24 hours",
         "scade", "deadline", "overdue", "sospeso", "blocked", "bloccato",
         "azione richiesta", "action required",
     )
@@ -45,11 +54,28 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
         "forms.gle", "docs.google.com/forms", "forms.office.com", "google form",
         "questionario", "survey", "modulo",
     )
+    validation_words = (
+        "email address is valid", "verify your email", "confirm your email",
+        "get back to me", "reply back", "kindly reply",
+    )
+    impersonation_words = (
+        "jeff bezos", "elon musk", "bill gates", "amazon.com", "ceo",
+        "direttore", "amministratore delegato", "hr department", "it department",
+        "support team", "assistenza clienti",
+        "founder", "president",
+    )
+    marketing_words = (
+        "sconto", "sconti", "promo", "promozione", "offerta", "offerte",
+        "discount", "sale", "newsletter", "coupon", "voucher",
+    )
 
     has_money = any(word in text for word in money_words)
     has_credentials = any(word in text for word in credential_words)
     has_urgency = any(word in text for word in urgency_words)
     has_form = any(word in text or word in urls for word in form_words)
+    has_validation = any(word in text for word in validation_words)
+    has_impersonation = any(word in text for word in impersonation_words)
+    has_marketing = any(word in text for word in marketing_words)
 
     if has_money:
         signals.append("money/payment/bank-detail wording is present")
@@ -61,6 +87,10 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
         signals.append("external form or survey is paired with sensitive money/account wording")
     elif has_form:
         neutral_notes.append("external form or survey link is present without a sensitive-data request")
+    if has_money and has_validation:
+        signals.append("prize/donation/money claim asks the recipient to reply or validate the email address")
+    if has_money and has_impersonation:
+        signals.append("money/prize claim impersonates a well-known executive or brand")
 
     neutral_admin_words = (
         "firma ore", "firmare le ore", "firmarmi le ore", "timesheet",
@@ -68,6 +98,8 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
     )
     if any(word in text for word in neutral_admin_words):
         neutral_notes.append("normal administrative work request wording is present")
+    if has_marketing and not (has_credentials or has_form or has_validation):
+        neutral_notes.append("promotional or discount wording is present without credential or sensitive-form requests")
 
     if signals:
         return signals + neutral_notes
@@ -103,6 +135,73 @@ def _link_hint(link: dict) -> str:
     return "neutral unless paired with a risky request in the body"
 
 
+def _auth_status(soc: dict, protocol: str) -> str:
+    protocol = protocol.upper()
+    auth_results = soc.get("auth_results") or {}
+    arc_auth_results = soc.get("arc_auth_results") or {}
+    result = auth_results.get(protocol) or arc_auth_results.get(protocol) or {}
+    return (result.get("status") or "none").lower()
+
+
+def _technical_context_lines(soc: dict) -> list[str]:
+    spf_status = _auth_status(soc, "SPF")
+    dkim_status = _auth_status(soc, "DKIM")
+    dmarc_status = _auth_status(soc, "DMARC")
+    auth_overall = "neutral"
+    if dmarc_status in {"pass", "bestguesspass"} and spf_status == "pass":
+        auth_overall = "acceptable: SPF and DMARC pass"
+    elif dmarc_status in {"fail", "permerror"} or spf_status in {"fail", "softfail", "permerror"}:
+        auth_overall = "suspicious: SPF or DMARC failed"
+
+    lines = [
+        f"Authentication overall: {auth_overall}",
+        f"SPF: {spf_status}",
+        f"DKIM: {dkim_status} (signature_present={bool(soc.get('dkim_signature_present'))})",
+        f"DMARC: {dmarc_status}",
+        f"Reply-To mismatch: {bool(soc.get('reply_to_mismatch'))}",
+        f"Return-Path domain mismatch: {bool(soc.get('return_path_domain_mismatch'))}",
+        f"Display name spoofing: {soc.get('display_name_spoofing') or 'none'}",
+    ]
+
+    attachments = soc.get("attachments") or []
+    if not attachments:
+        lines.append("Attachments: none")
+    else:
+        for att in attachments[:5]:
+            lines.append(
+                "Attachment: "
+                f"name={att.get('filename') or '(unnamed)'} "
+                f"ext={att.get('extension_from_filename') or '-'} "
+                f"mime={att.get('content_type') or '-'} "
+                f"magic={att.get('magic_detected_format') or '-'} "
+                f"anomaly={att.get('anomaly') or 'none'}"
+            )
+
+    flags = soc.get("flags") or []
+    high_medium = [
+        flag for flag in flags
+        if flag.get("level") in {"HIGH", "MEDIUM"}
+    ]
+    if auth_overall.startswith("acceptable"):
+        high_medium = [
+            flag for flag in high_medium
+            if not (
+                flag.get("field") == "DKIM"
+                and any(token in (flag.get("message") or "").lower() for token in ["dkim none", "firma dkim assente"])
+            )
+        ]
+    if high_medium:
+        lines.append("SOC technical flags:")
+        for flag in high_medium[:6]:
+            lines.append(
+                f"- {flag.get('level')} {flag.get('field')}: {_clip(flag.get('message', ''), 160)}"
+            )
+    else:
+        lines.append("SOC technical flags: none high/medium")
+
+    return lines
+
+
 def build_fast_email_prompt(soc: dict) -> str:
     body = soc.get("body_ai") or soc.get("body_extracted") or soc.get("body_clean") or soc.get("body") or ""
     links = soc.get("links") or []
@@ -136,19 +235,23 @@ def build_fast_email_prompt(soc: dict) -> str:
             f"Da: {soc.get('from_') or 'Sconosciuto'}",
             f"Destinatari visibili: {_clip(recipients, 500) or '-'}",
             f"Oggetto: {subject}",
-            f"Classification baseline: {'SUSPICIOUS only if the risky request is explicit' if has_actionable_text_risk else 'NOT SUSPICIOUS'}",
+            f"Content intent baseline: {'risky content pattern detected' if has_actionable_text_risk else 'no risky content pattern detected'}",
             "",
             "Text risk signals detected:",
             "\n".join(f"- {signal}" for signal in risk_signals),
             "",
+            "Corpo:",
+            _clip(body, 2000),
+            "",
+            "Technical corroboration inputs - do not use these for the initial thesis:",
             "VirusTotal link reputation:",
             link_reputation_summary,
             "",
+            "Technical context:",
+            "\n".join(_technical_context_lines(soc)),
+            "",
             "Link estratti:",
             "\n".join(link_lines) if link_lines else "- nessuno",
-            "",
-            "Corpo:",
-            _clip(body, 2000),
         ]
     )
 
@@ -159,42 +262,44 @@ def stream_phi4_email_analysis(soc: dict, model: str = OLLAMA_MODEL, timeout: in
         {
             "role": "user",
             "content": (
-                "Check whether the email is suspicious based on the text/body and visible recipients only.\n"
-                "Do not use SPF, DKIM, DMARC, routing headers, Reply-To, Return-Path, attachment reputation, "
-                "or other technical authentication data for this answer.\n"
+                "Analyze the email in two strict steps, then answer with one concise English paragraph.\n"
+                "Step 1 - Mandatory body/subject thesis: FIRST inspect only the subject and body. "
+                "Before considering any technical field, explicitly check the subject/body for urgency or pressure, "
+                "money requests, payment instructions, bank coordinates such as IBAN/SWIFT/account numbers, invoices or refunds, "
+                "promotions or prizes, credential or login requests, sensitive forms, requests to click links, impersonation "
+                "of brands/executives/internal departments, and any unusual requested action. "
+                "This first thesis must ignore SPF, DKIM, DMARC, Return-Path, Reply-To, VirusTotal, attachments, flags, "
+                "routing, sender IPs, geolocation, and every other technical signal.\n"
+                "Step 2 - Technical corroboration only: ONLY AFTER the body/content thesis, use SPF/DKIM/DMARC, Return-Path mismatch, "
+                "Reply-To mismatch, display-name spoofing, VirusTotal link reputation, attachment anomalies, and SOC flags to say "
+                "whether the technical evidence supports, weakens, or does not materially change the thesis from Step 1.\n"
                 "Start exactly with one of these phrases:\n"
                 "- The email provided is suspicious because\n"
                 "- The email provided is not suspicious because\n"
-                "Only mention risks that are explicitly visible in the body, subject, links, or recipients. "
-                "Do not invent IBAN changes, payment redirection, credentials, Google Forms, or urgency.\n"
-                "Follow the Classification baseline in the prompt. If it says NOT SUSPICIOUS, you must start with "
-                "\"The email provided is not suspicious because\" unless the body explicitly asks for money, "
-                "credentials, bank details, sensitive form submission, or unusual urgent action.\n"
-                "A link is not suspicious by itself. Do not classify an email as suspicious only because it has "
-                "external links, many links, tracking links, document links, meeting links, newsletter links, "
-                "or common business/collaboration links.\n"
-                "For link risk, use the VirusTotal link reputation summary as the main evidence. If VirusTotal "
-                "says links are clean, not_found, skipped, or unknown, do not call the link dangerous unless the "
-                "email body explicitly asks for a risky action. If VirusTotal says malicious or suspicious, mention "
-                "that reputation result as evidence.\n"
-                "Do not say an email is suspicious because a link is embedded, repeated, identical in subject/body, "
-                "redirects through Google services, or points to a company website. Those are not phishing evidence "
-                "unless paired with a risky request in the body.\n"
-                "Do not say an email is suspicious because there is only one visible recipient, because the recipient "
-                "is the user's own address, or because recipients are not clearly justified.\n"
-                "Mention a link as evidence only when the body asks the recipient to do a risky action through "
-                "that link, such as entering credentials, filling sensitive personal/bank data, changing payment "
-                "details, approving a payment, or acting under unusual urgency.\n"
-                "If the detected text risk signals say that no explicit money, credential, bank-detail, "
-                "sensitive-form, or unusual-urgency wording was found, default to not suspicious unless the body "
-                "clearly contradicts that.\n"
-                "Treat money requests, urgency, bank coordinate/IBAN changes, payment redirection, invoices, "
-                "credential requests, account verification forms, and Google Forms asking for sensitive data "
-                "as suspicious indicators.\n"
-                "Normal administrative work requests, such as asking a manager to sign hours, timesheets, "
-                "attendance sheets, or work records, are not suspicious unless they also ask for money, "
-                "credentials, bank details, external forms, or urgent unusual action.\n"
-                "End with a practical recommendation such as: Please verify with your IT team.\n\n"
+                "Your first sentence must be driven by the body/content thesis and must mention the content reason first. "
+                "If the body contains a clear scam/phishing "
+                "pattern, classify as suspicious even if some technical checks pass. If the body looks normal, classify as "
+                "not suspicious unless the technical evidence is strong and corroborated by multiple independent indicators. "
+                "A VirusTotal status of suspicious alone is not enough to override normal body content; treat it as a manual-check note. "
+                "Only a clearly malicious VirusTotal result, or VirusTotal suspicious plus identity mismatch/authentication failure/attachment anomaly, "
+                "may override a normal body.\n"
+                "Do not invent risks. Only mention body risks explicitly visible in the subject/body/links/recipients, "
+                "and only mention technical risks explicitly listed in Technical context.\n"
+                "Do not mention sender IP, injection IP, relay IP, geolocation, or routing path as evidence. "
+                "In modern email these values are often missing, internal, or misleading.\n"
+                "A link is not suspicious by itself. Use VirusTotal link reputation as the main link evidence, and "
+                "mention a link as risky only if VirusTotal marks it malicious or the body asks for a risky action through it.\n"
+                "Do not classify as suspicious only because a link is embedded, repeated, redirects through Google, "
+                "points to a company website, or because there is one visible recipient.\n"
+                "Promotions, newsletters, discounts, events, and normal commercial messages are not phishing just because they contain links.\n"
+                "Treat lottery/prize/donation/inheritance claims, large unexpected money amounts, celebrity or CEO "
+                "impersonation, and requests to reply to validate an email address as explicit money-scam indicators.\n"
+                "Normal administrative work requests, such as asking a manager to sign hours, timesheets, attendance "
+                "sheets, or work records, are not suspicious unless they also ask for money, credentials, bank details, "
+                "external forms, or urgent unusual action.\n"
+                "In the answer, mention the body/content reason first. Then add one short clause explaining whether "
+                "technical checks support, weaken, or do not materially change the content-based assessment. "
+                "Do not lead with technical failures unless the body is empty or unreadable. End with: Please verify with your IT team.\n\n"
                 f"{build_fast_email_prompt(soc)}"
             ),
         },
@@ -206,8 +311,8 @@ def stream_phi4_email_analysis(soc: dict, model: str = OLLAMA_MODEL, timeout: in
         "options": {
             "temperature": 0.1,
             "top_p": 0.9,
-            "num_ctx": 2048,
-            "num_predict": 220,
+            "num_ctx": 4096,
+            "num_predict": 260,
         },
     }
     request = urllib.request.Request(
