@@ -5,9 +5,8 @@ from concurrent.futures import ThreadPoolExecutor
 import streamlit as st
 import torch
 
+from src.analyzer.llm_context_analyzer import stream_phi4_email_analysis
 from src.components.email_globe import render_email_globe
-from src.config import URLHAUS_API_KEY
-from src.validators.urlhaus import check_urlhaus
 from src.views.backend import get_backend
 
 
@@ -86,6 +85,65 @@ def _render_flag(flag: dict):
         st.caption(label)
 
 
+def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
+    st.markdown("#### Phi-4 mini scam/phishing explanation")
+    st.caption(
+        "Analisi testuale locale con Ollama: valuta contenuto, urgenza, soldi, IBAN, "
+        "pagamenti, credenziali e moduli esterni. Non usa SPF/DKIM/DMARC."
+    )
+
+    result_key = f"{analysis_key}_result"
+    error_key = f"{analysis_key}_error"
+
+    if st.session_state.get(result_key):
+        st.success(st.session_state[result_key])
+        return None
+
+    if st.session_state.get(error_key):
+        st.error(st.session_state[error_key])
+        return None
+
+    if auto_run:
+        placeholder = st.empty()
+        placeholder.info("Phi-4 mini analysis will stream here after the page finishes loading.")
+        return placeholder
+
+    st.info("L'analisi Phi-4 mini parte automaticamente nel riquadro Executive Triage.")
+    return None
+
+
+def _stream_phi4_analysis(soc: dict, analysis_key: str, placeholder):
+    if placeholder is None:
+        return
+
+    result_key = f"{analysis_key}_result"
+    error_key = f"{analysis_key}_error"
+    if st.session_state.get(result_key) or st.session_state.get(error_key):
+        return
+
+    last_text = ""
+    try:
+        for event in stream_phi4_email_analysis(soc):
+            if event.get("status") == "stream":
+                last_text = event.get("text") or last_text
+                placeholder.info(last_text)
+            elif event.get("status") == "ok":
+                last_text = event.get("text") or last_text
+                st.session_state[result_key] = last_text or "Analisi completata senza testo."
+                placeholder.success(st.session_state[result_key])
+                return
+            elif event.get("status") == "error":
+                last_text = event.get("text") or last_text
+                if last_text:
+                    placeholder.warning(last_text)
+                st.session_state[error_key] = event.get("message") or "Errore durante l'analisi Phi-4 mini."
+                st.error(st.session_state[error_key])
+                return
+    except Exception as exc:
+        st.session_state[error_key] = f"Errore durante l'analisi Phi-4 mini: {exc}"
+        st.error(st.session_state[error_key])
+
+
 def _render_abuseipdb(rep: dict):
     status = rep.get("status")
     if status == "ok":
@@ -156,38 +214,40 @@ def _render_virustotal(vt: dict):
         st.markdown(f"[Apri report VirusTotal]({vt['permalink']})")
 
 
-def _render_urlhaus(rep: dict):
+def _render_vt_url(rep: dict):
     status = rep.get("status", "error")
     message = rep.get("message", "")
-    permalink = rep.get("permalink") or rep.get("host_permalink")
+    permalink = rep.get("permalink")
 
     if status == "malicious":
-        st.error(f"URLhaus: SEGNALATO - {message}")
+        st.error(f"VirusTotal: MALEVOLO - {rep.get('detection_ratio', '-')}")
     elif status == "suspicious":
-        st.warning(f"URLhaus: storico sospetto - {message}")
+        st.warning(f"VirusTotal: SOSPETTO - {rep.get('detection_ratio', '-')}")
+    elif status == "clean":
+        st.success(f"VirusTotal: pulito - {rep.get('detection_ratio', '-')}")
     elif status == "not_found":
-        st.success("URLhaus: non presente nel feed malware")
+        st.info("VirusTotal: URL non trovata")
     elif status == "skipped":
-        st.info(f"URLhaus: {message}")
+        st.info(f"VirusTotal: {message}")
         if permalink:
-            st.markdown(f"[Apri URLhaus]({permalink})")
+            st.markdown(f"[Apri VirusTotal]({permalink})")
         return
     else:
-        st.warning(f"URLhaus: {message}")
+        st.warning(f"VirusTotal: {message}")
         if permalink:
-            st.markdown(f"[Apri URLhaus]({permalink})")
+            st.markdown(f"[Apri VirusTotal]({permalink})")
         return
 
-    if rep.get("threat"):
-        st.caption(f"Threat: `{rep['threat']}`")
-    if rep.get("url_status"):
-        st.caption(f"Stato URLhaus: `{rep['url_status']}`")
-    if rep.get("tags"):
-        st.caption("Tag: " + ", ".join(f"`{tag}`" for tag in rep["tags"][:8]))
-    if rep.get("payloads"):
-        st.caption(f"Elementi collegati nel feed: {len(rep['payloads'])}")
+    st.caption(
+        f"Malicious `{rep.get('malicious', 0)}` · Suspicious `{rep.get('suspicious', 0)}` · "
+        f"Harmless `{rep.get('harmless', 0)}` · Undetected `{rep.get('undetected', 0)}`"
+    )
+    if rep.get("last_analysis"):
+        st.caption(f"Ultima analisi: `{rep['last_analysis']}`")
+    if rep.get("final_url") and rep.get("final_url") != rep.get("url"):
+        st.caption(f"Final URL: `{rep['final_url']}`")
     if permalink:
-        st.markdown(f"[Apri scheda URLhaus]({permalink})")
+        st.markdown(f"[Apri scheda VirusTotal]({permalink})")
 
 
 def _auth_status_box(title: str, status: str):
@@ -200,6 +260,19 @@ def _auth_status_box(title: str, status: str):
         st.warning(f"{title}: {status.upper()}")
     else:
         st.info(f"{title}: {status.upper()}")
+
+
+def _hop_from_label(hop: dict) -> str:
+    if hop.get("from_host"):
+        return hop["from_host"]
+    raw = (hop.get("raw") or "").lstrip().lower()
+    if raw.startswith("by "):
+        return "internal/by-only"
+    return "unknown"
+
+
+def _hop_by_label(hop: dict) -> str:
+    return hop.get("by_host") or "unknown"
 
 
 def _status_from_received_spf(raw: str) -> str:
@@ -285,11 +358,32 @@ def _render_auth_evidence(result: dict) -> None:
         st.caption("Nessuna stringa trovata nell'EML per questo controllo.")
 
 
-def _safe_urlhaus_lookup(validator, url: str, host: str) -> dict:
-    lookup = getattr(validator, "check_urlhaus", None)
+def _safe_vt_url_lookup(validator, url: str) -> dict:
+    lookup = getattr(validator, "check_url_reputation", None)
     if callable(lookup):
-        return lookup(url, host)
-    return check_urlhaus(url, host, URLHAUS_API_KEY)
+        return lookup(url)
+    return {"status": "skipped", "url": url, "message": "Validator VirusTotal URL non disponibile"}
+
+
+def _summarize_link_reputation(results: dict) -> str:
+    if not results:
+        return "No links found."
+
+    counts = {"malicious": 0, "suspicious": 0, "clean": 0, "not_found": 0, "skipped": 0, "error": 0}
+    for rep in results.values():
+        status = rep.get("status", "error")
+        counts[status] = counts.get(status, 0) + 1
+
+    parts = [f"{value} {key}" for key, value in counts.items() if value]
+    worst = "clean"
+    if counts.get("malicious"):
+        worst = "malicious"
+    elif counts.get("suspicious"):
+        worst = "suspicious"
+    elif counts.get("error") or counts.get("skipped"):
+        worst = "unknown"
+
+    return f"VirusTotal link reputation: worst={worst}; " + ", ".join(parts)
 
 
 def render():
@@ -337,6 +431,27 @@ def render():
             attachments = soc.get("attachments", [])
             lookalike_alerts = soc.get("lookalike_alerts", [])
             eml_auth = _email_auth_from_eml(soc)
+            unique_links = {lnk["url"]: lnk for lnk in links if lnk.get("url")}
+            vt_url_results = {}
+            if unique_links:
+                with st.spinner("Lookup VirusTotal URL in corso..."):
+                    max_workers = min(4, max(1, len(unique_links)))
+                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                        futures = {
+                            executor.submit(_safe_vt_url_lookup, validator, url): url
+                            for url in unique_links
+                        }
+                        for future, url in futures.items():
+                            try:
+                                vt_url_results[url] = future.result()
+                            except Exception as exc:
+                                vt_url_results[url] = {
+                                    "status": "error",
+                                    "url": url,
+                                    "message": f"Errore lookup VirusTotal URL: {exc}",
+                                }
+            soc["link_reputation"] = vt_url_results
+            soc["link_reputation_summary"] = _summarize_link_reputation(vt_url_results)
 
             st.subheader("Executive Triage")
             c1, c2, c3, c4, c5 = st.columns(5)
@@ -346,6 +461,10 @@ def render():
             c4.metric("Link", len(links))
             c5.metric("Allegati", len(attachments))
             st.caption(severity_caption)
+
+            phi4_key = f"phi4_analysis_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
+            with st.container(border=True):
+                phi4_placeholder = _render_phi4_analysis(soc, phi4_key, auto_run=True)
 
             if flags:
                 with st.container(border=True):
@@ -474,7 +593,7 @@ def render():
                     render_email_globe(soc, validator)
 
                 for idx, hop in enumerate(hops, start=1):
-                    title = f"Hop {idx}: {hop.get('from_host') or '?'} -> {hop.get('by_host') or '?'}"
+                    title = f"Hop {idx}: {_hop_from_label(hop)} -> {_hop_by_label(hop)}"
                     with st.expander(title):
                         st.write(f"**Sender IP:** `{hop.get('sender_ip') or '-'}`")
                         tls_version = hop.get("tls_version")
@@ -499,29 +618,8 @@ def render():
                 if not links:
                     st.info("Nessun URL trovato nel corpo dell'email.")
                 else:
-                    st.caption("Ogni URL viene controllata su URLhaus; se non c'è match sulla URL, viene controllato l'host.")
-                    unique_links = {lnk["url"]: lnk for lnk in links if lnk.get("url")}
-                    urlhaus_results = {}
-                    with st.spinner("Lookup URLhaus in corso..."):
-                        max_workers = min(6, max(1, len(unique_links)))
-                        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                            futures = {
-                                executor.submit(
-                                    _safe_urlhaus_lookup,
-                                    validator,
-                                    lnk["url"],
-                                    lnk.get("host", ""),
-                                ): url
-                                for url, lnk in unique_links.items()
-                            }
-                            for future, url in futures.items():
-                                try:
-                                    urlhaus_results[url] = future.result()
-                                except Exception as exc:
-                                    urlhaus_results[url] = {
-                                        "status": "error",
-                                        "message": f"Errore lookup URLhaus: {exc}",
-                                    }
+                    st.caption("Ogni URL viene controllata su VirusTotal. Il risultato viene passato anche a Phi-4 mini.")
+                    st.info(soc.get("link_reputation_summary") or "VirusTotal link reputation non disponibile.")
 
                     if lookalike_alerts:
                         st.markdown("##### Lookalike / Typosquatting")
@@ -532,7 +630,7 @@ def render():
 
                     st.markdown("##### URL estratte")
                     for lnk in links:
-                        rep = urlhaus_results.get(lnk["url"], {})
+                        rep = vt_url_results.get(lnk["url"], {})
                         risky = rep.get("status") in ("malicious", "suspicious")
                         with st.container(border=True):
                             top_left, top_right = st.columns([3, 1])
@@ -546,7 +644,7 @@ def render():
                                     st.warning(rep.get("status", "suspicious"))
                                 else:
                                     st.success("checked")
-                            _render_urlhaus(rep)
+                            _render_vt_url(rep)
                             st.markdown(
                                 f"[VirusTotal](https://www.virustotal.com/gui/domain/{lnk['host']})"
                                 f" · [WHOIS](https://www.whois.com/whois/{lnk['host']})"
@@ -582,6 +680,8 @@ def render():
                 st.markdown("#### Analisi AI del contenuto")
                 clean_body = soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
                 email_text = f"Subject: {soc.get('subject') or ''}\n\n{clean_body}".strip()
+
+                _render_phi4_analysis(soc, phi4_key, auto_run=False)
 
                 if model_source == "company":
                     st.success("Modello aziendale attivo.")
@@ -645,6 +745,8 @@ def render():
                     height=480,
                     disabled=True,
                 )
+
+            _stream_phi4_analysis(soc, phi4_key, phi4_placeholder)
 
             if os.path.exists(temp_path):
                 os.remove(temp_path)

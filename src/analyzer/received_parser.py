@@ -16,8 +16,8 @@ from typing import Any, Dict, List, Optional
 # La validazione formale ed enterprise viene delegata al modulo 'ipaddress'
 _IP_CANDIDATE_RE = re.compile(r"\[?([0-9a-fA-F:.]+)\]?")
 
-_BY_RE = re.compile(r"\bby\s+([\w.\-]+)", re.IGNORECASE)
-_FROM_RE = re.compile(r"\bfrom\s+([\w.\-]+)\s*(?:\(([^)]*)\))?", re.IGNORECASE)
+_BY_RE = re.compile(r"\bby\s+(\[[^\]]+\]|[^\s;()]+)", re.IGNORECASE)
+_FROM_RE = re.compile(r"\bfrom\s+(\[[^\]]+\]|[^\s;()]+)\s*(?:\(([^)]*)\))?", re.IGNORECASE)
 _FOR_RE = re.compile(r"\bfor\s+<([^>]+)>", re.IGNORECASE)
 
 # TLS regex più tollerante per gli standard moderni (inclusi TLSv1.3 e formati estesi)
@@ -80,6 +80,15 @@ def _preferred_sender_ip(*ip_groups: List[str]) -> Optional[str]:
     return ips[0] if ips else None
 
 
+def _clean_host_token(value: str | None) -> Optional[str]:
+    if not value:
+        return None
+    value = value.strip().strip("[]")
+    if "%" in value:
+        value = value.split("%", 1)[0]
+    return value.rstrip(".,;") or None
+
+
 # ── Funzioni Principali Esposte ──────────────────────────────────────────────
 
 
@@ -111,7 +120,7 @@ def parse_received_hop(raw: str) -> Dict[str, Any]:
     # Parsing della sezione 'FROM'
     m_from = _FROM_RE.search(clean_raw)
     if m_from:
-        hop["from_host"] = m_from.group(1)
+        hop["from_host"] = _clean_host_token(m_from.group(1))
         parenthetical = m_from.group(2) or ""
 
         # Cerca prima l'IP dentro la parentesi (comportamento standard MTA)
@@ -137,7 +146,7 @@ def parse_received_hop(raw: str) -> Dict[str, Any]:
 
     # Parsing della sezione 'BY'
     m_by = _BY_RE.search(clean_raw)
-    hop["by_host"] = m_by.group(1) if m_by else None
+    hop["by_host"] = _clean_host_token(m_by.group(1)) if m_by else None
 
     # Parsing della sezione 'FOR'
     m_for = _FOR_RE.search(clean_raw)
