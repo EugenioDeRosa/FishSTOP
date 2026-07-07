@@ -4,10 +4,36 @@ import socket
 import urllib.error
 import urllib.request
 
+import requests
+
+from src.config import GITHUB_MODELS_TOKEN
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "phi4-mini:latest"
 ENABLE_LOCAL_OLLAMA = os.getenv("ENABLE_LOCAL_OLLAMA", "1").strip().lower() in {"1", "true", "yes", "on"}
+
+# ── Provider LLM: "ollama" (locale) o "github" (GitHub Models hosted) ───────
+# In locale lascia LLM_PROVIDER=ollama. Per il deploy basta impostare
+# LLM_PROVIDER=github + GITHUB_MODELS_TOKEN nei secrets, senza toccare codice.
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "ollama").strip().lower()
+
+GITHUB_MODELS_ENDPOINT = os.getenv(
+    "GITHUB_MODELS_ENDPOINT", "https://models.inference.ai.azure.com/chat/completions"
+)
+# Verifica il nome esatto nel codice di esempio di GitHub Models (Marketplace ->
+# Phi-4-mini-instruct -> "Get API access"): il catalogo a volte usa un id diverso.
+GITHUB_MODELS_MODEL = os.getenv("GITHUB_MODELS_MODEL", "Phi-4-mini-instruct")
+
+
+def _llm_enabled() -> bool:
+    if LLM_PROVIDER == "github":
+        return bool(GITHUB_MODELS_TOKEN)
+    return ENABLE_LOCAL_OLLAMA
+
+
+def _active_model(default_ollama_model: str) -> str:
+    return GITHUB_MODELS_MODEL if LLM_PROVIDER == "github" else default_ollama_model
+
 
 SYSTEM_MESSAGE = (
     "You are a SOC phishing and scam classifier. "
@@ -279,13 +305,18 @@ def build_fast_email_prompt(soc: dict) -> str:
 
 
 def stream_phi4_email_analysis(soc: dict, model: str = OLLAMA_MODEL, timeout: int = 90):
-    if not ENABLE_LOCAL_OLLAMA:
+    if not _llm_enabled():
         yield {
             "status": "error",
-            "message": "Analisi Phi-4 locale disattivata. Collega Hugging Face per usare l'AI nella web app.",
+            "message": (
+                "Analisi LLM disattivata: imposta ENABLE_LOCAL_OLLAMA=1 (locale) oppure "
+                "LLM_PROVIDER=github + GITHUB_MODELS_TOKEN (hosted)."
+            ),
             "text": "",
         }
         return
+
+    model = _active_model(model)
 
     messages = [
         {"role": "system", "content": SYSTEM_MESSAGE},
@@ -339,6 +370,13 @@ def stream_phi4_email_analysis(soc: dict, model: str = OLLAMA_MODEL, timeout: in
             ),
         },
     ]
+    if LLM_PROVIDER == "github":
+        yield from _stream_github_models(messages, model, timeout)
+    else:
+        yield from _stream_ollama(messages, model, timeout)
+
+
+def _stream_ollama(messages: list[dict], model: str, timeout: int):
     payload = {
         "model": model,
         "messages": messages,
@@ -371,36 +409,75 @@ def stream_phi4_email_analysis(soc: dict, model: str = OLLAMA_MODEL, timeout: in
                 if event.get("done"):
                     break
     except TimeoutError:
-        yield {
-            "status": "error",
-            "message": f"Ollama ha superato il timeout di {timeout} secondi.",
-            "text": "".join(chunks),
-        }
+        yield {"status": "error", "message": f"Ollama ha superato il timeout di {timeout} secondi.", "text": "".join(chunks)}
         return
     except socket.timeout:
-        yield {
-            "status": "error",
-            "message": f"Ollama ha superato il timeout di {timeout} secondi.",
-            "text": "".join(chunks),
-        }
+        yield {"status": "error", "message": f"Ollama ha superato il timeout di {timeout} secondi.", "text": "".join(chunks)}
         return
     except urllib.error.URLError as exc:
-        yield {
-            "status": "error",
-            "message": f"Ollama non raggiungibile su {OLLAMA_CHAT_URL}: {exc}",
-            "text": "".join(chunks),
-        }
+        yield {"status": "error", "message": f"Ollama non raggiungibile su {OLLAMA_CHAT_URL}: {exc}", "text": "".join(chunks)}
         return
     except Exception as exc:
-        yield {
-            "status": "error",
-            "message": f"Errore durante la generazione con Ollama: {exc}",
-            "text": "".join(chunks),
-        }
+        yield {"status": "error", "message": f"Errore durante la generazione con Ollama: {exc}", "text": "".join(chunks)}
         return
 
-    yield {
-        "status": "ok",
-        "model": model,
-        "text": "".join(chunks).strip(),
+    yield {"status": "ok", "model": model, "text": "".join(chunks).strip()}
+
+
+def _stream_github_models(messages: list[dict], model: str, timeout: int):
+    """
+    Chiama GitHub Models (Azure AI Inference, API OpenAI-compatible) in streaming
+    SSE. Richiede un GitHub PAT con permesso 'Models: read' in GITHUB_MODELS_TOKEN.
+    """
+    headers = {
+        "Authorization": f"Bearer {GITHUB_MODELS_TOKEN}",
+        "Content-Type": "application/json",
+        "Accept": "text/event-stream",
     }
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "temperature": 0.1,
+        "top_p": 0.9,
+        "max_tokens": 260,
+    }
+
+    chunks: list[str] = []
+    try:
+        with requests.post(
+            GITHUB_MODELS_ENDPOINT, headers=headers, json=payload, stream=True, timeout=timeout
+        ) as response:
+            response.raise_for_status()
+            for raw_line in response.iter_lines(decode_unicode=True):
+                if not raw_line or not raw_line.startswith("data:"):
+                    continue
+                data = raw_line[len("data:"):].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    event = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                choices = event.get("choices") or []
+                if not choices:
+                    continue
+                content = (choices[0].get("delta") or {}).get("content", "")
+                if content:
+                    chunks.append(content)
+                    yield {"status": "stream", "text": "".join(chunks)}
+    except requests.exceptions.Timeout:
+        yield {"status": "error", "message": f"GitHub Models ha superato il timeout di {timeout} secondi.", "text": "".join(chunks)}
+        return
+    except requests.exceptions.HTTPError as exc:
+        code = exc.response.status_code if exc.response is not None else "?"
+        yield {"status": "error", "message": f"GitHub Models HTTP {code}: verifica GITHUB_MODELS_TOKEN/GITHUB_MODELS_MODEL. ({exc})", "text": "".join(chunks)}
+        return
+    except requests.exceptions.RequestException as exc:
+        yield {"status": "error", "message": f"GitHub Models non raggiungibile su {GITHUB_MODELS_ENDPOINT}: {exc}", "text": "".join(chunks)}
+        return
+    except Exception as exc:
+        yield {"status": "error", "message": f"Errore durante la generazione con GitHub Models: {exc}", "text": "".join(chunks)}
+        return
+
+    yield {"status": "ok", "model": model, "text": "".join(chunks).strip()}

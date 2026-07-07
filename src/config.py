@@ -88,6 +88,7 @@ def print_config_status():
 
 ABUSEIPDB_API_KEY = get_secret("ABUSEIPDB_API_KEY")
 VIRUSTOTAL_API_KEY = get_secret("VIRUSTOTAL_API_KEY")
+GITHUB_MODELS_TOKEN = get_secret("GITHUB_MODELS_TOKEN")
 
 
 if __name__ == "__main__":
