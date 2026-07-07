@@ -6,6 +6,7 @@ from concurrent.futures import ThreadPoolExecutor
 import streamlit as st
 import streamlit.components.v1 as components
  
+from src.analyzer.html_utils import sanitize_html_for_preview
 from src.analyzer.llm_context_analyzer import ENABLE_LOCAL_OLLAMA, stream_phi4_email_analysis
 from src.components.email_globe import render_email_globe
 from src.views.backend import get_content_model, get_core_backend
@@ -477,6 +478,14 @@ def _summarize_link_reputation(results: dict) -> str:
     return f"VirusTotal link reputation: worst={worst}; " + ", ".join(parts)
 
 
+def _render_html_preview(raw_html: str, key: str, height: int = 360) -> None:
+    components.html(
+        sanitize_html_for_preview(raw_html),
+        height=height,
+        scrolling=True,
+    )
+
+
 def render():
     parser, validator, analyzer = get_core_backend()
 
@@ -491,7 +500,7 @@ def render():
         st.caption("Il file viene analizzato localmente e convertito in un report SOC.")
 
         if uploaded_file is not None:
-            raw_text = uploaded_file.getvalue().decode("utf-8", errors="ignore")
+            raw_text = uploaded_file.getvalue().decode("utf-8", errors="replace")
             if st.session_state.get("current_eml_name") != uploaded_file.name:
                 st.session_state["raw_eml_debug_data"] = _strip_encoded_content(raw_text)
                 st.session_state["current_eml_name"] = uploaded_file.name
@@ -810,24 +819,37 @@ def render():
                 ai_context = soc.get("body_context", "normal")
                 body_display = soc.get("body_extracted") or soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
                 full_body = soc.get("body_clean_full") or soc.get("body_clean") or soc.get("body") or ""
+                body_html = soc.get("body_html") or ""
                 if ai_context == "forwarded":
                     st.info("Email inoltrata: viene mostrato e analizzato il contenuto inoltrato.")
                 elif ai_context == "reply":
                     st.info("Risposta email: viene mostrata e analizzata solo la risposta corrente.")
-                if soc.get("html_strip_applied"):
-                    clean_tab, full_tab, html_tab = st.tabs(["Body estratto", "Conversazione completa", "HTML grezzo"])
-                    with clean_tab:
-                        st.text_area("Body", body_display, height=280)
-                    with full_tab:
-                        st.text_area("Body completo", full_body, height=280)
-                    with html_tab:
-                        st.code(soc.get("body_html") or "", language="html")
-                else:
-                    body_tab, full_tab = st.tabs(["Body estratto", "Conversazione completa"])
-                    with body_tab:
-                        st.text_area("Body", body_display, height=280)
-                    with full_tab:
-                        st.text_area("Body completo", full_body, height=280)
+
+                tab_labels = ["Body estratto", "Conversazione completa"]
+                if body_html:
+                    tab_labels.extend(["HTML interpretato", "HTML raw"])
+
+                body_tabs = st.tabs(tab_labels)
+                with body_tabs[0]:
+                    if body_display:
+                        st.text_area("Testo usato per AI e triage", body_display, height=300)
+                    else:
+                        st.warning("Nessun testo estraibile dal corpo del messaggio.")
+                with body_tabs[1]:
+                    if full_body:
+                        st.text_area("Testo completo normalizzato", full_body, height=300)
+                    else:
+                        st.info("Nessuna conversazione completa disponibile.")
+
+                next_tab = 2
+                if body_html:
+                    with body_tabs[next_tab]:
+                        st.caption("Preview HTML isolata: script, form e contenuti attivi vengono rimossi prima della visualizzazione.")
+                        _render_html_preview(body_html, f"{phi4_key}_body_html")
+                    next_tab += 1
+                    with body_tabs[next_tab]:
+                        st.code(body_html, language="html")
+                    next_tab += 1
 
             with raw_tab:
                 st.markdown("#### Report strutturato")
@@ -835,7 +857,7 @@ def render():
                 st.json(report_copy, expanded=False)
                 st.markdown("#### EML raw pulito")
                 st.text_area(
-                    "Raw EML",
+                    "EML raw pulito",
                     st.session_state.get("raw_eml_debug_data", ""),
                     height=480,
                     disabled=True,

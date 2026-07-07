@@ -34,10 +34,28 @@ def _extract_domain(email_or_addr: str) -> str:
 
 def _decode_text_part(part) -> str:
     payload = part.get_payload(decode=True)
-    if not payload:
-        return ""
     charset = part.get_content_charset() or "utf-8"
-    return payload.decode(charset, errors="replace")
+
+    if payload:
+        for candidate in (charset, "utf-8", "latin-1", "cp1252"):
+            try:
+                return payload.decode(candidate, errors="replace")
+            except LookupError:
+                continue
+
+    raw_payload = part.get_payload(decode=False)
+    if isinstance(raw_payload, str):
+        return raw_payload
+    return ""
+
+
+def _looks_like_html(value: str) -> bool:
+    if not value:
+        return False
+    return bool(re.search(
+        r"(?is)<\s*(?:!doctype\s+html|html|body|table|div|span|p|br|a|img|style|head)\b",
+        value,
+    ))
 
 
 def _is_public_ip(value: str | None) -> bool:
@@ -165,7 +183,10 @@ class EmlSOCAnalyzer:
             elif ct == "text/plain":
                 text = _decode_text_part(part)
                 if text:
-                    body_parts.append(text)
+                    if _looks_like_html(text):
+                        html_parts.append(text)
+                    else:
+                        body_parts.append(text)
             elif ct == "text/html":
                 text = _decode_text_part(part)
                 if text:

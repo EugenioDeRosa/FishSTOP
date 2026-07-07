@@ -9,6 +9,7 @@ Gli attaccanti inseriscono tag o commenti HTML invisibili in mezzo alle parole
 stripping, BERT riceve token sporchi e le regex sui link non trovano le URL reali.
 """
 
+import html as html_lib
 import re
 
 try:
@@ -47,6 +48,8 @@ def strip_html(html: str) -> str:
         text = soup.get_text(separator="\n")
     else:
         # Fallback regex
+        html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*>.*?</\1>", " ", html)
+        html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*?/?>", " ", html)
         text = re.sub(r"<[^>]+>", " ", html)
         text = (text
                 .replace("&amp;",  "&")
@@ -62,3 +65,50 @@ def strip_html(html: str) -> str:
     cleaned = re.sub(r" {2,}", " ", cleaned)
 
     return cleaned.strip()
+
+
+def sanitize_html_for_preview(html: str) -> str:
+    """
+    Restituisce HTML renderizzabile nella dashboard senza contenuti attivi.
+
+    La preview serve all'analista per capire layout e testo del messaggio, non
+    per eseguire codice dell'email. Rimuove quindi script, iframe, form, embed,
+    event handler inline e URL javascript/data potenzialmente pericolosi.
+    """
+    if not html or not html.strip():
+        return "<p><em>Nessun HTML disponibile.</em></p>"
+
+    if not _BS4_AVAILABLE:
+        safe_html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*>.*?</\1>", " ", html)
+        safe_html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*?/?>", " ", safe_html)
+        safe_html = re.sub(r"(?i)\b(?:javascript|vbscript|data)\s*:", "#", safe_html)
+        escaped = html_lib.escape(safe_html)
+        return f"<pre style='white-space: pre-wrap'>{escaped}</pre>"
+
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        soup = BeautifulSoup(html, "html.parser")
+
+    for tag in soup(["script", "iframe", "object", "embed", "form", "input", "button", "meta"]):
+        tag.decompose()
+
+    for tag in soup.find_all(True):
+        for attr in list(tag.attrs):
+            attr_l = attr.lower()
+            value = tag.attrs.get(attr)
+            if attr_l.startswith("on"):
+                del tag.attrs[attr]
+                continue
+            if attr_l in {"href", "src", "xlink:href", "action"}:
+                raw_value = " ".join(value) if isinstance(value, list) else str(value or "")
+                lowered = raw_value.strip().lower()
+                if lowered.startswith(("javascript:", "data:", "vbscript:", "file:")):
+                    del tag.attrs[attr]
+
+    body = soup.body.decode_contents() if soup.body else str(soup)
+    return f"""
+    <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24292f;">
+      {body}
+    </div>
+    """

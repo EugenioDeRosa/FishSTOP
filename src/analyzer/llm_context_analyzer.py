@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import socket
 import urllib.error
 import urllib.request
@@ -36,10 +37,10 @@ def _active_model(default_ollama_model: str) -> str:
 
 
 SYSTEM_MESSAGE = (
-    "You are a SOC phishing and scam classifier. "
-    "You must always decide whether the email looks suspicious by judging the subject/body first. "
-    "Only after that content thesis is formed may you use technical indicators as supporting or weakening evidence. "
-    "Never let SPF, DKIM, DMARC, links, attachments, sender IPs, or reputation data create the initial thesis. "
+    "You are a SOC assistant that explains email intent. "
+    "You do not perform independent forensic analysis. "
+    "First understand the intent of the anonymized subject/body only. "
+    "Then use only the structured technical facts provided by FishSTOP as supporting context. "
     "Answer with one concise English paragraph and no JSON."
 )
 
@@ -49,6 +50,24 @@ def _clip(value: str, limit: int) -> str:
     if len(value) <= limit:
         return value
     return value[:limit] + "\n[...troncato...]"
+
+
+def _anonymize_for_llm(value: str) -> str:
+    value = str(value or "")
+    replacements = [
+        (r"\b[A-Z]{2}\d{2}[A-Z0-9]{11,30}\b", "[IBAN]"),
+        (r"(?<!\w)\+?\d[\d .()/-]{7,}\d\b", "[PHONE]"),
+        (r"\b(?:\d[ -]?){13,19}\b", "[POSSIBLE_CARD_OR_ACCOUNT]"),
+        (r"\b(?:[A-Za-z0-9._%+-]+)@(?:[A-Za-z0-9.-]+\.[A-Za-z]{2,})\b", "[EMAIL]"),
+        (r"\bhttps?://[^\s<>\"]+", "[URL]"),
+        (r"\b(?:\d{1,3}\.){3}\d{1,3}\b", "[IP]"),
+        (r"\b(Ciao|Gentile|Buongiorno|Buonasera|Salve)\s+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}", r"\1 [PERSON]"),
+        (r"\b(Sig\.?|Sig\.ra|Dott\.?|Dott\.ssa|Mr\.?|Mrs\.?|Ms\.?)\s+[A-ZÀ-ÖØ-Þ][A-Za-zÀ-ÖØ-öø-ÿ' -]{2,}", r"\1 [PERSON]"),
+    ]
+    anonymized = value
+    for pattern, placeholder in replacements:
+        anonymized = re.sub(pattern, placeholder, anonymized, flags=re.IGNORECASE)
+    return anonymized
 
 
 def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> list[str]:
@@ -183,6 +202,19 @@ def _link_hint(link: dict) -> str:
     return "neutral unless paired with a risky request in the body"
 
 
+def _anonymized_link_hint(link: dict) -> str:
+    host = (link.get("host") or "").lower()
+    if "docs.google.com/forms" in host or "forms.gle" in host or "forms.office.com" in host:
+        return "external form link"
+    if any(part in host for part in ("sharepoint.com", "teams.microsoft.com", "office.com", "microsoft.com")):
+        return "common business/collaboration link"
+    if any(part in host for part in ("linkedin.com", "youtube.com", "zoom.us", "meet.google.com", "calendar.google.com")):
+        return "common informational/meeting link"
+    if link.get("is_ip"):
+        return "direct IP link"
+    return "generic extracted link"
+
+
 def _auth_status(soc: dict, protocol: str) -> str:
     protocol = protocol.upper()
     auth_results = soc.get("auth_results") or {}
@@ -218,7 +250,7 @@ def _technical_context_lines(soc: dict) -> list[str]:
         for att in attachments[:5]:
             lines.append(
                 "Attachment: "
-                f"name={att.get('filename') or '(unnamed)'} "
+                "name=[ATTACHMENT_NAME] "
                 f"ext={att.get('extension_from_filename') or '-'} "
                 f"mime={att.get('content_type') or '-'} "
                 f"magic={att.get('magic_detected_format') or '-'} "
@@ -260,6 +292,13 @@ def build_fast_email_prompt(soc: dict) -> str:
         str(soc.get(field) or "")
         for field in ("to", "cc", "delivered_to")
     )
+    anonymized_subject = _anonymize_for_llm(subject)
+    anonymized_body = _anonymize_for_llm(body)
+    anonymized_sender = "[SENDER]" if soc.get("from_") else "Sconosciuto"
+    anonymized_recipients = "[RECIPIENTS]" if recipients.strip() else "-"
+    anonymized_technical_context = "\n".join(
+        _anonymize_for_llm(line) for line in _technical_context_lines(soc)
+    )
     risk_signals = _detect_text_risk_signals(subject, body, links)
     has_actionable_text_risk = _has_actionable_text_risk(risk_signals)
 
@@ -270,8 +309,8 @@ def build_fast_email_prompt(soc: dict) -> str:
             vt_status = rep.get("status", "unknown")
             ratio = rep.get("detection_ratio", "0 / 0")
             link_lines.append(
-                f"- host={link.get('host') or '-'} vt_status={vt_status} detections={ratio} "
-                f"url={_clip(link.get('url', ''), 180)} hint={_link_hint(link)}"
+                f"- link_type={_anonymized_link_hint(link)} vt_status={vt_status} detections={ratio} "
+                f"hint={_link_hint(link)}"
             )
     elif links:
         link_lines.append(
@@ -280,23 +319,25 @@ def build_fast_email_prompt(soc: dict) -> str:
 
     return "\n".join(
         [
-            f"Da: {soc.get('from_') or 'Sconosciuto'}",
-            f"Destinatari visibili: {_clip(recipients, 500) or '-'}",
-            f"Oggetto: {subject}",
+            "Privacy note: subject, body, sender, recipients, URLs, IPs, phone numbers, email addresses, "
+            "IBANs and account-like numbers are anonymized before being sent to the model.",
+            f"Da: {_clip(anonymized_sender, 500) or 'Sconosciuto'}",
+            f"Destinatari visibili: {_clip(anonymized_recipients, 500) or '-'}",
+            f"Oggetto anonimizzato: {anonymized_subject}",
             f"Content precheck: {_content_precheck_label(has_actionable_text_risk)}",
             "",
             "Text risk signals detected:",
             "\n".join(f"- {signal}" for signal in risk_signals),
             "",
-            "Corpo:",
-            _clip(body, 2000),
+            "Corpo anonimizzato:",
+            _clip(anonymized_body, 2000),
             "",
             "Technical corroboration inputs - do not use these for the initial thesis:",
             "VirusTotal link reputation:",
             link_reputation_summary,
             "",
             "Technical context:",
-            "\n".join(_technical_context_lines(soc)),
+            anonymized_technical_context,
             "",
             "Link estratti:",
             "\n".join(link_lines) if link_lines else "- nessuno",
@@ -323,34 +364,28 @@ def stream_phi4_email_analysis(soc: dict, model: str = OLLAMA_MODEL, timeout: in
         {
             "role": "user",
             "content": (
-                "Analyze the email in two strict steps, then answer with one concise English paragraph.\n"
-                "Step 1 - Mandatory body/subject thesis: FIRST detect the language of the subject/body and interpret the content "
-                "in that original language. This may be French, Italian, English, Spanish, German, Portuguese, Dutch, or any other language. "
-                "Do not assume the email is safe because English or Italian keywords are absent, and do not rely on the local keyword precheck "
-                "as a safety decision. Before considering any technical field, explicitly check the subject/body meaning for urgency or pressure, "
-                "money requests, payment instructions, bank coordinates such as IBAN/SWIFT/account numbers, invoices or refunds, "
-                "promotions or prizes, credential or login requests, sensitive forms, requests to click links, impersonation "
-                "of brands/executives/internal departments, vague profitable business opportunities, international-collaboration proposals, "
-                "requests to move the conversation to a personal email address, and any unusual requested action. "
-                "This first thesis must ignore SPF, DKIM, DMARC, Return-Path, Reply-To, VirusTotal, attachments, flags, "
-                "routing, sender IPs, geolocation, and every other technical signal.\n"
-                "Step 2 - Technical corroboration only: ONLY AFTER the body/content thesis, use SPF/DKIM/DMARC, Return-Path mismatch, "
-                "Reply-To mismatch, display-name spoofing, VirusTotal link reputation, attachment anomalies, and SOC flags to say "
-                "whether the technical evidence supports, weakens, or does not materially change the thesis from Step 1.\n"
+                "Write an explanation in two strict steps, then answer with one concise English paragraph.\n"
+                "Step 1 - Intent from anonymized subject/body: detect the language and explain the likely intent of the "
+                "anonymized subject/body. Focus on what the message asks the recipient to do, such as paying, logging in, "
+                "sharing credentials, opening a form, replying, accepting a promotion, handling an invoice, or completing "
+                "a normal administrative task. Do not infer identities from placeholders such as [EMAIL], [URL], [IP], "
+                "[PHONE], [IBAN], or [POSSIBLE_CARD_OR_ACCOUNT].\n"
+                "Step 2 - FishSTOP technical context: use only the structured facts provided below, such as SPF, DKIM, "
+                "DMARC, Return-Path mismatch, Reply-To mismatch, display-name spoofing, VirusTotal status, attachment "
+                "anomalies, and SOC flags. Do not perform new technical analysis and do not invent risks that are not "
+                "explicitly listed.\n"
                 "Start exactly with one of these phrases:\n"
                 "- The email provided is suspicious because\n"
                 "- The email provided is not suspicious because\n"
-                "Your first sentence must be driven by the body/content thesis and must mention the content reason first. "
-                "If the body contains a clear scam/phishing "
-                "pattern, classify as suspicious even if some technical checks pass. If the body looks normal, classify as "
-                "not suspicious unless the technical evidence is strong and corroborated by multiple independent indicators. "
+                "Your first sentence must be driven by the intent of the anonymized subject/body and must mention that "
+                "intent first. If the body contains a clear scam/phishing pattern, classify as suspicious even if some "
+                "technical checks pass. If the body looks normal, classify as not suspicious unless the provided FishSTOP "
+                "technical context is strong and corroborated by multiple independent indicators. "
                 "A VirusTotal status of suspicious alone is not enough to override normal body content; treat it as a manual-check note. "
                 "Only a clearly malicious VirusTotal result, or VirusTotal suspicious plus identity mismatch/authentication failure/attachment anomaly, "
                 "may override a normal body.\n"
-                "Do not invent risks. Only mention body risks explicitly visible in the subject/body/links/recipients, "
-                "and only mention technical risks explicitly listed in Technical context.\n"
-                "Do not mention sender IP, injection IP, relay IP, geolocation, or routing path as evidence. "
-                "In modern email these values are often missing, internal, or misleading.\n"
+                "Do not mention sender IP, injection IP, relay IP, geolocation, routing path, full URLs, email addresses, "
+                "phone numbers, IBANs, account numbers, or personal data as evidence.\n"
                 "A link is not suspicious by itself. Use VirusTotal link reputation as the main link evidence, and "
                 "mention a link as risky only if VirusTotal marks it malicious or the body asks for a risky action through it.\n"
                 "Do not classify as suspicious only because a link is embedded, repeated, redirects through Google, "
