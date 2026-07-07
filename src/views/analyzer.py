@@ -9,7 +9,7 @@ import torch
 
 from src.analyzer.llm_context_analyzer import ENABLE_LOCAL_OLLAMA, stream_phi4_email_analysis
 from src.components.email_globe import render_email_globe
-from src.views.backend import get_backend
+from src.views.backend import get_content_model, get_core_backend
 
 
 def _strip_encoded_content(raw: str) -> str:
@@ -479,7 +479,7 @@ def _summarize_link_reputation(results: dict) -> str:
 
 
 def render():
-    parser, validator, analyzer, tokenizer, model, model_source = get_backend()
+    parser, validator, analyzer = get_core_backend()
 
     st.title("FishStop SOC Console")
     st.caption("Email triage, authentication checks, threat intelligence e classificazione AI")
@@ -774,6 +774,9 @@ def render():
                 email_text = f"Subject: {soc.get('subject') or ''}\n\n{clean_body}".strip()
 
                 _render_phi4_analysis(soc, phi4_key, auto_run=False)
+
+                with st.spinner("Caricamento modello BERT..."):
+                    tokenizer, model, model_source = get_content_model()
 
                 if model_source == "company":
                     st.success("Modello aziendale attivo.")
