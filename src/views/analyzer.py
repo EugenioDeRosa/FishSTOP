@@ -7,7 +7,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import torch
 
-from src.analyzer.llm_context_analyzer import stream_phi4_email_analysis
+from src.analyzer.llm_context_analyzer import ENABLE_LOCAL_OLLAMA, stream_phi4_email_analysis
 from src.components.email_globe import render_email_globe
 from src.views.backend import get_backend
 
@@ -136,6 +136,10 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
 
     if st.session_state.get(error_key):
         st.error(st.session_state[error_key])
+        return None
+
+    if not ENABLE_LOCAL_OLLAMA:
+        st.info("Analisi Phi-4 locale disattivata per la web app. La collegheremo a Hugging Face nel prossimo passaggio.")
         return None
 
     if auto_run:

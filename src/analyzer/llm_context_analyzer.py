@@ -1,4 +1,5 @@
 import json
+import os
 import socket
 import urllib.error
 import urllib.request
@@ -6,6 +7,7 @@ import urllib.request
 
 OLLAMA_CHAT_URL = "http://localhost:11434/api/chat"
 OLLAMA_MODEL = "phi4-mini:latest"
+ENABLE_LOCAL_OLLAMA = os.getenv("ENABLE_LOCAL_OLLAMA", "1").strip().lower() in {"1", "true", "yes", "on"}
 
 SYSTEM_MESSAGE = (
     "You are a SOC phishing and scam classifier. "
@@ -58,6 +60,14 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
         "email address is valid", "verify your email", "confirm your email",
         "get back to me", "reply back", "kindly reply",
     )
+    vague_lure_words = (
+        "profitable business opportunity", "business opportunity", "lucrative opportunity",
+        "international collaboration", "share for your consideration", "of interest to you",
+        "would like to share", "reply me via", "responda-me via",
+        "oportunidade de negócio", "oportunidade de negocio", "negócio lucrativa",
+        "negocio lucrativa", "colaboração internacional", "colaboracao internacional",
+        "gostaria de compartilhar", "mais detalhes",
+    )
     impersonation_words = (
         "jeff bezos", "elon musk", "bill gates", "amazon.com", "ceo",
         "direttore", "amministratore delegato", "hr department", "it department",
@@ -74,6 +84,7 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
     has_urgency = any(word in text for word in urgency_words)
     has_form = any(word in text or word in urls for word in form_words)
     has_validation = any(word in text for word in validation_words)
+    has_vague_lure = any(word in text for word in vague_lure_words)
     has_impersonation = any(word in text for word in impersonation_words)
     has_marketing = any(word in text for word in marketing_words)
 
@@ -91,6 +102,8 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
         signals.append("prize/donation/money claim asks the recipient to reply or validate the email address")
     if has_money and has_impersonation:
         signals.append("money/prize claim impersonates a well-known executive or brand")
+    if has_vague_lure:
+        signals.append("vague profitable business opportunity or international-collaboration lure asks for a reply")
 
     neutral_admin_words = (
         "firma ore", "firmare le ore", "firmarmi le ore", "timesheet",
@@ -118,6 +131,15 @@ def _has_actionable_text_risk(signals: list[str]) -> bool:
     return any(
         not any(marker in signal for marker in neutral_markers)
         for signal in signals
+    )
+
+
+def _content_precheck_label(has_actionable_text_risk: bool) -> str:
+    if has_actionable_text_risk:
+        return "local keyword/rule precheck found possible risky intent"
+    return (
+        "no local keyword/rule match; this is not a safety decision. "
+        "The model must detect the language and inspect the original subject/body intent."
     )
 
 
@@ -235,7 +257,7 @@ def build_fast_email_prompt(soc: dict) -> str:
             f"Da: {soc.get('from_') or 'Sconosciuto'}",
             f"Destinatari visibili: {_clip(recipients, 500) or '-'}",
             f"Oggetto: {subject}",
-            f"Content intent baseline: {'risky content pattern detected' if has_actionable_text_risk else 'no risky content pattern detected'}",
+            f"Content precheck: {_content_precheck_label(has_actionable_text_risk)}",
             "",
             "Text risk signals detected:",
             "\n".join(f"- {signal}" for signal in risk_signals),
@@ -257,17 +279,28 @@ def build_fast_email_prompt(soc: dict) -> str:
 
 
 def stream_phi4_email_analysis(soc: dict, model: str = OLLAMA_MODEL, timeout: int = 90):
+    if not ENABLE_LOCAL_OLLAMA:
+        yield {
+            "status": "error",
+            "message": "Analisi Phi-4 locale disattivata. Collega Hugging Face per usare l'AI nella web app.",
+            "text": "",
+        }
+        return
+
     messages = [
         {"role": "system", "content": SYSTEM_MESSAGE},
         {
             "role": "user",
             "content": (
                 "Analyze the email in two strict steps, then answer with one concise English paragraph.\n"
-                "Step 1 - Mandatory body/subject thesis: FIRST inspect only the subject and body. "
-                "Before considering any technical field, explicitly check the subject/body for urgency or pressure, "
+                "Step 1 - Mandatory body/subject thesis: FIRST detect the language of the subject/body and interpret the content "
+                "in that original language. This may be French, Italian, English, Spanish, German, Portuguese, Dutch, or any other language. "
+                "Do not assume the email is safe because English or Italian keywords are absent, and do not rely on the local keyword precheck "
+                "as a safety decision. Before considering any technical field, explicitly check the subject/body meaning for urgency or pressure, "
                 "money requests, payment instructions, bank coordinates such as IBAN/SWIFT/account numbers, invoices or refunds, "
                 "promotions or prizes, credential or login requests, sensitive forms, requests to click links, impersonation "
-                "of brands/executives/internal departments, and any unusual requested action. "
+                "of brands/executives/internal departments, vague profitable business opportunities, international-collaboration proposals, "
+                "requests to move the conversation to a personal email address, and any unusual requested action. "
                 "This first thesis must ignore SPF, DKIM, DMARC, Return-Path, Reply-To, VirusTotal, attachments, flags, "
                 "routing, sender IPs, geolocation, and every other technical signal.\n"
                 "Step 2 - Technical corroboration only: ONLY AFTER the body/content thesis, use SPF/DKIM/DMARC, Return-Path mismatch, "
@@ -293,7 +326,9 @@ def stream_phi4_email_analysis(soc: dict, model: str = OLLAMA_MODEL, timeout: in
                 "points to a company website, or because there is one visible recipient.\n"
                 "Promotions, newsletters, discounts, events, and normal commercial messages are not phishing just because they contain links.\n"
                 "Treat lottery/prize/donation/inheritance claims, large unexpected money amounts, celebrity or CEO "
-                "impersonation, and requests to reply to validate an email address as explicit money-scam indicators.\n"
+                "impersonation, vague profitable business or investment opportunities, international-collaboration lures, and requests "
+                "to reply to a personal/free email address for more details as explicit scam indicators even if no money amount, "
+                "credential request, or bank detail is shown yet.\n"
                 "Normal administrative work requests, such as asking a manager to sign hours, timesheets, attendance "
                 "sheets, or work records, are not suspicious unless they also ask for money, credentials, bank details, "
                 "external forms, or urgent unusual action.\n"

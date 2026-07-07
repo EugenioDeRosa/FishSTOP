@@ -181,6 +181,24 @@ Poi apri:
 http://localhost:8501
 ```
 
+## Deploy su Streamlit Cloud
+
+Per pubblicare la web app:
+
+1. Pusha il repository su GitHub.
+2. In Streamlit Cloud crea una nuova app dal repository `EugenioDeRosa/FishSTOP`.
+3. Usa come main file `streamlit_app.py`.
+4. In Advanced settings > Secrets inserisci almeno:
+
+```toml
+ENABLE_LOCAL_OLLAMA = "0"
+ABUSEIPDB_API_KEY = ""
+VIRUSTOTAL_API_KEY = ""
+```
+
+`ENABLE_LOCAL_OLLAMA = "0"` evita che la web app provi a chiamare Ollama su `localhost`.
+Quando collegheremo Hugging Face, aggiungeremo qui anche il token e l'URL del backend AI.
+
 ## Uso della dashboard
 
 1. Apri `Analyze EML`.
