@@ -1,12 +1,11 @@
-import json
+﻿import json
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 
 import streamlit as st
 import streamlit.components.v1 as components
-import torch
-
+ 
 from src.analyzer.llm_context_analyzer import ENABLE_LOCAL_OLLAMA, stream_phi4_email_analysis
 from src.components.email_globe import render_email_globe
 from src.views.backend import get_content_model, get_core_backend
@@ -769,6 +768,7 @@ def render():
                                     _render_virustotal(validator.check_file_hash(att["hash_sha256"]))
 
             with content_tab:
+                import torch
                 st.markdown("#### Analisi AI del contenuto")
                 clean_body = soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
                 email_text = f"Subject: {soc.get('subject') or ''}\n\n{clean_body}".strip()

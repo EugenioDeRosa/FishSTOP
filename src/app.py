@@ -15,14 +15,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.version import APP_VERSION
-from src.views import analyzer, dataset_sources, settings, train
 
 
 PAGES = {
-    "settings": settings.render,
-    "train": train.render,
-    "dataset_sources": dataset_sources.render,
-    "analyze": analyzer.render,
+    "settings": "src.views.settings",
+    "train": "src.views.train",
+    "dataset_sources": "src.views.dataset_sources",
+    "analyze": "src.views.analyzer",
 }
 
 if st.session_state.get("page") not in {"home", *PAGES}:
@@ -83,4 +82,7 @@ with st.sidebar:
 if st.session_state.page == "home":
     render_home()
 else:
-    PAGES[st.session_state.page]()
+    import importlib
+
+    page_module = importlib.import_module(PAGES[st.session_state.page])
+    page_module.render()
