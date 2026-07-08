@@ -17,7 +17,7 @@ from .lookalike import is_ip_url
 # Regex per URL assoluti — cattura http/https/ftp e URL senza schema (www.)
 _URL_RE = re.compile(
     r"""(?i)\b(?:https?://|ftp://|www\.)"""
-    r"""(?:[a-z0-9\-]+\.)+[a-z]{2,}"""
+    r"""(?:[^\W_][\w\-]*\.)+[^\W_]{2,}"""
     r"""(?::\d{1,5})?"""
     r"""(?:/[^\s"'<>\]\)]*)?""",
     re.VERBOSE,

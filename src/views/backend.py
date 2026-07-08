@@ -1,5 +1,3 @@
-import os
-
 import streamlit as st
 
 from src.analyzer import EmlSOCAnalyzer
@@ -21,23 +19,10 @@ def init_core_backend():
 def init_content_model():
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-    company_path = os.path.join("models", "company_model")
-    base_path = os.path.join("models", "saved_models")
+    tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_ID)
+    model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_ID)
 
-    if os.path.isdir(company_path) and os.path.exists(os.path.join(company_path, "config.json")):
-        model_path = company_path
-        model_source = "company"
-    elif os.path.isdir(base_path) and os.path.exists(os.path.join(base_path, "config.json")):
-        model_path = base_path
-        model_source = "base"
-    else:
-        model_path = HF_MODEL_ID
-        model_source = "base"
-
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    model = AutoModelForSequenceClassification.from_pretrained(model_path)
-
-    return tokenizer, model, model_source
+    return tokenizer, model, "huggingface"
 
 
 def get_core_backend():

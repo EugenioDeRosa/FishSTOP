@@ -37,11 +37,15 @@ def _decode_text_part(part) -> str:
     charset = part.get_content_charset() or "utf-8"
 
     if payload:
+        decoded_candidates = []
         for candidate in (charset, "utf-8", "latin-1", "cp1252"):
             try:
-                return payload.decode(candidate, errors="replace")
+                decoded = payload.decode(candidate, errors="replace")
             except LookupError:
                 continue
+            decoded_candidates.append(decoded)
+        if decoded_candidates:
+            return min(decoded_candidates, key=lambda value: value.count("\ufffd"))
 
     raw_payload = part.get_payload(decode=False)
     if isinstance(raw_payload, str):
@@ -182,14 +186,14 @@ class EmlSOCAnalyzer:
                 ))
             elif ct == "text/plain":
                 text = _decode_text_part(part)
-                if text:
+                if text and text.strip():
                     if _looks_like_html(text):
                         html_parts.append(text)
                     else:
                         body_parts.append(text)
             elif ct == "text/html":
                 text = _decode_text_part(part)
-                if text:
+                if text and text.strip():
                     html_parts.append(text)
 
         combined_html = "\n".join(html_parts)
@@ -374,6 +378,10 @@ class EmlSOCAnalyzer:
             technique_label = {
                 "edit_distance": "Edit-distance",
                 "homoglyph":     "Omoglifi Unicode",
+                "unicode_homoglyph": "Omoglifi Unicode nel dominio",
+                "unicode_domain": "Caratteri Unicode nel dominio",
+                "punycode_idna": "Dominio Punycode/IDNA",
+                "punycode_homograph": "Attacco omografo Punycode",
                 "typosquatting": "Typosquatting",
             }.get(alert["technique"], alert["technique"])
             flag(

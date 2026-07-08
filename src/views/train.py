@@ -1,9 +1,4 @@
 import json
-import os
-import shutil
-import zipfile
-from datetime import datetime, timezone
-from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
@@ -14,7 +9,6 @@ from src.eml_dataset_builder import EmlDatasetBuilder
 
 PUBLIC_DATASET = Path("data/processed/fishstop_train_balanced.csv")
 PUBLIC_DATASET_FALLBACK = Path("data/processed/fishstop_train.csv")
-COMPANY_MODEL_DIR = Path("models/company_model")
 
 
 def _normalize_training_df(df: pd.DataFrame, source_name: str) -> pd.DataFrame:
@@ -203,7 +197,7 @@ print("\\nFatto. Scarica da Drive: fishstop_bert_model.zip")
                 "metadata": {},
                 "source": [
                     "# FishStop Colab Training\\n",
-                    "Carica `fishstop_train.csv` in `MyDrive`, esegui tutto, poi scarica `fishstop_bert_model.zip` e importalo in FishStop.\\n",
+                    "Carica `fishstop_train.csv` in `MyDrive`, esegui tutto, poi pubblica il modello su Hugging Face per usarlo nella web app.\\n",
                 ],
             },
             {
@@ -225,52 +219,11 @@ print("\\nFatto. Scarica da Drive: fishstop_bert_model.zip")
     return json.dumps(notebook, indent=2).encode("utf-8")
 
 
-def _safe_extract_model_zip(uploaded_zip) -> tuple[bool, str]:
-    raw = uploaded_zip.read()
-    with zipfile.ZipFile(BytesIO(raw)) as archive:
-        names = archive.namelist()
-        if not names:
-            return False, "Zip vuoto."
-
-        root_prefix = ""
-        if all(name.startswith("fishstop_bert_model/") for name in names if name.strip()):
-            root_prefix = "fishstop_bert_model/"
-
-        required = {"config.json", "tokenizer_config.json"}
-        archive_basenames = {Path(name.removeprefix(root_prefix)).name for name in names}
-        if not required.issubset(archive_basenames):
-            return False, "Zip non valido: mancano config.json o tokenizer_config.json."
-
-        temp_dir = COMPANY_MODEL_DIR.parent / "_company_model_import"
-        if temp_dir.exists():
-            shutil.rmtree(temp_dir)
-        temp_dir.mkdir(parents=True, exist_ok=True)
-
-        for member in archive.infolist():
-            rel = member.filename.removeprefix(root_prefix)
-            if not rel or rel.endswith("/"):
-                continue
-            dest = (temp_dir / rel).resolve()
-            if temp_dir.resolve() not in dest.parents:
-                shutil.rmtree(temp_dir)
-                return False, "Zip non valido: percorso interno non sicuro."
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            with archive.open(member) as src, open(dest, "wb") as dst:
-                shutil.copyfileobj(src, dst)
-
-    if COMPANY_MODEL_DIR.exists():
-        backup = COMPANY_MODEL_DIR.with_name(
-            f"company_model_backup_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}"
-        )
-        COMPANY_MODEL_DIR.rename(backup)
-    temp_dir.rename(COMPANY_MODEL_DIR)
-    return True, f"Modello importato in {COMPANY_MODEL_DIR}."
-
-
 def render():
     st.header("Colab Training")
     st.markdown(
-        "Prepara il CSV, apri il notebook in Google Colab con GPU, poi importa qui lo zip del modello allenato."
+        "Prepara il CSV e apri il notebook in Google Colab con GPU. "
+        "La web app carica il modello solo da Hugging Face."
     )
 
     builder = EmlDatasetBuilder()
@@ -326,22 +279,5 @@ def render():
     )
     st.markdown(
         "Carica `fishstop_train.csv` in Google Drive, cartella `MyDrive`. "
-        "Apri il notebook in Colab, attiva GPU, esegui tutto e scarica `fishstop_bert_model.zip`."
+        "Apri il notebook in Colab, attiva GPU, esegui tutto e pubblica il modello aggiornato su Hugging Face."
     )
-
-    st.divider()
-    st.subheader("3. Import modello")
-    uploaded_model = st.file_uploader("Carica fishstop_bert_model.zip", type=["zip"])
-    if uploaded_model and st.button("Importa modello aziendale", type="primary", use_container_width=True):
-        try:
-            ok, message = _safe_extract_model_zip(uploaded_model)
-        except zipfile.BadZipFile:
-            ok, message = False, "File zip non valido."
-        except Exception as exc:
-            ok, message = False, f"Import fallito: {exc}"
-
-        if ok:
-            st.success(message)
-            st.info("Riavvia l'app per caricare il modello aziendale.")
-        else:
-            st.error(message)

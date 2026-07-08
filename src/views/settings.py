@@ -1,5 +1,3 @@
-import os
-
 import streamlit as st
 
 from src.config import ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY
@@ -10,10 +8,7 @@ def render():
     st.header("Settings")
 
     model_source = get_model_source()
-    if model_source == "company":
-        st.success("Modello aziendale attivo (`models/company_model`)")
-    else:
-        st.info("Modello base attivo (Kaggle-BERT / HuggingFace)")
+    st.info(f"Modello BERT attivo da Hugging Face (`{model_source}`).")
 
     st.divider()
     st.subheader("API Keys")
@@ -36,13 +31,12 @@ def render():
     )
 
     st.divider()
-    st.subheader("Paths")
+    st.subheader("Modelli online")
     st.code(
         "\n".join(
             [
-                f"company_model : {os.path.abspath('models/company_model')}",
-                f"base_model    : {os.path.abspath('models/saved_models')}",
-                f"custom_dataset: {os.path.abspath('data/custom_dataset.csv')}",
+                "bert_model : https://huggingface.co/eugenioderodev/fishstop-bert",
+                "phi4_mini  : GitHub Models / Azure AI endpoint via GITHUB_MODELS_TOKEN",
             ]
         ),
         language="text",

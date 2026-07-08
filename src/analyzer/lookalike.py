@@ -63,6 +63,33 @@ def normalize_homoglyphs(domain: str) -> str:
     return "".join(HOMOGLYPH_MAP.get(ch, ch) for ch in domain)
 
 
+def decode_punycode_domain(host: str) -> str:
+    """
+    Decodifica le label IDNA/punycode (xn--) in Unicode.
+
+    Se una label e' malformata, viene lasciata invariata per non interrompere
+    l'analisi dell'email.
+    """
+    labels = []
+    for label in (host or "").lower().rstrip(".").split("."):
+        if label.startswith("xn--"):
+            try:
+                labels.append(label.encode("ascii").decode("idna"))
+            except UnicodeError:
+                labels.append(label)
+        else:
+            labels.append(label)
+    return ".".join(labels)
+
+
+def _has_punycode_label(host: str) -> bool:
+    return any(label.lower().startswith("xn--") for label in (host or "").split("."))
+
+
+def _has_non_ascii(value: str) -> bool:
+    return any(ord(ch) > 127 for ch in value or "")
+
+
 def strip_public_suffix(domain: str) -> str:
     """
     Ritorna il 'registered domain' (etichette - TLD) in forma semplificata.
@@ -130,7 +157,7 @@ def check_lookalike_domains(
 
     def _alert(url: str, host: str, brand: str, technique: str,
                 detail: str, dist: int | None = None) -> None:
-        key = (host, brand)
+        key = (host, brand, technique)
         if key in seen_pairs:
             return
         seen_pairs.add(key)
@@ -152,6 +179,32 @@ def check_lookalike_domains(
 
         host_norm = normalize_homoglyphs(host)
         host_sld  = strip_public_suffix(host_norm)
+        decoded_host = decode_punycode_domain(host)
+        decoded_norm = normalize_homoglyphs(decoded_host)
+
+        if _has_punycode_label(host) and decoded_host != host.lower():
+            detail = f"Dominio punycode `{host}` decodificato come `{decoded_host}`."
+            if decoded_norm != decoded_host:
+                detail += f" Normalizzazione omoglifi: `{decoded_norm}`."
+            _alert(url, host, "-", "punycode_idna", detail)
+            continue
+
+        if _has_non_ascii(host):
+            if host_norm != host.lower():
+                detail = (
+                    f"Dominio `{host}` contiene caratteri Unicode omoglifi; "
+                    f"normalizzato diventa `{host_norm}`."
+                )
+                _alert(url, host, "-", "unicode_homoglyph", detail)
+            else:
+                _alert(
+                    url,
+                    host,
+                    "-",
+                    "unicode_domain",
+                    f"Dominio `{host}` contiene caratteri Unicode non ASCII.",
+                )
+            continue
 
         for brand in brands:
             brand_norm = normalize_homoglyphs(brand)
@@ -181,7 +234,27 @@ def check_lookalike_domains(
                        f"che lo rendono visivamente simile a `{brand}`")
                 continue
 
-            # Tecnica 3: Typosquatting — prefissi ingannatori
+            # Tecnica 3: Punycode / IDNA homograph
+            if _has_punycode_label(host) and decoded_host != host.lower():
+                decoded_sld = strip_public_suffix(decoded_norm)
+                decoded_matches_brand = (
+                    decoded_norm == brand_norm
+                    or decoded_norm.endswith("." + brand_norm)
+                    or decoded_sld == brand_sld
+                    or levenshtein(decoded_sld, brand_sld) <= edit_distance_threshold
+                )
+                if decoded_matches_brand:
+                    _alert(
+                        url,
+                        host,
+                        brand,
+                        "punycode_homograph",
+                        f"Dominio punycode `{host}` decodificato come `{decoded_host}`; "
+                        f"dopo normalizzazione omoglifi risulta simile a `{brand}`",
+                    )
+                    continue
+
+            # Tecnica 4: Typosquatting — prefissi ingannatori
             for prefix in ("secure-", "login-", "verify-", "account-",
                            "update-", "signin-", "support-", "my-", "auth-"):
                 candidate = host_norm.removeprefix("www.")

@@ -8,7 +8,7 @@ import streamlit as st
 import streamlit.components.v1 as components
  
 from src.analyzer.html_utils import sanitize_html_for_preview
-from src.analyzer.llm_context_analyzer import ENABLE_LOCAL_OLLAMA, stream_phi4_email_analysis
+from src.analyzer.llm_context_analyzer import stream_phi4_email_analysis
 from src.components.email_globe import render_email_globe
 from src.views.backend import get_content_model, get_core_backend
 
@@ -189,7 +189,7 @@ def _render_extracted_links_box(links: list[dict], key_prefix: str) -> None:
 def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
-        "Analisi testuale locale con Ollama: valuta contenuto plain e HTML, urgenza, soldi, IBAN, "
+        "Analisi hosted con Phi-4 mini: valuta contenuto plain e HTML, urgenza, soldi, IBAN, "
         "pagamenti, credenziali e moduli esterni; poi usa SPF/DKIM/DMARC, link e allegati solo come contesto."
     )
 
@@ -202,10 +202,6 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
 
     if st.session_state.get(error_key):
         st.error(st.session_state[error_key])
-        return None
-
-    if not ENABLE_LOCAL_OLLAMA:
-        st.info("Analisi Phi-4 locale disattivata per la web app. La collegheremo a Hugging Face nel prossimo passaggio.")
         return None
 
     if auto_run:
@@ -853,10 +849,7 @@ def render():
                 with st.spinner("Caricamento modello BERT..."):
                     tokenizer, model, model_source = get_content_model()
 
-                if model_source == "company":
-                    st.success("Modello aziendale attivo.")
-                else:
-                    st.info("Modello base attivo.")
+                st.info("Modello BERT caricato da Hugging Face.")
 
                 if not email_text or email_text.lower() == "subject:":
                     st.warning("Email senza testo significativo per la classificazione.")

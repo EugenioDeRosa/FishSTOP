@@ -82,6 +82,7 @@ def sanitize_html_for_preview(html: str) -> str:
     if not _BS4_AVAILABLE:
         safe_html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*>.*?</\1>", " ", html)
         safe_html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*?/?>", " ", safe_html)
+        safe_html = re.sub(r"(?is)<img\b[^>]*>", "[Immagine remota bloccata]", safe_html)
         safe_html = re.sub(r"""(?is)\son[a-z0-9_-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", "", safe_html)
         safe_html = re.sub(r"""(?is)\s(?:href|src|xlink:href|action)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", "", safe_html)
         safe_html = re.sub(r"(?i)\b(?:javascript|vbscript|data)\s*:", "#", safe_html)
@@ -95,6 +96,25 @@ def sanitize_html_for_preview(html: str) -> str:
 
     for tag in soup(["script", "iframe", "object", "embed", "form", "input", "button", "meta"]):
         tag.decompose()
+
+    for img in soup.find_all("img"):
+        src = str(img.get("src") or "").strip()
+        alt = str(img.get("alt") or "").strip()
+        label = "Immagine remota bloccata"
+        if alt:
+            label = f"{label}: {alt[:120]}"
+        elif src:
+            label = f"{label}: sorgente esterna rimossa"
+        placeholder = soup.new_tag("div")
+        placeholder.string = label
+        placeholder["style"] = (
+            "display:block; box-sizing:border-box; min-height:96px; padding:18px; "
+            "margin:8px 0; border:1px dashed #d0d7de; border-radius:6px; "
+            "background:#f6f8fa; color:#57606a; text-align:center; "
+            "font-family:Arial,sans-serif; font-size:14px;"
+        )
+        placeholder["title"] = "Immagine remota non caricata per evitare tracking o contenuti esterni."
+        img.replace_with(placeholder)
 
     for tag in soup.find_all(True):
         for attr in list(tag.attrs):
