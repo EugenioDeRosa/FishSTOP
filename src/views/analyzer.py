@@ -2,6 +2,7 @@
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
+from html import escape as html_escape
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -120,10 +121,75 @@ def _copyable_value(label: str, value: str | None, key: str):
         )
 
 
+def _confirm_copyable_link(url: str, key: str) -> None:
+    url = str(url or "")
+    if not url:
+        return
+
+    js_value = json.dumps(url)
+    element_id = f"copy_link_{re.sub(r'[^a-zA-Z0-9_]', '_', key)}"
+    components.html(
+        f"""
+        <div style="display: flex; gap: 8px; align-items: stretch; width: 100%;">
+          <code style="flex: 1; display: block; overflow-wrap: anywhere; padding: 8px 10px;
+                       border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa;
+                       color: #24292f; font-size: 12px; line-height: 1.35;">{html_escape(url)}</code>
+          <button id="{element_id}"
+            style="min-width: 86px; padding: 6px 10px; border: 1px solid #d0d7de;
+                   border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">
+            Copia
+          </button>
+        </div>
+        <script>
+          const button_{element_id} = document.getElementById("{element_id}");
+          button_{element_id}.onclick = async () => {{
+            const confirmed = window.confirm(
+              "Questo link proviene da una mail potenzialmente pericolosa. Vuoi davvero copiarlo?"
+            );
+            if (!confirmed) return;
+            try {{
+              await navigator.clipboard.writeText({js_value});
+              button_{element_id}.innerText = "Copiato";
+              setTimeout(() => button_{element_id}.innerText = "Copia", 1200);
+            }} catch (err) {{
+              button_{element_id}.innerText = "Errore";
+              setTimeout(() => button_{element_id}.innerText = "Copia", 1200);
+            }}
+          }};
+        </script>
+        """,
+        height=46,
+    )
+
+
+def _render_extracted_links_box(links: list[dict], key_prefix: str) -> None:
+    unique_links = []
+    seen = set()
+    for link in links:
+        url = link.get("url")
+        if not url or url in seen:
+            continue
+        seen.add(url)
+        unique_links.append(link)
+
+    with st.container(border=True):
+        st.markdown("#### Link presenti nella mail")
+        st.caption("La preview HTML non contiene link cliccabili. Copia un URL solo se serve per analisi in ambiente sicuro.")
+        if not unique_links:
+            st.info("Nessun link trovato nella mail.")
+            return
+
+        for idx, link in enumerate(unique_links, start=1):
+            host = link.get("host") or "-"
+            source = link.get("source") or "-"
+            st.caption(f"{idx}. Host: `{host}` · Fonte: `{source}`")
+            _confirm_copyable_link(link.get("url", ""), f"{key_prefix}_{idx}")
+
+
 def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
-        "Analisi testuale locale con Ollama: valuta contenuto, urgenza, soldi, IBAN, "
+        "Analisi testuale locale con Ollama: valuta contenuto plain e HTML, urgenza, soldi, IBAN, "
         "pagamenti, credenziali e moduli esterni; poi usa SPF/DKIM/DMARC, link e allegati solo come contesto."
     )
 
@@ -844,8 +910,9 @@ def render():
                 next_tab = 2
                 if body_html:
                     with body_tabs[next_tab]:
-                        st.caption("Preview HTML isolata: script, form e contenuti attivi vengono rimossi prima della visualizzazione.")
+                        st.caption("Preview HTML isolata: script, form, contenuti attivi e link cliccabili vengono rimossi prima della visualizzazione.")
                         _render_html_preview(body_html, f"{phi4_key}_body_html")
+                        _render_extracted_links_box(links, f"{phi4_key}_body_html_links")
                     next_tab += 1
                     with body_tabs[next_tab]:
                         st.code(body_html, language="html")

@@ -192,15 +192,17 @@ class EmlSOCAnalyzer:
                 if text:
                     html_parts.append(text)
 
-        raw_body = "\n".join(body_parts) if body_parts else "\n".join(html_parts)
+        combined_html = "\n".join(html_parts)
+        html_clean = strip_html(combined_html) if combined_html else ""
+        raw_body = "\n".join(body_parts) if body_parts else combined_html
         report["body"]      = raw_body.strip()
-        report["body_html"] = "\n".join(html_parts).strip() if html_parts else None
+        report["body_html"] = combined_html.strip() if html_parts else None
+        report["body_html_clean"] = html_clean
 
         if body_parts:
             report["body_clean"] = re.sub(r"\n{3,}", "\n\n", report["body"]).strip()
         else:
-            combined_html = "\n".join(html_parts)
-            report["body_clean"] = strip_html(combined_html)
+            report["body_clean"] = html_clean
 
         report["body_source"]        = "text/plain" if body_parts else ("text/html" if html_parts else "empty")
         report["html_strip_applied"] = (not bool(body_parts)) and bool(html_parts)

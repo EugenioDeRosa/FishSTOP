@@ -72,8 +72,9 @@ def sanitize_html_for_preview(html: str) -> str:
     Restituisce HTML renderizzabile nella dashboard senza contenuti attivi.
 
     La preview serve all'analista per capire layout e testo del messaggio, non
-    per eseguire codice dell'email. Rimuove quindi script, iframe, form, embed,
-    event handler inline e URL javascript/data potenzialmente pericolosi.
+    per eseguire codice dell'email o consentire click verso risorse esterne.
+    Rimuove quindi script, iframe, form, embed, event handler inline e tutte le
+    destinazioni href/src/action.
     """
     if not html or not html.strip():
         return "<p><em>Nessun HTML disponibile.</em></p>"
@@ -81,6 +82,8 @@ def sanitize_html_for_preview(html: str) -> str:
     if not _BS4_AVAILABLE:
         safe_html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*>.*?</\1>", " ", html)
         safe_html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*?/?>", " ", safe_html)
+        safe_html = re.sub(r"""(?is)\son[a-z0-9_-]+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", "", safe_html)
+        safe_html = re.sub(r"""(?is)\s(?:href|src|xlink:href|action)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)""", "", safe_html)
         safe_html = re.sub(r"(?i)\b(?:javascript|vbscript|data)\s*:", "#", safe_html)
         escaped = html_lib.escape(safe_html)
         return f"<pre style='white-space: pre-wrap'>{escaped}</pre>"
@@ -101,10 +104,10 @@ def sanitize_html_for_preview(html: str) -> str:
                 del tag.attrs[attr]
                 continue
             if attr_l in {"href", "src", "xlink:href", "action"}:
-                raw_value = " ".join(value) if isinstance(value, list) else str(value or "")
-                lowered = raw_value.strip().lower()
-                if lowered.startswith(("javascript:", "data:", "vbscript:", "file:")):
-                    del tag.attrs[attr]
+                del tag.attrs[attr]
+                if tag.name == "a":
+                    tag.attrs["title"] = "Link rimosso per sicurezza: usa la box Link presenti nella mail."
+                    tag.attrs["style"] = "color: inherit; text-decoration: none; cursor: default;"
 
     body = soup.body.decode_contents() if soup.body else str(soup)
     return f"""

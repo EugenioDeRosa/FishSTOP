@@ -39,7 +39,7 @@ def _active_model(default_ollama_model: str) -> str:
 SYSTEM_MESSAGE = (
     "You are a SOC assistant that explains email intent. "
     "You do not perform independent forensic analysis. "
-    "First understand the intent of the anonymized subject/body only. "
+    "First understand the intent of the anonymized subject/body, including HTML-derived body text when present. "
     "Then use only the structured technical facts provided by FishSTOP as supporting context. "
     "Answer with one concise English paragraph and no JSON."
 )
@@ -68,6 +68,38 @@ def _anonymize_for_llm(value: str) -> str:
     for pattern, placeholder in replacements:
         anonymized = re.sub(pattern, placeholder, anonymized, flags=re.IGNORECASE)
     return anonymized
+
+
+def _normalize_for_compare(value: str) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().lower()
+
+
+def _body_context_for_llm(soc: dict) -> tuple[str, str]:
+    plain_body = soc.get("body_ai") or soc.get("body_extracted") or soc.get("body_clean") or soc.get("body") or ""
+    html_body = soc.get("body_html_clean") or ""
+    if not html_body and soc.get("body_html"):
+        try:
+            from .html_utils import strip_html
+        except ImportError:
+            from src.analyzer.html_utils import strip_html
+        html_body = strip_html(soc.get("body_html") or "")
+
+    plain_norm = _normalize_for_compare(plain_body)
+    html_norm = _normalize_for_compare(html_body)
+    has_distinct_html = bool(html_norm and html_norm != plain_norm and html_norm not in plain_norm)
+
+    if has_distinct_html:
+        return (
+            "\n\n".join(
+                part for part in [
+                    "Plain/current body text:\n" + plain_body if plain_body else "",
+                    "HTML-derived visible text:\n" + html_body,
+                ]
+                if part
+            ),
+            "plain text plus distinct HTML-derived visible text",
+        )
+    return plain_body or html_body, "plain text" if plain_body else ("HTML-derived visible text" if html_body else "empty")
 
 
 def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> list[str]:
@@ -283,7 +315,7 @@ def _technical_context_lines(soc: dict) -> list[str]:
 
 
 def build_fast_email_prompt(soc: dict) -> str:
-    body = soc.get("body_ai") or soc.get("body_extracted") or soc.get("body_clean") or soc.get("body") or ""
+    body, body_source_for_llm = _body_context_for_llm(soc)
     links = soc.get("links") or []
     link_reputation = soc.get("link_reputation") or {}
     link_reputation_summary = soc.get("link_reputation_summary") or "VirusTotal link reputation not available."
@@ -324,12 +356,13 @@ def build_fast_email_prompt(soc: dict) -> str:
             f"Da: {_clip(anonymized_sender, 500) or 'Sconosciuto'}",
             f"Destinatari visibili: {_clip(anonymized_recipients, 500) or '-'}",
             f"Oggetto anonimizzato: {anonymized_subject}",
+            f"Body source inspected by Phi-4: {body_source_for_llm}",
             f"Content precheck: {_content_precheck_label(has_actionable_text_risk)}",
             "",
             "Text risk signals detected:",
             "\n".join(f"- {signal}" for signal in risk_signals),
             "",
-            "Corpo anonimizzato:",
+            "Corpo anonimizzato, includendo il testo visibile derivato dall'HTML quando presente:",
             _clip(anonymized_body, 2000),
             "",
             "Technical corroboration inputs - do not use these for the initial thesis:",
