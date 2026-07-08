@@ -374,6 +374,19 @@ class EmlSOCAnalyzer:
                     "tipico di phishing o C2",
                 )
 
+            if lnk.get("display_mismatch"):
+                flag(
+                    "HIGH", "Link",
+                    "Il link mostra `" + (lnk.get("display_host") or "?")
+                    + "` ma punta a `" + (lnk.get("host") or "?")
+                    + "`: possibile link mascherato nell'HTML.",
+                )
+            if lnk.get("is_possible_shortener"):
+                flag(
+                    "MEDIUM", "Link",
+                    "Possibile short link/redirector senza whitelist: `" + lnk["url"]
+                    + "` - " + (lnk.get("shortener_reason") or "pattern sospetto"),
+                )
         for alert in report.get("lookalike_alerts", []):
             technique_label = {
                 "edit_distance": "Edit-distance",
@@ -384,10 +397,14 @@ class EmlSOCAnalyzer:
                 "punycode_homograph": "Attacco omografo Punycode",
                 "typosquatting": "Typosquatting",
             }.get(alert["technique"], alert["technique"])
-            flag(
-                "HIGH", "Lookalike Domain",
-                technique_label + ": `" + alert["host"] + "` assomiglia a `"
-                + alert["matched_brand"] + "` — " + alert["detail"],
-            )
+            matched_brand = alert.get("matched_brand") or "-"
+            if matched_brand == "-":
+                message = technique_label + ": `" + alert["host"] + "` - " + alert["detail"]
+            else:
+                message = (
+                    technique_label + ": `" + alert["host"] + "` assomiglia a `"
+                    + matched_brand + "` - " + alert["detail"]
+                )
+            flag("HIGH", "Lookalike Domain", message)
 
         return flags

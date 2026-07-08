@@ -41,3 +41,8 @@ def get_content_model():
 
 def get_model_source() -> str:
     return init_content_model()[2]
+
+
+def warm_up_backend():
+    init_core_backend()
+    init_content_model()

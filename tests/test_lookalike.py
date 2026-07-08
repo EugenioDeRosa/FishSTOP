@@ -19,14 +19,26 @@ def test_decode_punycode_domain():
     assert decoded != "xn--pple-43d.com"
 
 
-def test_punycode_homograph_alert_for_known_brand():
+def test_punycode_idna_alert_is_general():
     alerts = check_lookalike_domains([
         _link("https://xn--pple-43d.com/login", "xn--pple-43d.com")
     ])
 
     assert any(
-        alert["technique"] == "punycode_homograph"
-        and alert["matched_brand"] == "apple.com"
+        alert["technique"] == "punycode_idna"
+        and alert["matched_brand"] == "-"
+        for alert in alerts
+    )
+
+
+def test_unicode_homoglyph_alert_is_general():
+    alerts = check_lookalike_domains([
+        _link("https://docs.gооgle.com/doc", "docs.gооgle.com")
+    ])
+
+    assert any(
+        alert["technique"] == "unicode_homoglyph"
+        and alert["matched_brand"] == "-"
         for alert in alerts
     )
 

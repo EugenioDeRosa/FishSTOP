@@ -15,6 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from src.version import APP_VERSION
+from src.views.backend import warm_up_backend
 
 
 PAGES = {
@@ -26,6 +27,134 @@ PAGES = {
 
 if st.session_state.get("page") not in {"home", *PAGES}:
     st.session_state.page = "home"
+
+
+def _render_startup_splash():
+    st.markdown(
+        f"""
+        <style>
+            .fishstop-splash {{
+                min-height: 72vh;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 4rem 1rem;
+                background:
+                    radial-gradient(circle at top left, rgba(36, 126, 255, 0.24), transparent 28%),
+                    radial-gradient(circle at bottom right, rgba(0, 209, 178, 0.18), transparent 24%),
+                    linear-gradient(135deg, #07111f 0%, #0b1a33 52%, #081018 100%);
+                border-radius: 28px;
+                overflow: hidden;
+                position: relative;
+            }}
+            .fishstop-splash::before {{
+                content: "";
+                position: absolute;
+                inset: 0;
+                background-image:
+                    linear-gradient(rgba(255,255,255,0.04) 1px, transparent 1px),
+                    linear-gradient(90deg, rgba(255,255,255,0.04) 1px, transparent 1px);
+                background-size: 44px 44px;
+                mask-image: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent 92%);
+                pointer-events: none;
+            }}
+            .fishstop-card {{
+                position: relative;
+                z-index: 1;
+                width: min(720px, 100%);
+                padding: 2.2rem 2rem;
+                border-radius: 24px;
+                background: rgba(5, 13, 24, 0.72);
+                border: 1px solid rgba(255, 255, 255, 0.12);
+                box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+                backdrop-filter: blur(18px);
+            }}
+            .fishstop-badge {{
+                display: inline-flex;
+                align-items: center;
+                gap: 0.55rem;
+                padding: 0.45rem 0.8rem;
+                border-radius: 999px;
+                background: rgba(255, 255, 255, 0.08);
+                color: #b6d7ff;
+                font-size: 0.82rem;
+                letter-spacing: 0.12em;
+                text-transform: uppercase;
+            }}
+            .fishstop-dot {{
+                width: 0.55rem;
+                height: 0.55rem;
+                border-radius: 999px;
+                background: linear-gradient(135deg, #4cf3ff, #7c8dff);
+                box-shadow: 0 0 16px rgba(76, 243, 255, 0.9);
+                animation: fishstopPulse 1.6s ease-in-out infinite;
+            }}
+            .fishstop-title {{
+                margin: 1rem 0 0.4rem;
+                font-size: clamp(2rem, 4vw, 3.5rem);
+                line-height: 1.05;
+                font-weight: 800;
+                color: #f5fbff;
+                letter-spacing: -0.04em;
+            }}
+            .fishstop-subtitle {{
+                margin: 0;
+                font-size: 1.02rem;
+                line-height: 1.6;
+                color: rgba(231, 240, 255, 0.8);
+                max-width: 58ch;
+            }}
+            .fishstop-loader {{
+                margin-top: 1.7rem;
+                height: 0.8rem;
+                border-radius: 999px;
+                overflow: hidden;
+                background: rgba(255, 255, 255, 0.08);
+                border: 1px solid rgba(255, 255, 255, 0.08);
+            }}
+            .fishstop-loader > span {{
+                display: block;
+                width: 45%;
+                height: 100%;
+                border-radius: inherit;
+                background: linear-gradient(90deg, #4cf3ff, #7c8dff, #00d1b2);
+                animation: fishstopSweep 1.2s ease-in-out infinite;
+            }}
+            .fishstop-meta {{
+                margin-top: 1rem;
+                color: rgba(231, 240, 255, 0.62);
+                font-size: 0.92rem;
+            }}
+            @keyframes fishstopPulse {{
+                0%, 100% {{ transform: scale(0.95); opacity: 0.72; }}
+                50% {{ transform: scale(1.08); opacity: 1; }}
+            }}
+            @keyframes fishstopSweep {{
+                0% {{ transform: translateX(-120%); }}
+                100% {{ transform: translateX(260%); }}
+            }}
+        </style>
+        <div class="fishstop-splash">
+            <div class="fishstop-card">
+                <div class="fishstop-badge"><span class="fishstop-dot"></span> FishStop startup</div>
+                <div class="fishstop-title">Warming up the triage engine</div>
+                <p class="fishstop-subtitle">
+                    Loading the core parser, SOC backend and BERT model so EML analysis starts fast once the dashboard appears.
+                </p>
+                <div class="fishstop-loader"><span></span></div>
+                <div class="fishstop-meta">Build {APP_VERSION} · Preparing secure email analysis workspace</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+if not st.session_state.get("startup_ready"):
+    _render_startup_splash()
+    warm_up_backend()
+    st.session_state.startup_ready = True
+    st.rerun()
 
 
 def render_home():

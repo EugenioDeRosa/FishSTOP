@@ -16,22 +16,6 @@ import unicodedata
 from .constants import KNOWN_BRANDS, HOMOGLYPH_MAP
 
 
-KNOWN_URL_SHORTENERS: set[str] = {
-    "t.co",
-    "bit.ly",
-    "tinyurl.com",
-    "goo.gl",
-    "ow.ly",
-    "buff.ly",
-    "cutt.ly",
-    "is.gd",
-    "s.id",
-    "rebrand.ly",
-    "lnkd.in",
-    "youtu.be",
-    "aka.ms",
-}
-
 MIN_EDIT_DISTANCE_SLD_LEN = 4
 
 
@@ -104,17 +88,6 @@ def strip_public_suffix(domain: str) -> str:
     return domain
 
 
-def _registered_domain(domain: str) -> str:
-    parts = (domain or "").lower().rstrip(".").split(".")
-    if len(parts) >= 2:
-        return ".".join(parts[-2:])
-    return domain or ""
-
-
-def _is_known_shortener(host: str) -> bool:
-    registered = _registered_domain(host)
-    return registered in KNOWN_URL_SHORTENERS
-
 
 def is_ip_url(host: str) -> bool:
     """True se l'host è un indirizzo IPv4 o IPv6."""
@@ -174,7 +147,7 @@ def check_lookalike_domains(
         host = link["host"]
         url  = link["url"]
 
-        if not host or is_ip_url(host) or _is_known_shortener(host):
+        if not host or is_ip_url(host):
             continue
 
         host_norm = normalize_homoglyphs(host)

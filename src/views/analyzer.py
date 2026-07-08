@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -400,6 +400,17 @@ def _render_vt_url(rep: dict):
         st.caption(f"Ultima analisi: `{rep['last_analysis']}`")
     if rep.get("final_url") and rep.get("final_url") != rep.get("url"):
         st.caption(f"Final URL: `{rep['final_url']}`")
+    destination_status = rep.get("destination_status") or "unavailable"
+    if destination_status == "match":
+        st.caption(
+            f"Destination check: PASS after `{rep.get('redirect_count', 0)}` redirect(s)"
+        )
+    elif destination_status == "mismatch":
+        st.caption(
+            f"Destination check: MISMATCH after `{rep.get('redirect_count', 0)}` redirect(s)"
+        )
+    elif rep.get("destination_message"):
+        st.caption(f"Destination check: {rep['destination_message']}")
     if permalink:
         st.markdown(f"[Apri scheda VirusTotal]({permalink})")
 
@@ -786,22 +797,37 @@ def render():
                     if lookalike_alerts:
                         st.markdown("##### Lookalike / Typosquatting")
                         for alert in lookalike_alerts:
-                            st.error(
-                                f"`{alert['host']}` assomiglia a `{alert['matched_brand']}` - {alert['detail']}"
-                            )
+                            matched_brand = alert.get("matched_brand") or "-"
+                            if matched_brand == "-":
+                                st.error(f"`{alert['host']}` - {alert['detail']}")
+                            else:
+                                st.error(
+                                    f"`{alert['host']}` assomiglia a `{matched_brand}` - {alert['detail']}"
+                                )
 
                     st.markdown("##### URL estratte")
                     for lnk in links:
                         rep = vt_url_results.get(lnk["url"], {})
                         risky = rep.get("status") in ("malicious", "suspicious")
+                        destination_mismatch = rep.get("destination_status") == "mismatch"
+                        display_mismatch = lnk.get("display_mismatch")
+                        possible_shortener = lnk.get("is_possible_shortener")
                         with st.container(border=True):
                             top_left, top_right = st.columns([3, 1])
                             with top_left:
                                 st.markdown(f"**`{lnk.get('host') or '-'}`**")
                                 st.caption(f"`{lnk.get('url')}`")
+                                if lnk.get("display_host"):
+                                    st.caption(f"Testo visibile: `{lnk.get('display_host')}`")
                             with top_right:
                                 if lnk.get("is_ip"):
                                     st.error("IP diretto")
+                                elif display_mismatch:
+                                    st.error("testo diverso")
+                                elif possible_shortener:
+                                    st.warning("short link")
+                                elif destination_mismatch:
+                                    st.warning("redirect mismatch")
                                 elif risky:
                                     st.warning(rep.get("status", "suspicious"))
                                 else:

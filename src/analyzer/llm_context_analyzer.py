@@ -257,6 +257,16 @@ def _technical_context_lines(soc: dict) -> list[str]:
         f"Display name spoofing: {soc.get('display_name_spoofing') or 'none'}",
     ]
 
+    link_reputation = soc.get("link_reputation") or {}
+    if link_reputation:
+        destination_match = sum(1 for rep in link_reputation.values() if rep.get("destination_status") == "match")
+        destination_mismatch = sum(1 for rep in link_reputation.values() if rep.get("destination_status") == "mismatch")
+        destination_unavailable = sum(1 for rep in link_reputation.values() if rep.get("destination_status") == "unavailable")
+        lines.append(
+            "Link destination checks: "
+            f"{destination_match} match, {destination_mismatch} mismatch, {destination_unavailable} unavailable"
+        )
+
     attachments = soc.get("attachments") or []
     if not attachments:
         lines.append("Attachments: none")
@@ -322,9 +332,11 @@ def build_fast_email_prompt(soc: dict) -> str:
             rep = link_reputation.get(link.get("url") or "", {})
             vt_status = rep.get("status", "unknown")
             ratio = rep.get("detection_ratio", "0 / 0")
+            destination_status = rep.get("destination_status", "unavailable")
+            redirect_count = rep.get("redirect_count", 0)
             link_lines.append(
                 f"- link_type={_anonymized_link_hint(link)} vt_status={vt_status} detections={ratio} "
-                f"hint={_link_hint(link)}"
+                f"dest={destination_status} redirects={redirect_count} hint={_link_hint(link)}"
             )
     elif links:
         link_lines.append(
@@ -377,49 +389,37 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
         {
             "role": "user",
             "content": (
-                "Write an explanation in two strict steps, then answer with one concise English paragraph.\n"
-                "Step 1 - Intent from anonymized subject/body: detect the language and explain the likely intent of the "
-                "anonymized subject/body. Focus on what the message asks the recipient to do, such as paying, logging in, "
-                "sharing credentials, opening a form, replying, accepting a promotion, handling an invoice, or completing "
-                "a normal administrative task. Do not infer identities from placeholders such as [EMAIL], [URL], [IP], "
-                "[PHONE], [IBAN], or [POSSIBLE_CARD_OR_ACCOUNT].\n"
-                "Step 2 - FishSTOP technical context: use only the structured facts provided below, such as SPF, DKIM, "
-                "DMARC, Return-Path mismatch, Reply-To mismatch, display-name spoofing, VirusTotal status, attachment "
-                "anomalies, and SOC flags. Do not perform new technical analysis and do not invent risks that are not "
-                "explicitly listed.\n"
-                "Start exactly with one of these phrases:\n"
+                "Analyze in two internal steps, then answer in one concise English paragraph (do not label the steps in the output).\n"
+                "Step 1: from the anonymized subject/body, detect the language and infer the requested action "
+                "(pay, login, share credentials, open a form, reply, accept a promo, handle an invoice, or normal admin task). "
+                "Ignore [EMAIL]/[URL]/[IP]/[PHONE]/[IBAN]/[POSSIBLE_CARD_OR_ACCOUNT] placeholders as identity clues.\n"
+                "Step 2: use only the structured FishSTOP facts below (SPF/DKIM/DMARC, Return-Path/Reply-To mismatch, "
+                "display-name spoofing, VirusTotal, attachment anomalies, SOC flags) as corroboration only — never invent new risks.\n\n"
+                "Start the paragraph with exactly one of:\n"
                 "- The email provided is suspicious because\n"
                 "- The email provided is not suspicious because\n"
-                "Your first sentence must be driven by the intent of the anonymized subject/body and must mention that "
-                "intent first. If the body contains a clear scam/phishing pattern, classify as suspicious even if some "
-                "technical checks pass. If the body looks normal, classify as not suspicious unless the provided FishSTOP "
-                "technical context is strong and corroborated by multiple independent indicators. "
-                "A VirusTotal status of suspicious alone is not enough to override normal body content; treat it as a manual-check note. "
-                "Only a clearly malicious VirusTotal result, or VirusTotal suspicious plus identity mismatch/authentication failure/attachment anomaly, "
-                "may override a normal body.\n"
-                "Do not mention sender IP, injection IP, relay IP, geolocation, routing path, full URLs, email addresses, "
-                "phone numbers, IBANs, account numbers, or personal data as evidence.\n"
-                "A link is not suspicious by itself. Use VirusTotal link reputation as the main link evidence, and "
-                "mention a link as risky only if VirusTotal marks it malicious or the body asks for a risky action through it.\n"
-                "Do not classify as suspicious only because a link is embedded, repeated, redirects through Google, "
-                "points to a company website, or because there is one visible recipient.\n"
-                "Promotions, newsletters, discounts, events, and normal commercial messages are not phishing just because they contain links.\n"
-                "Treat lottery/prize/donation/inheritance claims, large unexpected money amounts, celebrity or CEO "
-                "impersonation, vague profitable business or investment opportunities, international-collaboration lures, and requests "
-                "to reply to a personal/free email address for more details as explicit scam indicators even if no money amount, "
-                "credential request, or bank detail is shown yet.\n"
-                "Normal administrative work requests, such as asking a manager to sign hours, timesheets, attendance "
-                "sheets, or work records, are not suspicious unless they also ask for money, credentials, bank details, "
-                "external forms, or urgent unusual action.\n"
-                "In the answer, mention the body/content reason first. Then add one short clause explaining whether "
-                "technical checks support, weaken, or do not materially change the content-based assessment. "
-                "Do not lead with technical failures unless the body is empty or unreadable. End with: Please verify with your IT team.\n\n"
+                "Lead with the body's intent. Classify suspicious if the body shows a clear scam pattern, even if technical "
+                "checks pass. Classify not suspicious if the body is normal, unless technical evidence is strong and "
+                "multi-indicator: a lone VirusTotal 'suspicious' is not enough on its own (note it as manual-check only); "
+                "only a malicious VirusTotal result, or 'suspicious' plus an identity/auth/attachment anomaly, may override "
+                "a normal body.\n"
+                "Never cite IP, geolocation, routing, full URLs, emails, phone numbers, IBANs, account numbers or other PII "
+                "as evidence. Treat links as neutral unless VirusTotal flags them malicious or the body asks for a risky "
+                "action through them — embedding, repetition, Google redirects, or a single recipient are not evidence; "
+                "promos/newsletters/discounts with links are not phishing per se.\n"
+                "Treat as explicit scam signals even without a money/credential ask yet: lottery/prize/donation/inheritance "
+                "claims, unexpected large sums, celebrity/CEO impersonation, vague business/investment lures, "
+                "international-collaboration pitches, or requests to reply to a personal/free address for details. "
+                "Normal admin asks (sign timesheets/hours/attendance) are not suspicious unless paired with money, "
+                "credentials, bank details, external forms, or unusual urgency.\n"
+                "Mention the content-based reason first, then one short clause on whether the technical checks support, "
+                "weaken, or don't change that assessment (lead with a technical failure only if the body is empty/unreadable). "
+                "End with: Please verify with your IT team.\n\n"
                 f"{build_fast_email_prompt(soc)}"
             ),
         },
     ]
     yield from _stream_github_models(messages, model, timeout)
-
 
 def _stream_github_models(messages: list[dict], model: str, timeout: int):
     """
