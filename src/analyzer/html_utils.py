@@ -135,3 +135,57 @@ def sanitize_html_for_preview(html: str) -> str:
       {body}
     </div>
     """
+
+
+def sanitize_html_for_js_preview(html: str) -> str:
+    """
+    Restituisce HTML renderizzabile con JavaScript attivo, ma con link non cliccabili.
+
+    Questa modalita serve solo per osservare il rendering dinamico del messaggio:
+    gli href vengono rimossi e i click sui link sono bloccati dentro l'iframe.
+    """
+    if not html or not html.strip():
+        return "<p><em>Nessun HTML disponibile.</em></p>"
+
+    link_guard = """
+    <style>
+      a, a:visited {
+        color: inherit !important;
+        text-decoration: none !important;
+        cursor: default !important;
+        pointer-events: none !important;
+      }
+    </style>
+    <script>
+    (function () {
+      function disableLinks(root) {
+        var scope = root || document;
+        scope.querySelectorAll('a').forEach(function (link) {
+          link.removeAttribute('href');
+          link.removeAttribute('target');
+          link.setAttribute('aria-disabled', 'true');
+          link.setAttribute('title', 'Link disabilitato nella preview.');
+        });
+      }
+
+      document.addEventListener('click', function (event) {
+        if (event.target && event.target.closest && event.target.closest('a')) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+        }
+      }, true);
+
+      document.addEventListener('DOMContentLoaded', function () {
+        disableLinks(document);
+        var observer = new MutationObserver(function () { disableLinks(document); });
+        observer.observe(document.documentElement, { childList: true, subtree: true, attributes: true });
+      });
+    }());
+    </script>
+    """
+    return f"""
+    {link_guard}
+    <div style="font-family: Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24292f;">
+      {html}
+    </div>
+    """

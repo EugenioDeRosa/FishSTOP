@@ -7,7 +7,7 @@ from html import escape as html_escape
 import streamlit as st
 import streamlit.components.v1 as components
  
-from src.analyzer.html_utils import sanitize_html_for_preview
+from src.analyzer.html_utils import sanitize_html_for_js_preview, sanitize_html_for_preview
 from src.analyzer.llm_context_analyzer import stream_phi4_email_analysis
 from src.components.email_globe import render_email_globe
 from src.views.backend import get_content_model, get_core_backend
@@ -15,7 +15,7 @@ from src.views.backend import get_content_model, get_core_backend
 
 def _strip_encoded_content(raw: str) -> str:
     """
-    Rimuove blocchi base64/quoted-printable corposi dal debugger raw EML.
+    Rimuove blocchi base64/quoted-printable corposi dal raw EML.
     """
     lines = raw.splitlines(keepends=True)
     result = []
@@ -417,14 +417,31 @@ def _render_vt_url(rep: dict):
 
 def _auth_status_box(title: str, status: str):
     status = (status or "unknown").lower()
+    help_texts = {
+        "SPF": "SPF indica quali IP sono autorizzati a inviare email per il dominio mittente.",
+        "DKIM": "DKIM verifica l'integrita del messaggio tramite una firma crittografica del dominio.",
+        "DMARC": "DMARC indica cosa deve fare la casella ricevente quando SPF o DKIM falliscono.",
+    }
     if status == "pass":
-        st.success(f"{title}: PASS")
+        bg, border, color = "#ecfdf3", "#abefc6", "#067647"
     elif status in ("fail", "softfail", "permerror"):
-        st.error(f"{title}: {status.upper()}")
+        bg, border, color = "#fef3f2", "#fecdca", "#b42318"
     elif status in ("none", "neutral", "temperror"):
-        st.warning(f"{title}: {status.upper()}")
+        bg, border, color = "#fffaeb", "#fedf89", "#b54708"
     else:
-        st.info(f"{title}: {status.upper()}")
+        bg, border, color = "#eff8ff", "#b2ddff", "#175cd3"
+
+    label = f"{title}: {status.upper()}"
+    help_text = html_escape(help_texts.get(title.upper(), "Controllo di autenticazione email."), quote=True)
+    st.markdown(
+        f"""
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; margin:0 0 8px 0; border:1px solid {border}; border-radius:8px; background:{bg}; color:{color}; font-weight:600;">
+          <span>{html_escape(label)}</span>
+          <span title="{help_text}" style="display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:18px; height:18px; border:1px solid currentColor; border-radius:50%; font-size:12px; font-weight:700; cursor:help; opacity:.85;">?</span>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def _hop_from_label(hop: dict) -> str:
@@ -551,9 +568,10 @@ def _summarize_link_reputation(results: dict) -> str:
     return f"VirusTotal link reputation: worst={worst}; " + ", ".join(parts)
 
 
-def _render_html_preview(raw_html: str, key: str, height: int = 360) -> None:
+def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_javascript: bool = False) -> None:
+    preview_html = sanitize_html_for_js_preview(raw_html) if enable_javascript else sanitize_html_for_preview(raw_html)
     components.html(
-        sanitize_html_for_preview(raw_html),
+        preview_html,
         height=height,
         scrolling=True,
     )
@@ -575,7 +593,7 @@ def render():
         if uploaded_file is not None:
             raw_text = uploaded_file.getvalue().decode("utf-8", errors="replace")
             if st.session_state.get("current_eml_name") != uploaded_file.name:
-                st.session_state["raw_eml_debug_data"] = _strip_encoded_content(raw_text)
+                st.session_state["raw_eml_text"] = raw_text
                 st.session_state["current_eml_name"] = uploaded_file.name
                 st.rerun()
 
@@ -917,24 +935,36 @@ def render():
                 body_tabs = st.tabs(tab_labels)
                 with body_tabs[0]:
                     if body_display:
-                        st.text_area("Testo usato per AI e triage", body_display, height=300)
+                        st.text_area("Testo usato per AI e triage", body_display, height=300, disabled=True)
                     else:
                         st.warning("Nessun testo estraibile dal corpo del messaggio.")
                 with body_tabs[1]:
                     if full_body:
-                        st.text_area("Testo completo normalizzato", full_body, height=300)
+                        st.text_area("Testo completo normalizzato", full_body, height=300, disabled=True)
                     else:
                         st.info("Nessuna conversazione completa disponibile.")
 
                 next_tab = 2
                 if body_html:
                     with body_tabs[next_tab]:
-                        st.caption("Preview HTML isolata: script, form, contenuti attivi e link cliccabili vengono rimossi prima della visualizzazione.")
-                        _render_html_preview(body_html, f"{phi4_key}_body_html")
-                        _render_extracted_links_box(links, f"{phi4_key}_body_html_links")
+                        enable_html_javascript = st.checkbox(
+                            "Render HTML con JavaScript",
+                            value=False,
+                            key=f"{phi4_key}_body_html_javascript",
+                        )
+                        if enable_html_javascript:
+                            st.caption("Preview HTML con JavaScript attivo. I link restano disabilitati e non sono cliccabili.")
+                        else:
+                            st.caption("Preview HTML isolata: script, form, contenuti attivi e link cliccabili vengono rimossi prima della visualizzazione.")
+                        _render_html_preview(body_html, f"{phi4_key}_body_html", enable_javascript=enable_html_javascript)
                     next_tab += 1
                     with body_tabs[next_tab]:
-                        st.code(body_html, language="html")
+                        st.text_area(
+                            "HTML raw",
+                            body_html,
+                            height=360,
+                            disabled=True,
+                        )
                     next_tab += 1
 
             with raw_tab:
@@ -942,9 +972,16 @@ def render():
                 report_copy = {k: v for k, v in soc.items() if k != "raw_eml_bytes"}
                 st.json(report_copy, expanded=False)
                 st.markdown("#### EML raw pulito")
+                hide_encoded_content = st.checkbox(
+                    "Togli contenuti base64/quoted-printable",
+                    value=False,
+                    key=f"{phi4_key}_strip_encoded_raw",
+                )
+                raw_eml_text = st.session_state.get("raw_eml_text", "")
+                raw_eml_display = _strip_encoded_content(raw_eml_text) if hide_encoded_content else raw_eml_text
                 st.text_area(
                     "EML raw pulito",
-                    st.session_state.get("raw_eml_debug_data", ""),
+                    raw_eml_display,
                     height=480,
                     disabled=True,
                 )
