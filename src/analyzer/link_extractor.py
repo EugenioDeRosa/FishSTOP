@@ -1,10 +1,10 @@
 """
-analyzer/link_extractor.py - Estrazione di URL dal corpo delle email.
+analyzer/link_extractor.py - URL extraction from email bodies.
 
 Espone:
   - extract_links(body_plain, body_html) : lista di link strutturati
 
-Gestisce testo plain e HTML, preservando anche il testo visibile dei link.
+Handles plain text and HTML while preserving visible link text.
 """
 
 import re
@@ -92,7 +92,7 @@ def _possible_shortener(url: str, host: str) -> tuple[bool, str]:
     first = segments[0]
     sld = _registered_domain(host).split(".")[0]
     if len(sld) <= 5 and _OPAQUE_TOKEN_RE.match(first):
-        return True, "dominio breve con token opaco nel percorso"
+        return True, "short domain with opaque token in path"
     if len(segments) <= 2 and not parsed.query and _looks_opaque_token(first) and len(first) <= 16:
         return True, "percorso breve e opaco tipico di redirector/short link"
     return False, ""
@@ -104,10 +104,10 @@ def _same_registered_domain(left: str, right: str) -> bool:
 
 def extract_links(body_plain: str, body_html: str) -> list[dict]:
     """
-    Estrae tutti i link dal corpo email.
+    Extracts all links from the email body.
 
-    Oltre alla destinazione reale, per i link HTML conserva il testo visibile
-    e segnala quando il testo mostra un dominio diverso dalla destinazione href.
+    Besides the real destination, HTML links keep the visible text
+    and are flagged when the text shows a different domain than the href destination.
     """
     seen: set[str] = set()
     links: list[dict] = []

@@ -8,7 +8,7 @@ def render():
     st.header("Settings")
 
     model_source = get_model_source()
-    st.info(f"Modello BERT attivo da Hugging Face (`{model_source}`).")
+    st.info(f"Active BERT model from Hugging Face (`{model_source}`).")
 
     st.divider()
     st.subheader("API Keys")
@@ -16,22 +16,22 @@ def render():
     c1, c2 = st.columns(2)
     with c1:
         if ABUSEIPDB_API_KEY:
-            st.success("AbuseIPDB configurata")
+            st.success("AbuseIPDB configured")
         else:
-            st.error("AbuseIPDB mancante")
+            st.error("AbuseIPDB missing")
     with c2:
         if VIRUSTOTAL_API_KEY:
-            st.success("VirusTotal configurata per URL e file")
+            st.success("VirusTotal configured for URLs and files")
         else:
-            st.error("VirusTotal mancante")
+            st.error("VirusTotal missing")
 
     st.markdown(
-        "Imposta le chiavi in un file `.env` nella root del progetto "
+        "Set the keys in a `.env` file in the project root "
         "oppure in Streamlit Cloud -> Settings -> Secrets."
     )
 
     st.divider()
-    st.subheader("Modelli online")
+    st.subheader("Online models")
     st.code(
         "\n".join(
             [

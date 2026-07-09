@@ -19,7 +19,7 @@ SOURCE_OPTIONS = {
         "label": "Kaggle Phishing Email Dataset",
         "caption": (
             "Dataset finale combinato: Enron, Ling, CEAS, Nazario, Nigerian Fraud e SpamAssassin. "
-            "82.486 righe originali, circa 81.820 dopo pulizia e deduplica."
+            "82.486 rows originali, circa 81.820 dopo pulizia e deduplica."
         ),
         "url": "https://www.kaggle.com/datasets/naserabdullahalam/phishing-email-dataset",
         "citation_url": "https://arxiv.org/abs/2405.11619",
@@ -28,7 +28,7 @@ SOURCE_OPTIONS = {
         "label": "Kaggle Phishing and Legitimate Emails",
         "caption": (
             "10.000 email con text, label, phishing_type, severity e confidence "
-            "(6.000 phishing, 4.000 legittime nella copia locale). Usalo come fonte aggiuntiva opzionale."
+            "(6,000 phishing, 4,000 legitimate in the local copy). Use it as an optional additional source."
         ),
         "url": "https://www.kaggle.com/datasets/kuladeep19/phishing-and-legitimate-emails-dataset",
     },
@@ -36,7 +36,7 @@ SOURCE_OPTIONS = {
         "label": "Kaggle Phishing Email Detection",
         "caption": (
             "18.650 email con Email Text e Email Type: 11.322 Safe Email, 7.328 Phishing Email. "
-            "Fonte opzionale: contiene duplicati/quasi-duplicati, quindi viene filtrata dalla deduplica template."
+            "Source opzionale: contiene duplicati/quasi-duplicati, quindi viene filtrata dalla deduplica template."
         ),
         "url": "https://www.kaggle.com/datasets/subhajournal/phishingemails",
     },
@@ -55,12 +55,12 @@ SOURCE_OPTIONS = {
     },
     "spamassassin": {
         "label": "Apache SpamAssassin Ham",
-        "caption": "Email legittime easy_ham e hard_ham. Non selezionare insieme al Kaggle combinato.",
+        "caption": "Email legitimate easy_ham e hard_ham. Non selezionare insieme al Kaggle combinato.",
         "url": "https://spamassassin.apache.org/old/publiccorpus/",
     },
     "enron": {
         "label": "Enron Email Corpus",
-        "caption": "Email legittime, campionate per contenere tempi e dimensioni. Non selezionare insieme al Kaggle combinato.",
+        "caption": "Email legitimate, campionate per contenere tempi e dimensioni. Non selezionare insieme al Kaggle combinato.",
         "url": "https://www.cs.cmu.edu/~enron/",
     },
 }
@@ -69,18 +69,18 @@ SOURCE_OPTIONS = {
 def _render_stats(csv_path: Path) -> None:
     stats = dataset_stats(csv_path)
     c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Totale righe", stats["rows"])
-    c2.metric("Legittime", stats["legitimate"])
+    c1.metric("Total rows", stats["rows"])
+    c2.metric("Legitimate", stats["legitimate"])
     c3.metric("Phishing", stats["phishing"])
-    c4.metric("Doppioni", stats.get("duplicates", 0))
-    c5.metric("Quasi doppioni", stats.get("template_duplicates", 0))
-    c6.metric("Conflitti label", stats.get("label_conflicts", 0))
+    c4.metric("Duplicates", stats.get("duplicates", 0))
+    c5.metric("Near duplicates", stats.get("template_duplicates", 0))
+    c6.metric("Label conflicts", stats.get("label_conflicts", 0))
 
     if stats.get("missing_label"):
-        st.warning("Il CSV esistente non contiene la colonna `label`: rigeneralo con il pulsante qui sotto.")
+        st.warning("The existing CSV does not contain the `label` column: regenerate it with the button below.")
 
     if stats["sources"]:
-        with st.expander("Distribuzione per fonte", expanded=False):
+        with st.expander("Distribution by source", expanded=False):
             source_df = pd.DataFrame(
                 [{"source": k, "rows": v} for k, v in stats["sources"].items()]
             )
@@ -103,12 +103,12 @@ def _run_builder(label: str, *args, **kwargs) -> dict:
             st.info(f"{step.source}: {step.message}")
         elif step.errors:
             st.warning(
-                f"{step.source}: aggiunte {step.added}, duplicate/scartate {step.skipped}, "
-                f"errori {step.errors}. {step.message}"
+                f"{step.source}: added {step.added}, duplicates/discarded {step.skipped}, "
+                f"errors {step.errors}. {step.message}"
             )
         else:
             st.success(
-                f"{step.source}: aggiunte {step.added}, duplicate/scartate {step.skipped}."
+                f"{step.source}: added {step.added}, duplicates/discarded {step.skipped}."
             )
 
     if result["status"] == "ok":
@@ -121,20 +121,20 @@ def _run_builder(label: str, *args, **kwargs) -> dict:
 def render() -> None:
     st.header("Public Dataset Builder")
     st.markdown(
-        "Seleziona le fonti pubbliche da includere e genera in un clic un CSV bilanciato "
-        "50/50 tra email legittime e phishing, con deduplica esatta e rimozione dei quasi-duplicati/template."
+        "Select the public sources to include and generate a balanced CSV in one click "
+        "50/50 tra email legitimate e phishing, con deduplica esatta e rimozione dei quasi-duplicati/template."
     )
 
-    output_csv = Path(st.text_input("CSV bilanciato finale", value=str(BALANCED_OUTPUT_CSV)))
-    st.caption("Formato: `text,label,source,source_file,text_hash` con `0=legittima`, `1=phishing`.")
+    output_csv = Path(st.text_input("Final balanced CSV", value=str(BALANCED_OUTPUT_CSV)))
+    st.caption("Format: `text,label,source,source_file,text_hash` with `0=legitimate`, `1=phishing`.")
 
     st.divider()
-    st.subheader("Stato CSV bilanciato")
+    st.subheader("Balanced CSV status")
     _render_stats(output_csv)
 
     st.divider()
-    st.subheader("Fonti da includere")
-    st.caption("Le fonti Kaggle richiedono `kagglehub` e le credenziali Kaggle configurate.")
+    st.subheader("Sources to include")
+    st.caption("Kaggle sources require `kagglehub` and configured Kaggle credentials.")
 
     selected_sources: list[str] = []
     kaggle_selected = False
@@ -148,11 +148,11 @@ def render() -> None:
             disabled=disabled_by_combined,
         )
         st.caption(option["caption"])
-        st.markdown(f"[Apri fonte]({option['url']})")
+        st.markdown(f"[Open source]({option['url']})")
         if option.get("citation_url"):
-            st.markdown(f"[Articolo da citare]({option['citation_url']})")
+            st.markdown(f"[Citation paper]({option['citation_url']})")
         if disabled_by_combined:
-            st.info("Gia incluso nel Kaggle Phishing Email Dataset combinato.")
+            st.info("Already included in the combined Kaggle Phishing Email Dataset.")
             checked = False
         if checked:
             selected_sources.append(key)
@@ -160,12 +160,12 @@ def render() -> None:
             kaggle_selected = checked
 
     include_hard_ham = st.checkbox(
-        "Includi hard_ham SpamAssassin",
+        "Include SpamAssassin hard_ham",
         value=True,
         disabled="spamassassin" not in selected_sources,
     )
     max_enron = st.number_input(
-        "Massimo email Enron",
+        "Maximum Enron emails",
         min_value=1000,
         max_value=50000,
         value=10000,
@@ -175,13 +175,13 @@ def render() -> None:
 
     st.divider()
     if st.button(
-        "Genera dataset pubblico bilanciato 50/50",
+        "Generate balanced 50/50 public dataset",
         type="primary",
         disabled=not selected_sources,
         use_container_width=True,
     ):
         _run_builder(
-            "Generazione dataset bilanciato...",
+            "Generating balanced dataset...",
             selected_sources=selected_sources,
             output_csv=output_csv,
             staging_csv=DEFAULT_OUTPUT_CSV,
@@ -191,12 +191,12 @@ def render() -> None:
         st.rerun()
 
     if output_csv.exists():
-        with st.expander("Anteprima CSV", expanded=False):
+        with st.expander("CSV preview", expanded=False):
             df = pd.read_csv(output_csv, nrows=200)
             st.dataframe(df, hide_index=True, width="stretch")
 
         st.download_button(
-            "Scarica CSV bilanciato",
+            "Download balanced CSV",
             data=output_csv.read_bytes(),
             file_name=output_csv.name,
             mime="text/csv",

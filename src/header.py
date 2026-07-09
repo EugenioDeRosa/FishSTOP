@@ -1,5 +1,5 @@
 """
-analysis/header.py — Email header parsing.
+analysis/header.py - Email header parsing.
 
 Responsibilities:
   - Envelope field extraction (From, To, Subject, Date, etc.)
@@ -126,7 +126,7 @@ def parse_received_hop(raw: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def parse_auth_results(raw: str) -> dict:
-    """Parses an Authentication-Results header into a protocol → result dict."""
+    """Parses an Authentication-Results header into a protocol -> result dict."""
     results: dict = {}
     matches = list(_AUTH_FIELD_RE.finditer(raw))
     for index, m in enumerate(matches):

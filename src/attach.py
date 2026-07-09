@@ -1,5 +1,5 @@
 """
-analysis/attach.py — Attachment analysis.
+analysis/attach.py - Attachment analysis.
 
 Responsibilities:
   - MAGIC_BYTES / CONTENT_TYPE_TO_EXT databases.
@@ -155,7 +155,7 @@ def analyze_attachment(
             entry["anomaly"] = f"Base64 decode error: {exc}"
             return entry
     else:
-        entry["anomaly"] = "Non-base64 attachment — raw bytes not decoded"
+        entry["anomaly"] = "Non-base64 attachment - raw bytes not decoded"
         return entry
 
     ct_base       = content_type.split(";")[0].strip().lower()

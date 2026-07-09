@@ -34,7 +34,7 @@ def _strip_encoded_content(raw: str) -> str:
             n = i - start
             if n >= 4:
                 kb = sum(len(lines[j]) for j in range(start, i)) * 3 // 4 // 1024
-                result.append(f"[... contenuto base64 rimosso ({n} righe, ~{kb} KB) ...]\n")
+                result.append(f"[... base64 content removed ({n} rows, ~{kb} KB) ...]\n")
                 continue
             result.extend(lines[start:i])
             continue
@@ -45,7 +45,7 @@ def _strip_encoded_content(raw: str) -> str:
                 i += 1
             n = i - start
             if n >= 4:
-                result.append(f"[... contenuto quoted-printable rimosso ({n} righe) ...]\n")
+                result.append(f"[... quoted-printable content removed ({n} rows) ...]\n")
                 continue
             result.extend(lines[start:i])
             continue
@@ -67,12 +67,12 @@ def _flag_counts(flags: list[dict]) -> dict:
 
 def _severity(counts: dict) -> tuple[str, str]:
     if counts["HIGH"]:
-        return "CRITICAL", "Presenza di indicatori ad alta priorità"
+        return "CRITICAL", "High-priority indicators found"
     if counts["MEDIUM"]:
-        return "SUSPICIOUS", "Indicatori da validare manualmente"
+        return "SUSPICIOUS", "Indicators require manual validation"
     if counts["LOW"]:
-        return "WATCH", "Nessun blocco critico, ma ci sono note"
-    return "LOW", "Nessun indicatore SOC rilevante"
+        return "WATCH", "No critical blockers, but notes are present"
+    return "LOW", "No relevant SOC indicator"
 
 
 def _render_flag(flag: dict):
@@ -137,23 +137,23 @@ def _confirm_copyable_link(url: str, key: str) -> None:
           <button id="{element_id}"
             style="min-width: 86px; padding: 6px 10px; border: 1px solid #d0d7de;
                    border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">
-            Copia
+            Copy
           </button>
         </div>
         <script>
           const button_{element_id} = document.getElementById("{element_id}");
           button_{element_id}.onclick = async () => {{
             const confirmed = window.confirm(
-              "Questo link proviene da una mail potenzialmente pericolosa. Vuoi davvero copiarlo?"
+              "This link comes from a potentially dangerous email. Do you really want to copy it?"
             );
             if (!confirmed) return;
             try {{
               await navigator.clipboard.writeText({js_value});
-              button_{element_id}.innerText = "Copiato";
-              setTimeout(() => button_{element_id}.innerText = "Copia", 1200);
+              button_{element_id}.innerText = "Copyto";
+              setTimeout(() => button_{element_id}.innerText = "Copy", 1200);
             }} catch (err) {{
-              button_{element_id}.innerText = "Errore";
-              setTimeout(() => button_{element_id}.innerText = "Copia", 1200);
+              button_{element_id}.innerText = "Error";
+              setTimeout(() => button_{element_id}.innerText = "Copy", 1200);
             }}
           }};
         </script>
@@ -173,24 +173,24 @@ def _render_extracted_links_box(links: list[dict], key_prefix: str) -> None:
         unique_links.append(link)
 
     with st.container(border=True):
-        st.markdown("#### Link presenti nella mail")
-        st.caption("La preview HTML non contiene link cliccabili. Copia un URL solo se serve per analisi in ambiente sicuro.")
+        st.markdown("#### Links found in the email")
+        st.caption("La preview HTML non contiene link cliccabili. Copy un URL solo se serve per analisi in ambiente sicuro.")
         if not unique_links:
-            st.info("Nessun link trovato nella mail.")
+            st.info("No links found in the email.")
             return
 
         for idx, link in enumerate(unique_links, start=1):
             host = link.get("host") or "-"
             source = link.get("source") or "-"
-            st.caption(f"{idx}. Host: `{host}` · Fonte: `{source}`")
+            st.caption(f"{idx}. Host: `{host}` · Source: `{source}`")
             _confirm_copyable_link(link.get("url", ""), f"{key_prefix}_{idx}")
 
 
 def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
-        "Analisi hosted con Phi-4 mini: valuta contenuto plain e HTML, urgenza, soldi, IBAN, "
-        "pagamenti, credenziali e moduli esterni; poi usa SPF/DKIM/DMARC, link e allegati solo come contesto."
+        "Hosted Phi-4 mini analysis: evaluates plain and HTML content, urgency, money, IBANs, "
+        "payments, credentials, and external forms; then uses SPF/DKIM/DMARC, links, and attachments only as context."
     )
 
     result_key = f"{analysis_key}_result"
@@ -209,7 +209,7 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
         placeholder.markdown(_phi4_loading_html(), unsafe_allow_html=True)
         return placeholder
 
-    st.info("L'analisi Phi-4 mini parte automaticamente nel riquadro Executive Triage.")
+    st.info("Phi-4 mini analysis starts automatically in the Executive Triage panel.")
     return None
 
 
@@ -226,8 +226,8 @@ def _phi4_loading_html() -> str:
         color: #57606a;
         font-size: 0.95rem;
     ">
-        <span>Phi-4 mini sta analizzando contenuto e indicatori tecnici</span>
-        <span class="phi4-typing-dots" aria-label="caricamento">
+        <span>Phi-4 mini is analyzing content and technical indicators</span>
+        <span class="phi4-typing-dots" aria-label="loading">
             <span></span><span></span><span></span>
         </span>
     </div>
@@ -283,18 +283,18 @@ def _stream_phi4_analysis(soc: dict, analysis_key: str, placeholder):
                 placeholder.info(last_text)
             elif event.get("status") == "ok":
                 last_text = event.get("text") or last_text
-                st.session_state[result_key] = last_text or "Analisi completata senza testo."
+                st.session_state[result_key] = last_text or "Analysis completed without text."
                 placeholder.success(st.session_state[result_key])
                 return
             elif event.get("status") == "error":
                 last_text = event.get("text") or last_text
                 if last_text:
                     placeholder.warning(last_text)
-                st.session_state[error_key] = event.get("message") or "Errore durante l'analisi Phi-4 mini."
+                st.session_state[error_key] = event.get("message") or "Error durante l'analisi Phi-4 mini."
                 st.error(st.session_state[error_key])
                 return
     except Exception as exc:
-        st.session_state[error_key] = f"Errore durante l'analisi Phi-4 mini: {exc}"
+        st.session_state[error_key] = f"Error durante l'analisi Phi-4 mini: {exc}"
         st.error(st.session_state[error_key])
 
 
@@ -303,28 +303,28 @@ def _render_abuseipdb(rep: dict):
     if status == "ok":
         score = int(rep.get("abuseConfidenceScore") or 0)
         if rep.get("isWhitelisted"):
-            st.success("Whitelisted - provider noto")
+            st.success("Whitelisted - known provider")
         elif score == 0:
-            st.success("Score 0/100 - nessuna segnalazione")
+            st.success("Score 0/100 - no reports")
         elif score < 25:
-            st.info(f"Score {score}/100 - basso rischio")
+            st.info(f"Score {score}/100 - low risk")
         elif score < 75:
-            st.warning(f"Score {score}/100 - rischio moderato")
+            st.warning(f"Score {score}/100 - moderate risk")
         else:
-            st.error(f"Score {score}/100 - alto rischio")
+            st.error(f"Score {score}/100 - high risk")
 
         c1, c2, c3 = st.columns(3)
-        c1.metric("Segnalazioni", rep.get("totalReports", 0))
-        c2.metric("Utenti", rep.get("numDistinctUsers", 0))
-        c3.metric("Paese", rep.get("countryCode") or "-")
+        c1.metric("Reports", rep.get("totalReports", 0))
+        c2.metric("Users", rep.get("numDistinctUsers", 0))
+        c3.metric("Country", rep.get("countryCode") or "-")
         if rep.get("isp"):
             st.caption(f"ISP: `{rep['isp']}`")
         if rep.get("url"):
-            st.markdown(f"[Apri su AbuseIPDB]({rep['url']})")
+            st.markdown(f"[Open on AbuseIPDB]({rep['url']})")
     elif status == "skipped":
-        st.info(rep.get("message", "Lookup saltato"))
+        st.info(rep.get("message", "Lookup skipped"))
     else:
-        st.warning(rep.get("message", "Lookup non disponibile"))
+        st.warning(rep.get("message", "Lookup unavailable"))
 
 
 def _render_geo(geo: dict):
@@ -344,24 +344,24 @@ def _render_geo(geo: dict):
         if meta:
             st.caption(" · ".join(meta))
     else:
-        st.caption(f"Geo: {geo.get('message', 'non disponibile')}")
+        st.caption(f"Geo: {geo.get('message', 'unavailable')}")
 
 
 def _render_virustotal(vt: dict):
     status = vt.get("status")
     if status == "malicious":
-        st.error(f"MALEVOLO - {vt.get('detection_ratio', '-')}")
+        st.error(f"MALICIOUS - {vt.get('detection_ratio', '-')}")
     elif status == "suspicious":
-        st.warning(f"SOSPETTO - {vt.get('detection_ratio', '-')}")
+        st.warning(f"SUSPICIOUS - {vt.get('detection_ratio', '-')}")
     elif status == "clean":
-        st.success(f"PULITO - 0 / {vt.get('total_engines', 0)} engine")
+        st.success(f"CLEAN - 0 / {vt.get('total_engines', 0)} engine")
     elif status == "not_found":
-        st.info("Non trovato su VirusTotal")
+        st.info("Not found on VirusTotal")
     elif status == "skipped":
-        st.info(vt.get("message", "Lookup saltato"))
+        st.info(vt.get("message", "Lookup skipped"))
         return
     else:
-        st.warning(vt.get("message", "VirusTotal non disponibile"))
+        st.warning(vt.get("message", "VirusTotal unavailable"))
         return
 
     if vt.get("permalink"):
@@ -374,22 +374,22 @@ def _render_vt_url(rep: dict):
     permalink = rep.get("permalink")
 
     if status == "malicious":
-        st.error(f"VirusTotal: MALEVOLO - {rep.get('detection_ratio', '-')}")
+        st.error(f"VirusTotal: MALICIOUS - {rep.get('detection_ratio', '-')}")
     elif status == "suspicious":
-        st.warning(f"VirusTotal: SOSPETTO - {rep.get('detection_ratio', '-')}")
+        st.warning(f"VirusTotal: SUSPICIOUS - {rep.get('detection_ratio', '-')}")
     elif status == "clean":
-        st.success(f"VirusTotal: pulito - {rep.get('detection_ratio', '-')}")
+        st.success(f"VirusTotal: clean - {rep.get('detection_ratio', '-')}")
     elif status == "not_found":
-        st.info("VirusTotal: URL non trovata")
+        st.info("VirusTotal: URL not found")
     elif status == "skipped":
         st.info(f"VirusTotal: {message}")
         if permalink:
-            st.markdown(f"[Apri VirusTotal]({permalink})")
+            st.markdown(f"[Open VirusTotal]({permalink})")
         return
     else:
         st.warning(f"VirusTotal: {message}")
         if permalink:
-            st.markdown(f"[Apri VirusTotal]({permalink})")
+            st.markdown(f"[Open VirusTotal]({permalink})")
         return
 
     st.caption(
@@ -397,30 +397,17 @@ def _render_vt_url(rep: dict):
         f"Harmless `{rep.get('harmless', 0)}` · Undetected `{rep.get('undetected', 0)}`"
     )
     if rep.get("last_analysis"):
-        st.caption(f"Ultima analisi: `{rep['last_analysis']}`")
-    if rep.get("final_url") and rep.get("final_url") != rep.get("url"):
-        st.caption(f"Final URL: `{rep['final_url']}`")
-    destination_status = rep.get("destination_status") or "unavailable"
-    if destination_status == "match":
-        st.caption(
-            f"Destination check: PASS after `{rep.get('redirect_count', 0)}` redirect(s)"
-        )
-    elif destination_status == "mismatch":
-        st.caption(
-            f"Destination check: MISMATCH after `{rep.get('redirect_count', 0)}` redirect(s)"
-        )
-    elif rep.get("destination_message"):
-        st.caption(f"Destination check: {rep['destination_message']}")
+        st.caption(f"Last analysis: `{rep['last_analysis']}`")
     if permalink:
-        st.markdown(f"[Apri scheda VirusTotal]({permalink})")
+        st.markdown(f"[Open VirusTotal page]({permalink})")
 
 
 def _auth_status_box(title: str, status: str, show_help: bool = True):
     status = (status or "unknown").lower()
     help_texts = {
-        "SPF": "SPF indica quali IP sono autorizzati a inviare email per il dominio mittente.",
-        "DKIM": "DKIM verifica l'integrita del messaggio tramite una firma crittografica del dominio.",
-        "DMARC": "DMARC indica cosa deve fare la casella ricevente quando SPF o DKIM falliscono.",
+        "SPF": "SPF indicates which IPs are authorized to send email for the sender domain.",
+        "DKIM": "DKIM verifies message integrity through a cryptographic domain signature.",
+        "DMARC": "DMARC indicates what the receiving mailbox should do when SPF or DKIM fails.",
     }
     if status == "pass":
         bg, border, color = "#ecfdf3", "#abefc6", "#067647"
@@ -432,7 +419,7 @@ def _auth_status_box(title: str, status: str, show_help: bool = True):
         bg, border, color = "#eff8ff", "#b2ddff", "#175cd3"
 
     label = f"{title}: {status.upper()}"
-    help_text = html_escape(help_texts.get(title.upper(), "Controllo di autenticazione email."), quote=True)
+    help_text = html_escape(help_texts.get(title.upper(), "Email authentication check."), quote=True)
     help_icon = (
         f'''
         <span class="auth-help" tabindex="0" aria-label="{help_text}">
@@ -593,7 +580,7 @@ def _email_auth_from_eml(soc: dict) -> dict:
 
 
 def _render_auth_evidence(result: dict) -> None:
-    st.caption(f"Fonte: `{result.get('source') or '-'}`")
+    st.caption(f"Source: `{result.get('source') or '-'}`")
     if result.get("identity"):
         st.caption(f"Identita: `{result['identity']}`")
     raw = result.get("raw") or ""
@@ -608,7 +595,7 @@ def _safe_vt_url_lookup(validator, url: str) -> dict:
     lookup = getattr(validator, "check_url_reputation", None)
     if callable(lookup):
         return lookup(url)
-    return {"status": "skipped", "url": url, "message": "Validator VirusTotal URL non disponibile"}
+    return {"status": "skipped", "url": url, "message": "Validator VirusTotal URL unavailable"}
 
 
 def _summarize_link_reputation(results: dict) -> str:
@@ -651,7 +638,7 @@ def render():
 
     with col_upload:
         st.subheader("Case Intake")
-        uploaded_file = st.file_uploader("Carica un file `.eml`", type=["eml"])
+        uploaded_file = st.file_uploader("Upload an `.eml` file", type=["eml"])
         st.caption("Il file viene analizzato localmente e convertito in un report SOC.")
 
         if uploaded_file is not None:
@@ -672,7 +659,7 @@ def render():
 
     with col_results:
         if uploaded_file is None:
-            st.info("Carica un `.eml` per aprire il caso di analisi.")
+            st.info("Upload an `.eml` to open the analysis case.")
             return
 
         try:
@@ -689,7 +676,7 @@ def render():
             unique_links = {lnk["url"]: lnk for lnk in links if lnk.get("url")}
             vt_url_results = {}
             if unique_links:
-                with st.spinner("Lookup VirusTotal URL in corso..."):
+                with st.spinner("Running VirusTotal URL lookup..."):
                     max_workers = min(4, max(1, len(unique_links)))
                     with ThreadPoolExecutor(max_workers=max_workers) as executor:
                         futures = {
@@ -703,7 +690,7 @@ def render():
                                 vt_url_results[url] = {
                                     "status": "error",
                                     "url": url,
-                                    "message": f"Errore lookup VirusTotal URL: {exc}",
+                                    "message": f"Error lookup VirusTotal URL: {exc}",
                                 }
             soc["link_reputation"] = vt_url_results
             soc["link_reputation_summary"] = _summarize_link_reputation(vt_url_results)
@@ -714,7 +701,7 @@ def render():
             c2.metric("High", counts["HIGH"])
             c3.metric("Medium", counts["MEDIUM"])
             c4.metric("Link", len(links))
-            c5.metric("Allegati", len(attachments))
+            c5.metric("Attachments", len(attachments))
             st.caption(severity_caption)
 
             phi4_key = f"phi4_analysis_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
@@ -723,19 +710,19 @@ def render():
 
             if flags:
                 with st.container(border=True):
-                    st.markdown("#### Alert principali")
+                    st.markdown("#### Main alerts")
                     for flag in flags[:5]:
                         _render_flag(flag)
                     if len(flags) > 5:
-                        st.caption(f"Altri {len(flags) - 5} indicatori disponibili nella tab Dettagli SOC.")
+                        st.caption(f"Altri {len(flags) - 5} indicators are available in the SOC Details tab.")
 
             overview, identity, auth, links_tab, attach_tab, content_tab, raw_tab = st.tabs(
                 [
                     "Overview",
-                    "Identità",
+                    "Identity",
                     "Auth & Routing",
                     "Link Intel",
-                    "Allegati",
+                    "Attachments",
                     "AI & Body",
                     "Raw",
                 ]
@@ -758,14 +745,14 @@ def render():
                     if lookalike_alerts:
                         st.error(f"Lookalike domains: {len(lookalike_alerts)}")
                     else:
-                        st.success("Lookalike domains: nessun match")
+                        st.success("Lookalike domains: no match")
 
-                st.markdown("#### Dettagli SOC")
+                st.markdown("#### SOC Details")
                 if flags:
                     for flag in flags:
                         _render_flag(flag)
                 else:
-                    st.success("Nessun flag SOC generato.")
+                    st.success("No SOC flags generated.")
 
             with identity:
                 st.markdown("#### Envelope & Identity")
@@ -781,23 +768,23 @@ def render():
                     st.write(f"**Importance:** `{soc.get('importance') or '-'}`")
 
                 if soc.get("reply_to_mismatch"):
-                    st.error("Reply-To differisce dal From.")
+                    st.error("Reply-To differs from From.")
                 elif soc.get("reply_to"):
-                    st.success("Reply-To coerente con From.")
+                    st.success("Reply-To is consistent with From.")
                 else:
-                    st.info("Reply-To assente.")
+                    st.info("Reply-To absent.")
 
                 if soc.get("return_path_domain_mismatch"):
                     st.error(
-                        f"Return-Path mismatch: `{soc.get('return_path_domain')}` differisce dal dominio From."
+                        f"Return-Path mismatch: `{soc.get('return_path_domain')}` differs from the From domain."
                     )
                 elif soc.get("return_path"):
-                    st.success("Return-Path coerente con il dominio From.")
+                    st.success("Return-Path is consistent with the From domain.")
 
                 if soc.get("display_name_spoofing"):
                     st.error(f"Display Name Spoofing: `{soc['display_name_spoofing']}`")
 
-                st.markdown("#### Reputazione domini mittente")
+                st.markdown("#### Sender domain reputation")
                 domains = {}
 
                 def pull_domain(raw: str | None) -> str:
@@ -817,15 +804,15 @@ def render():
                     domains[f"Reply-To ({rt_domain})"] = rt_domain
 
                 if not domains:
-                    st.info("Nessun dominio mittente estraibile.")
+                    st.info("No sender domain could be extracted.")
                 else:
                     for label, domain in domains.items():
                         with st.expander(label):
-                            with st.spinner(f"Reputazione dominio {domain}..."):
+                            with st.spinner(f"Domain reputation {domain}..."):
                                 _render_abuseipdb(validator.check_domain_reputation(domain))
 
             with auth:
-                st.markdown("#### Autenticazione")
+                st.markdown("#### Authentication")
                 col_spf, col_dkim, col_dmarc = st.columns(3)
                 with col_spf:
                     _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"))
@@ -840,11 +827,11 @@ def render():
                 st.markdown("#### Routing")
                 hops = soc.get("received_hops", [])
                 c1, c2, c3 = st.columns(3)
-                c1.metric("Hop Received", len(hops))
+                c1.metric("Received hops", len(hops))
                 c2.metric("Injection IP", soc.get("injection_sender_ip") or "-")
                 c3.metric("Closest sender", (soc.get("closest_to_sender") or {}).get("from_host") or "-")
 
-                with st.expander("Percorso geografico email", expanded=False):
+                with st.expander("Email geographic route", expanded=False):
                     render_email_globe(soc, validator)
 
                 for idx, hop in enumerate(hops, start=1):
@@ -860,10 +847,10 @@ def render():
                         for ip in all_ips:
                             with st.container(border=True):
                                 st.write(f"IP `{ip}`")
-                                with st.spinner(f"Geolocalizzazione {ip}..."):
+                                with st.spinner(f"Geolocation {ip}..."):
                                     _render_geo(validator.geolocate_ip(ip))
                                 with st.expander("AbuseIPDB"):
-                                    with st.spinner(f"Reputazione {ip}..."):
+                                    with st.spinner(f"Reputation {ip}..."):
                                         _render_abuseipdb(validator.check_ip_reputation(ip))
                         with st.expander("Raw header"):
                             st.code(hop.get("raw", ""), language="text")
@@ -871,10 +858,10 @@ def render():
             with links_tab:
                 st.markdown("#### Link Intelligence")
                 if not links:
-                    st.info("Nessun URL trovato nel corpo dell'email.")
+                    st.info("No URL found in the email body.")
                 else:
-                    st.caption("Ogni URL viene controllata su VirusTotal. Il risultato viene passato anche a Phi-4 mini.")
-                    st.info(soc.get("link_reputation_summary") or "VirusTotal link reputation non disponibile.")
+                    st.caption("Each URL is checked on VirusTotal. The result is also passed to Phi-4 mini.")
+                    st.info(soc.get("link_reputation_summary") or "VirusTotal link reputation unavailable.")
 
                     if lookalike_alerts:
                         st.markdown("##### Lookalike / Typosquatting")
@@ -884,14 +871,13 @@ def render():
                                 st.error(f"`{alert['host']}` - {alert['detail']}")
                             else:
                                 st.error(
-                                    f"`{alert['host']}` assomiglia a `{matched_brand}` - {alert['detail']}"
+                                    f"`{alert['host']}` looks like `{matched_brand}` - {alert['detail']}"
                                 )
 
-                    st.markdown("##### URL estratte")
+                    st.markdown("##### Extracted URLs")
                     for lnk in links:
                         rep = vt_url_results.get(lnk["url"], {})
                         risky = rep.get("status") in ("malicious", "suspicious")
-                        destination_mismatch = rep.get("destination_status") == "mismatch"
                         display_mismatch = lnk.get("display_mismatch")
                         possible_shortener = lnk.get("is_possible_shortener")
                         with st.container(border=True):
@@ -900,16 +886,14 @@ def render():
                                 st.markdown(f"**`{lnk.get('host') or '-'}`**")
                                 st.caption(f"`{lnk.get('url')}`")
                                 if lnk.get("display_host"):
-                                    st.caption(f"Testo visibile: `{lnk.get('display_host')}`")
+                                    st.caption(f"Visible text: `{lnk.get('display_host')}`")
                             with top_right:
                                 if lnk.get("is_ip"):
-                                    st.error("IP diretto")
+                                    st.error("Direct IP")
                                 elif display_mismatch:
-                                    st.error("testo diverso")
+                                    st.error("different text")
                                 elif possible_shortener:
                                     st.warning("short link")
-                                elif destination_mismatch:
-                                    st.warning("redirect mismatch")
                                 elif risky:
                                     st.warning(rep.get("status", "suspicious"))
                                 else:
@@ -921,48 +905,48 @@ def render():
                             )
 
             with attach_tab:
-                st.markdown("#### Allegati")
+                st.markdown("#### Attachments")
                 if not attachments:
-                    st.info("Nessun allegato rilevato.")
+                    st.info("No attachments detected.")
                 for att in attachments:
                     with st.container(border=True):
-                        st.markdown(f"##### `{att.get('filename') or '(senza nome)'}`")
+                        st.markdown(f"##### `{att.get('filename') or '(unnamed)'}`")
                         c1, c2, c3, c4 = st.columns(4)
                         c1.metric("Content-Type", att.get("content_type") or "-")
                         c2.metric("Encoding", att.get("encoding") or "-")
-                        c3.metric("Estensione", att.get("extension_from_filename") or "-")
+                        c3.metric("Extension", att.get("extension_from_filename") or "-")
                         c4.metric("Magic", att.get("magic_detected_format") or "-")
 
                         if att.get("anomaly"):
                             st.error(att["anomaly"])
                         elif att.get("extension_match") is True:
-                            st.success("Estensione, Content-Type e magic bytes coerenti.")
+                            st.success("Extension, Content-Type e magic bytes coerenti.")
                         else:
-                            st.warning("Coerenza file non determinabile.")
+                            st.warning("File consistency cannot be determined.")
 
                         if att.get("hash_sha256"):
-                            with st.expander("Hash e VirusTotal"):
+                            with st.expander("Hash and VirusTotal"):
                                 st.code(att["hash_sha256"], language="text")
-                                with st.spinner("Lookup VirusTotal allegato..."):
+                                with st.spinner("Running VirusTotal attachment lookup..."):
                                     _render_virustotal(validator.check_file_hash(att["hash_sha256"]))
 
             with content_tab:
                 import torch
-                st.markdown("#### Analisi AI del contenuto")
+                st.markdown("#### AI Content Analysis")
                 clean_body = soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
                 email_text = f"Subject: {soc.get('subject') or ''}\n\n{clean_body}".strip()
 
                 _render_phi4_analysis(soc, phi4_key, auto_run=False)
 
-                with st.spinner("Caricamento modello BERT..."):
+                with st.spinner("Loading BERT model..."):
                     tokenizer, model, model_source = get_content_model()
 
-                st.info("Modello BERT caricato da Hugging Face.")
+                st.info("BERT model loaded from Hugging Face.")
 
                 if not email_text or email_text.lower() == "subject:":
-                    st.warning("Email senza testo significativo per la classificazione.")
+                    st.warning("Email has no meaningful text for classification.")
                 else:
-                    with st.spinner("BERT sta analizzando il contenuto..."):
+                    with st.spinner("BERT is analyzing the content..."):
                         inputs = tokenizer(email_text, return_tensors="pt", truncation=True, max_length=512)
                         with torch.no_grad():
                             outputs = model(**inputs)
@@ -971,55 +955,55 @@ def render():
                     prob_safe = probabilities[0] * 100
                     prob_phishing = probabilities[1] * 100
                     c1, c2 = st.columns(2)
-                    c1.metric("Legittima", f"{prob_safe:.2f}%")
+                    c1.metric("Legitimate", f"{prob_safe:.2f}%")
                     c2.metric("Phishing", f"{prob_phishing:.2f}%")
                     if prob_phishing > prob_safe:
-                        st.error("Risultato IA: possibile phishing")
+                        st.error("AI result: possible phishing")
                     else:
-                        st.success("Risultato IA: email probabilmente legittima")
-                    with st.expander("Logit grezzi"):
+                        st.success("AI result: email probably legitimate")
+                    with st.expander("Raw logits"):
                         st.json({"logits": logits.flatten().tolist()})
 
-                st.markdown("#### Corpo estratto")
+                st.markdown("#### Extracted Body")
                 source = soc.get("body_source", "unknown")
-                st.caption(f"Sorgente: `{source}`")
+                st.caption(f"Source: `{source}`")
                 ai_context = soc.get("body_context", "normal")
                 body_display = soc.get("body_extracted") or soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
                 full_body = soc.get("body_clean_full") or soc.get("body_clean") or soc.get("body") or ""
                 body_html = soc.get("body_html") or ""
                 if ai_context == "forwarded":
-                    st.info("Email inoltrata: viene mostrato e analizzato il contenuto inoltrato.")
+                    st.info("Forwarded email: the forwarded content is shown and analyzed.")
                 elif ai_context == "reply":
-                    st.info("Risposta email: viene mostrata e analizzata solo la risposta corrente.")
+                    st.info("Email reply: only the current reply is shown and analyzed.")
 
-                tab_labels = ["Body estratto", "Conversazione completa"]
+                tab_labels = ["Extracted body", "Full conversation"]
                 if body_html:
-                    tab_labels.extend(["HTML interpretato", "HTML raw"])
+                    tab_labels.extend(["Rendered HTML", "HTML raw"])
 
                 body_tabs = st.tabs(tab_labels)
                 with body_tabs[0]:
                     if body_display:
-                        st.text_area("Testo usato per AI e triage", body_display, height=300, disabled=True)
+                        st.text_area("Text used for AI and triage", body_display, height=300, disabled=True)
                     else:
-                        st.warning("Nessun testo estraibile dal corpo del messaggio.")
+                        st.warning("No text could be extracted from the message body.")
                 with body_tabs[1]:
                     if full_body:
-                        st.text_area("Testo completo normalizzato", full_body, height=300, disabled=True)
+                        st.text_area("Full normalized text", full_body, height=300, disabled=True)
                     else:
-                        st.info("Nessuna conversazione completa disponibile.")
+                        st.info("No full conversation available.")
 
                 next_tab = 2
                 if body_html:
                     with body_tabs[next_tab]:
                         enable_html_javascript = st.checkbox(
-                            "Render HTML con JavaScript",
+                            "Render HTML with JavaScript",
                             value=False,
                             key=f"{phi4_key}_body_html_javascript",
                         )
                         if enable_html_javascript:
-                            st.caption("Preview HTML con JavaScript attivo. I link restano disabilitati e non sono cliccabili.")
+                            st.caption("HTML preview with JavaScript enabled. Links remain disabled and are not clickable.")
                         else:
-                            st.caption("Preview HTML isolata: script, form, contenuti attivi e link cliccabili vengono rimossi prima della visualizzazione.")
+                            st.caption("Isolated HTML preview: scripts, forms, active content, and clickable links are removed before display.")
                         _render_html_preview(body_html, f"{phi4_key}_body_html", enable_javascript=enable_html_javascript)
                     next_tab += 1
                     with body_tabs[next_tab]:
@@ -1032,19 +1016,19 @@ def render():
                     next_tab += 1
 
             with raw_tab:
-                st.markdown("#### Report strutturato")
+                st.markdown("#### Structured report")
                 report_copy = {k: v for k, v in soc.items() if k != "raw_eml_bytes"}
                 st.json(report_copy, expanded=False)
-                st.markdown("#### EML raw pulito")
+                st.markdown("#### Cleaned raw EML")
                 hide_encoded_content = st.checkbox(
-                    "Togli contenuti base64/quoted-printable",
+                    "Remove base64/quoted-printable content",
                     value=False,
                     key=f"{phi4_key}_strip_encoded_raw",
                 )
                 raw_eml_text = st.session_state.get("raw_eml_text", "")
                 raw_eml_display = _strip_encoded_content(raw_eml_text) if hide_encoded_content else raw_eml_text
                 st.text_area(
-                    "EML raw pulito",
+                    "Cleaned raw EML",
                     raw_eml_display,
                     height=480,
                     disabled=True,
@@ -1056,6 +1040,6 @@ def render():
                 os.remove(temp_path)
 
         except Exception as exc:
-            st.error(f"Si è verificato un errore durante l'analisi: {exc}")
-            with st.expander("Dettaglio errore"):
+            st.error(f"An error occurred during analysis: {exc}")
+            with st.expander("Error details"):
                 st.exception(exc)

@@ -1,12 +1,12 @@
 """
-analyzer/soc_analyzer.py — Motore di analisi statica ed euristica per il SOC.
+analyzer/soc_analyzer.py - Motore di analisi statica ed euristica per il SOC.
 
-Classe principale:
-  EmlSOCAnalyzer.analyze(eml_path) → dict
+Main class:
+  EmlSOCAnalyzer.analyze(eml_path) -> dict
 
 Coordina tutti i sotto-moduli dell'analyzer:
   - received_parser  : parsing catena Received e Authentication-Results
-  - link_extractor   : estrazione URL dal corpo
+  - link_extractor   : URL extraction from the body
   - lookalike        : rilevamento domini lookalike
   - attachment       : analisi allegati via magic bytes e hash
   - html_utils       : stripping HTML per body_clean
@@ -27,7 +27,7 @@ from .received_parser import parse_received_hop, parse_auth_results
 
 
 def _extract_domain(email_or_addr: str) -> str:
-    """Restituisce la porzione dominio di un indirizzo email, in minuscolo."""
+    """Returns the domain portion of an email address, lowercased."""
     m = re.search(r"@([\w.\-]+)", email_or_addr or "")
     return m.group(1).lower() if m else ""
 
@@ -74,7 +74,7 @@ def _is_public_ip(value: str | None) -> bool:
 class EmlSOCAnalyzer:
     """
     Parsa un file .eml grezzo e restituisce un report strutturato per il triage SOC.
-    Tutta la logica è estratta dinamicamente dall'email — nessun hardcoding
+    All logic is extracted dynamically from the email - no hardcoding
     legato a messaggi specifici.
     """
 
@@ -118,7 +118,7 @@ class EmlSOCAnalyzer:
         )
         report["return_path_domain"] = return_path_domain
 
-        # Display Name Spoofing: il display name contiene un indirizzo diverso dal mittente reale
+        # Display Name Spoofing: the display name contains an address different from the real sender
         display_name_email_match = None
         if report["from_"]:
             dn_match = re.match(r'^"?([^"<]+)"?\s*<', report["from_"])
@@ -259,8 +259,8 @@ class EmlSOCAnalyzer:
         """
         Estrae l'IP corretto per la verifica SPF live.
 
-        Priorità:
-          1. client-ip= nell'ULTIMO Received-SPF (più vicino al mittente)
+        Priority:
+          1. client-ip= in the LAST Received-SPF (closest to the sender)
           2. smtp.remote-ip= in Authentication-Results
           3. Primo IP pubblico nell'ultimo hop Received
           4. Fallback: sender_ip dall'hop [1]
@@ -295,13 +295,13 @@ class EmlSOCAnalyzer:
         spf = report["auth_results"].get("SPF") or report["arc_auth_results"].get("SPF")
         if spf:
             if spf["status"] != "pass":
-                flag("HIGH", "SPF", f"SPF {spf['status'].upper()} — dominio non autorizza il server mittente")
+                flag("HIGH", "SPF", f"SPF {spf['status'].upper()} - domain does not authorize the sender server")
         else:
-            flag("MEDIUM", "SPF", "Nessun risultato SPF trovato negli header")
+            flag("MEDIUM", "SPF", "No SPF result found in headers")
 
         # DKIM
         if not report["dkim_signature_present"]:
-            flag("MEDIUM", "DKIM", "Firma DKIM assente negli header")
+            flag("MEDIUM", "DKIM", "DKIM signature missing from headers")
         dkim = report["auth_results"].get("DKIM") or report["arc_auth_results"].get("DKIM")
         if dkim and dkim["status"] != "pass":
             flag("HIGH", "DKIM", f"DKIM {dkim['status'].upper()}")
@@ -311,12 +311,12 @@ class EmlSOCAnalyzer:
         if dmarc and dmarc["status"] not in ("pass", "bestguesspass"):
             flag("HIGH", "DMARC", f"DMARC {dmarc['status'].upper()}")
         elif not dmarc:
-            flag("LOW", "DMARC", "Nessuna policy DMARC rilevata negli header")
+            flag("LOW", "DMARC", "No DMARC policy detected in headers")
 
         # Reply-To mismatch
         if report["reply_to_mismatch"]:
             flag("HIGH", "Reply-To",
-                 f"Reply-To ({report['reply_to']}) differs da From ({report['from_']}) — possibile harvesting")
+                 f"Reply-To ({report['reply_to']}) differs da From ({report['from_']}) - possible harvesting")
 
         # Return-Path domain mismatch
         if report.get("return_path_domain_mismatch"):
@@ -325,35 +325,35 @@ class EmlSOCAnalyzer:
             )
             flag(
                 "HIGH", "Return-Path",
-                f"Il dominio Return-Path (`{report['return_path_domain']}`) differisce dal "
-                f"dominio From (`{_from_domain}`) — il server che riceverà i bounce "
-                "non è controllato dal mittente dichiarato. Tipico di phishing o BEC."
+                f"The Return-Path domain (`{report['return_path_domain']}`) differisce dal "
+                f"From domain (`{_from_domain}`) - the server that will receive bounces "
+                "is not controlled by the declared sender. Typical of phishing or BEC."
             )
         elif report.get("return_path") and not report.get("return_path_domain"):
-            flag("LOW", "Return-Path", "Return-Path presente ma dominio non estraibile")
+            flag("LOW", "Return-Path", "Return-Path present but domain cannot be extracted")
 
         # HTML stripping applicato
         if report.get("html_strip_applied"):
             flag("INFO", "Body",
-                 "Corpo email in formato HTML puro: tag rimossi prima dell'analisi AI. "
-                 "Possibile offuscamento testuale nascosto nei tag.")
+                 "Email body is pure HTML: tags removed before AI analysis. "
+                 "Possible hidden text obfuscation in tags.")
 
         # Display Name Spoofing
         dns_val = report.get("display_name_spoofing")
         if dns_val:
             flag(
                 "HIGH", "Display Name",
-                f"Il Display Name del campo From contiene un indirizzo email (`{dns_val}`). "
-                "Tecnica classica di Display Name Spoofing: i client di posta mostrano "
-                "l'indirizzo embedded invece del mittente reale."
+                f"The Display Name in the From field contains an email address (`{dns_val}`). "
+                "Classic Display Name Spoofing technique: email clients show "
+                "the embedded address instead of the real sender."
             )
 
         # Injection server
         inj = report.get("injection_server", {})
         if inj.get("sender_ip"):
             flag("INFO", "Received",
-                 f"Server di iniezione: {inj.get('sender_domain') or inj.get('from_host', '?')} "
-                 f"[{inj['sender_ip']}] — verificare reputazione IP/dominio")
+                 f"Injection server: {inj.get('sender_domain') or inj.get('from_host', '?')} "
+                 f"[{inj['sender_ip']}] - verify IP/domain reputation")
 
         # Anomalie allegati
         for att in report.get("attachments", []):
@@ -362,39 +362,39 @@ class EmlSOCAnalyzer:
                      f"'{att['filename']}': {att['anomaly']}")
             if att.get("magic_bytes_hex"):
                 flag("INFO", "Attachment",
-                     f"'{att['filename']}': magic bytes {att['magic_bytes_hex'][:8]}… "
-                     f"→ formato rilevato: {att['magic_detected_format'] or 'sconosciuto'}")
+                     f"'{att['filename']}': magic bytes {att['magic_bytes_hex'][:8]}... "
+                     f"-> detected format: {att['magic_detected_format'] or 'unknown'}")
 
         # Link anomalie: IP-direct e lookalike
         for lnk in report.get("links", []):
             if lnk.get("is_ip"):
                 flag(
                     "HIGH", "Link",
-                    "URL con IP nudo rilevato: `" + lnk["url"] + "` — evita DNS lookup, "
-                    "tipico di phishing o C2",
+                    "URL with bare IP detected: `" + lnk["url"] + "` - avoids DNS lookup, "
+                    "typical of phishing or C2",
                 )
 
             if lnk.get("display_mismatch"):
                 flag(
                     "HIGH", "Link",
-                    "Il link mostra `" + (lnk.get("display_host") or "?")
-                    + "` ma punta a `" + (lnk.get("host") or "?")
-                    + "`: possibile link mascherato nell'HTML.",
+                    "The link shows `" + (lnk.get("display_host") or "?")
+                    + "` but points to `" + (lnk.get("host") or "?")
+                    + "`: possible masked link in HTML.",
                 )
             if lnk.get("is_possible_shortener"):
                 flag(
                     "MEDIUM", "Link",
-                    "Possibile short link/redirector senza whitelist: `" + lnk["url"]
-                    + "` - " + (lnk.get("shortener_reason") or "pattern sospetto"),
+                    "Possible short link/redirector without whitelist: `" + lnk["url"]
+                    + "` - " + (lnk.get("shortener_reason") or "suspicious pattern"),
                 )
         for alert in report.get("lookalike_alerts", []):
             technique_label = {
                 "edit_distance": "Edit-distance",
-                "homoglyph":     "Omoglifi Unicode",
-                "unicode_homoglyph": "Omoglifi Unicode nel dominio",
-                "unicode_domain": "Caratteri Unicode nel dominio",
-                "punycode_idna": "Dominio Punycode/IDNA",
-                "punycode_homograph": "Attacco omografo Punycode",
+                "homoglyph":     "Unicode homoglyphs",
+                "unicode_homoglyph": "Unicode homoglyphs in domain",
+                "unicode_domain": "Unicode characters in domain",
+                "punycode_idna": "Punycode/IDNA domain",
+                "punycode_homograph": "Punycode homograph attack",
                 "typosquatting": "Typosquatting",
             }.get(alert["technique"], alert["technique"])
             matched_brand = alert.get("matched_brand") or "-"
@@ -402,7 +402,7 @@ class EmlSOCAnalyzer:
                 message = technique_label + ": `" + alert["host"] + "` - " + alert["detail"]
             else:
                 message = (
-                    technique_label + ": `" + alert["host"] + "` assomiglia a `"
+                    technique_label + ": `" + alert["host"] + "` looks like `"
                     + matched_brand + "` - " + alert["detail"]
                 )
             flag("HIGH", "Lookalike Domain", message)

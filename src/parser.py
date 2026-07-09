@@ -10,7 +10,7 @@ def _sanitize_eml_bytes(raw_bytes: bytes) -> bytes:
     Pre-processes raw .eml bytes exported by non-standard MUAs or webmail clients
     that violate RFC 2822 in predictable ways. Applies three fixes in order:
 
-    1. **Spurious leading lines** — Some clients (e.g. Rackspace webmail) prepend
+    1. **Spurious leading lines** - Some clients (e.g. Rackspace webmail) prepend
        lines like ``Created at: Wed, 13 May 2026 09:36:48 AM (CEST)`` whose field
        name contains spaces, making them invalid RFC 2822 headers. Python's email
        parser stops at the first invalid line and treats everything after it as the
@@ -18,7 +18,7 @@ def _sanitize_eml_bytes(raw_bytes: bytes) -> bytes:
        the first syntactically valid header field (printable ASCII, no spaces, ends
        with colon).
 
-    2. **Unicode whitespace used as header folding** — The same clients use Unicode
+    2. **Unicode whitespace used as header folding** - The same clients use Unicode
        characters (U+2003 EM SPACE ``\\xe2\\x80\\x83``, U+00A0 NO-BREAK SPACE
        ``\\xc2\\xa0``) instead of the ASCII SP/HTAB required by RFC 5322 §2.2.3 for
        folded long headers. Python's parser does not recognise these as continuation
@@ -26,7 +26,7 @@ def _sanitize_eml_bytes(raw_bytes: bytes) -> bytes:
        that start with Unicode whitespace but not ASCII whitespace are prefixed with
        a regular space; inline NBSP is replaced with a regular space throughout.
 
-    3. **Missing blank-line separator** — Header-only exports (no body, no trailing
+    3. **Missing blank-line separator** - Header-only exports (no body, no trailing
        blank line) confuse Python's ``email`` parser boundary detection. Fix: append
        ``\\n\\n`` if no blank line is already present.
     """
@@ -45,12 +45,12 @@ def _sanitize_eml_bytes(raw_bytes: bytes) -> bytes:
 
     # ── Fix 2: normalise Unicode folding whitespace ───────────────────────────
     # EM SPACE family: U+2000–U+200B all encode to \xe2\x80\x{80-8b} in UTF-8
-    # NO-BREAK SPACE: U+00A0 → \xc2\xa0 in UTF-8
+    # NO-BREAK SPACE: U+00A0 -> \xc2\xa0 in UTF-8
     unicode_indent_re = re.compile(rb'^(?:(?:\xe2\x80[\x80-\x8b])|\xc2\xa0)+')
     fixed_lines = []
     for line in lines:
         # If line starts with Unicode WS but NOT ASCII space/tab, it's a folded
-        # continuation that Python won't recognise — prefix with ASCII space.
+        # continuation that Python won't recognise - prefix with ASCII space.
         if line and line[0:1] not in (b' ', b'\t') and unicode_indent_re.match(line):
             line = b' ' + unicode_indent_re.sub(b'', line)
         # Replace any remaining NBSP inline (e.g. inside Received header values)
@@ -73,12 +73,12 @@ class EmailParserPipeline:
     def parse_single_eml(self, eml_path: str) -> dict:
         """
         Legge un singolo file .eml ed estrae Mittente, Destinatario, Oggetto,
-        Data, Header grezzi e il Corpo del testo pulito in modo ricorsivo.
+        date, raw headers, and the cleaned text body recursively.
 
         Applica automaticamente _sanitize_eml_bytes() prima del parsing per
         gestire i file esportati da MUA non conformi a RFC 2822 (es. webmail
         Rackspace, alcuni client Exchange) che:
-          - inseriscono righe non-header all'inizio del file
+          - inseriscono rows non-header all'inizio del file
           - usano Unicode whitespace per il folding degli header
           - omettono la riga vuota di separazione header/body
         """
@@ -100,12 +100,12 @@ class EmailParserPipeline:
         subject = str(msg.get('Subject', '')).strip()
         date = str(msg.get('Date', '')).strip()
 
-        # Normalizzazione degli Header (risolve i problemi di righe multiple / folding)
+        # Normalizzazione degli Header (risolve i problemi di rows multiple / folding)
         raw_headers = {}
         for k, v in msg.items():
             raw_headers[k] = str(v).replace('\n', ' ').replace('\t', ' ').strip()
 
-        # Estrazione ricorsiva del corpo del testo (Corretto per gestire strutture multipart annidate)
+        # Recursive text-body extraction (fixed to handle nested multipart structures)
         body_parts = []
         html_parts = []
 
@@ -114,7 +114,7 @@ class EmailParserPipeline:
                 content_type = part.get_content_type()
                 content_disposition = str(part.get_content_disposition())
 
-                # Saltiamo i veri e propri file allegati per non inquinare il testo del modello
+                # Skip actual attachments to avoid polluting the model text
                 if 'attachment' in content_disposition:
                     continue
 
@@ -129,7 +129,7 @@ class EmailParserPipeline:
                         charset = part.get_content_charset() or 'utf-8'
                         html_parts.append(payload.decode(charset, errors='ignore'))
             
-            # Se abbiamo trovato del testo semplice uniamo tutto, altrimenti usiamo l'HTML come fallback
+            # If plain text was found, join it all; otherwise use HTML as a fallback
             body = "\n".join(body_parts) if body_parts else "\n".join(html_parts)
         else:
             payload = msg.get_payload(decode=True)
@@ -146,7 +146,7 @@ class EmailParserPipeline:
 
     def load_batch_emls(self, folder_path: str) -> pd.DataFrame:
         """
-        Scansiona una cartella, analizza tutti i file .eml presenti e
+        Scans a folder, analyzes all available .eml files, and
         restituisce un DataFrame di Pandas pronto per l'addestramento.
         """
         parsed_emails = []
@@ -161,12 +161,12 @@ class EmailParserPipeline:
                     data = self.parse_single_eml(full_path)
                     parsed_emails.append(data)
                 except Exception as e:
-                    print(f"[-] Errore nel parsing del file {filename}: {e}")
+                    print(f"[-] Error nel parsing del file {filename}: {e}")
 
         return pd.DataFrame(parsed_emails)
 
 if __name__ == "__main__":
-    print("[*] Test isolato del modulo parser.py con i file caricati...")
+    print("[*] Isolated parser.py module test with loaded files...")
     parser = EmailParserPipeline()
     
     for test_file in ['test.eml', 'test2.eml', 'test3_good.eml']:

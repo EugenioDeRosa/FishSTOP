@@ -257,16 +257,6 @@ def _technical_context_lines(soc: dict) -> list[str]:
         f"Display name spoofing: {soc.get('display_name_spoofing') or 'none'}",
     ]
 
-    link_reputation = soc.get("link_reputation") or {}
-    if link_reputation:
-        destination_match = sum(1 for rep in link_reputation.values() if rep.get("destination_status") == "match")
-        destination_mismatch = sum(1 for rep in link_reputation.values() if rep.get("destination_status") == "mismatch")
-        destination_unavailable = sum(1 for rep in link_reputation.values() if rep.get("destination_status") == "unavailable")
-        lines.append(
-            "Link destination checks: "
-            f"{destination_match} match, {destination_mismatch} mismatch, {destination_unavailable} unavailable"
-        )
-
     attachments = soc.get("attachments") or []
     if not attachments:
         lines.append("Attachments: none")
@@ -291,7 +281,7 @@ def _technical_context_lines(soc: dict) -> list[str]:
             flag for flag in high_medium
             if not (
                 flag.get("field") == "DKIM"
-                and any(token in (flag.get("message") or "").lower() for token in ["dkim none", "firma dkim assente"])
+                and any(token in (flag.get("message") or "").lower() for token in ["dkim none", "dkim signature missing"])
             )
         ]
     if high_medium:
@@ -332,11 +322,9 @@ def build_fast_email_prompt(soc: dict) -> str:
             rep = link_reputation.get(link.get("url") or "", {})
             vt_status = rep.get("status", "unknown")
             ratio = rep.get("detection_ratio", "0 / 0")
-            destination_status = rep.get("destination_status", "unavailable")
-            redirect_count = rep.get("redirect_count", 0)
             link_lines.append(
                 f"- link_type={_anonymized_link_hint(link)} vt_status={vt_status} detections={ratio} "
-                f"dest={destination_status} redirects={redirect_count} hint={_link_hint(link)}"
+                f"hint={_link_hint(link)}"
             )
     elif links:
         link_lines.append(
@@ -356,7 +344,7 @@ def build_fast_email_prompt(soc: dict) -> str:
             "Text risk signals detected:",
             "\n".join(f"- {signal}" for signal in risk_signals),
             "",
-            "Corpo anonimizzato, includendo il testo visibile derivato dall'HTML quando presente:",
+            "Anonymized body, including visible text derived from HTML when present:",
             _clip(anonymized_body, 2000),
             "",
             "Technical corroboration inputs - do not use these for the initial thesis:",
@@ -377,7 +365,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
         yield {
             "status": "error",
             "message": (
-                "Analisi LLM non disponibile: configura GITHUB_MODELS_TOKEN nei secrets "
+                "LLM analysis unavailable: configure GITHUB_MODELS_TOKEN in secrets "
                 "per usare Phi-4 mini hosted."
             ),
             "text": "",
@@ -394,7 +382,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "(pay, login, share credentials, open a form, reply, accept a promo, handle an invoice, or normal admin task). "
                 "Ignore [EMAIL]/[URL]/[IP]/[PHONE]/[IBAN]/[POSSIBLE_CARD_OR_ACCOUNT] placeholders as identity clues.\n"
                 "Step 2: use only the structured FishSTOP facts below (SPF/DKIM/DMARC, Return-Path/Reply-To mismatch, "
-                "display-name spoofing, VirusTotal, attachment anomalies, SOC flags) as corroboration only — never invent new risks.\n\n"
+                "display-name spoofing, VirusTotal, attachment anomalies, SOC flags) as corroboration only - never invent new risks.\n\n"
                 "Start the paragraph with exactly one of:\n"
                 "- The email provided is suspicious because\n"
                 "- The email provided is not suspicious because\n"
@@ -405,7 +393,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "a normal body.\n"
                 "Never cite IP, geolocation, routing, full URLs, emails, phone numbers, IBANs, account numbers or other PII "
                 "as evidence. Treat links as neutral unless VirusTotal flags them malicious or the body asks for a risky "
-                "action through them — embedding, repetition, Google redirects, or a single recipient are not evidence; "
+                "action through them - embedding, repetition, Google redirects, or a single recipient are not evidence; "
                 "promos/newsletters/discounts with links are not phishing per se.\n"
                 "Treat as explicit scam signals even without a money/credential ask yet: lottery/prize/donation/inheritance "
                 "claims, unexpected large sums, celebrity/CEO impersonation, vague business/investment lures, "
@@ -474,7 +462,7 @@ def _stream_github_models(messages: list[dict], model: str, timeout: int):
         yield {"status": "error", "message": f"GitHub Models non raggiungibile su {GITHUB_MODELS_ENDPOINT}: {exc}", "text": "".join(chunks)}
         return
     except Exception as exc:
-        yield {"status": "error", "message": f"Errore durante la generazione con GitHub Models: {exc}", "text": "".join(chunks)}
+        yield {"status": "error", "message": f"Error durante la generazione con GitHub Models: {exc}", "text": "".join(chunks)}
         return
 
     yield {"status": "ok", "model": model, "text": "".join(chunks).strip()}

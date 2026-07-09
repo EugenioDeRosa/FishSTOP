@@ -36,7 +36,7 @@ _resolver.timeout = 2.0
 _resolver.lifetime = 6.0
 
 def _resolve_domain_a(domain: str) -> Optional[str]:
-    """Risolve un dominio usando il resolver di SISTEMA (bypassa dns.resolver/porta 53 custom)."""
+    """Resolves a domain using the SYSTEM resolver (bypasses dns.resolver/custom port 53)."""
     try:
         return socket.gethostbyname(domain)
     except (socket.gaierror, socket.timeout, UnicodeError):
@@ -95,7 +95,7 @@ def _format_abuseipdb(data: dict, lookup_key: str) -> dict:
         "usageType":            data.get("usageType") or "",
         "lastReportedAt":       data.get("lastReportedAt"),
         "url":                  f"https://www.abuseipdb.com/check/{ip}",
-        "message": f"Score: {score}/100 — {int(data.get('totalReports') or 0)} segnalazioni.",
+        "message": f"Score: {score}/100 - {int(data.get('totalReports') or 0)} reports.",
     }
 
 
@@ -111,7 +111,7 @@ def _format_vt_file(data: dict, base: dict) -> dict:
         "malicious": malicious,
         "suspicious": suspicious,
         "total_engines": total,
-        "message": f"{malicious} engine rilevano minacce su {total}.",
+        "message": f"{malicious} engines detect threats out of {total}.",
     }
 
 
@@ -119,18 +119,18 @@ def _format_vt_file(data: dict, base: dict) -> dict:
 
 def check_ip_reputation(ip: str) -> dict:
     base = {"ip": ip, "abuseConfidenceScore": 0, "totalReports": 0, "numDistinctUsers": 0, "isWhitelisted": False}
-    if not ip: return {**base, "status": "skipped", "message": "Nessun IP"}
+    if not ip: return {**base, "status": "skipped", "message": "No IP"}
     try:
         if not ipaddress.ip_address(ip.strip("[]")).is_global:
-            return {**base, "status": "skipped", "message": "IP non pubblico geolocalizzabile"}
+            return {**base, "status": "skipped", "message": "IP is not public/geolocatable"}
     except ValueError:
-        return {**base, "status": "skipped", "message": "IP non valido"}
-    if not ABUSEIPDB_API_KEY: return {**base, "status": "skipped", "message": "API key assente"}
+        return {**base, "status": "skipped", "message": "Invalid IP"}
+    if not ABUSEIPDB_API_KEY: return {**base, "status": "skipped", "message": "API key missing"}
     try:
         data = _abuseipdb_call(ip)
         return _format_abuseipdb(data, ip)
     except Exception as exc:
-        return {**base, "status": "error", "message": f"Errore AbuseIPDB: {exc}"}
+        return {**base, "status": "error", "message": f"Error AbuseIPDB: {exc}"}
 
 
 import subprocess
@@ -140,12 +140,12 @@ from typing import Optional
 
 def check_domain_reputation(domain: str, resolver = None) -> dict:
     """
-    Risolve il dominio emulando NSLOOKUP di sistema.
+    Resolves the domain by emulating system NSLOOKUP.
     Bypassa completamente i socket interni di Python e le librerie DNS instabili.
     """
     base = {"domain_queried": domain, "resolved_ip": "", "lookup_method": "error", "abuseConfidenceScore": 0}
-    if not domain: return {**base, "status": "skipped", "message": "Nessun dominio"}
-    if not ABUSEIPDB_API_KEY: return {**base, "status": "skipped", "message": "API key assente"}
+    if not domain: return {**base, "status": "skipped", "message": "No domain"}
+    if not ABUSEIPDB_API_KEY: return {**base, "status": "skipped", "message": "API key missing"}
 
     resolved_ip = None
 
@@ -164,7 +164,7 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
             output = result.stdout
             
             # Estraiamo gli indirizzi IP IPv4 validi dall'output di nslookup.
-            # Saltiamo la prima occorrenza (che di solito è l'IP del server DNS locale stesso)
+            # Skip the first occurrence, which is usually the local DNS server IP itself
             ip_finder = re.findall(r"Address:\s*([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})", output)
             
             if len(ip_finder) > 0:
@@ -181,9 +181,9 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
         try:
             resolved_ip = socket.gethostbyname(domain)
         except Exception as exc:
-            return {**base, "status": "skipped", "message": f"Nslookup e Socket falliti per il dominio. Errore: {exc}"}
+            return {**base, "status": "skipped", "message": f"Nslookup and socket failed for the domain. Error: {exc}"}
 
-    # Chiamata ad AbuseIPDB con l'IP pulito ottenuto da nslookup
+    # AbuseIPDB call with the clean IP obtained from nslookup
     try:
         data = _abuseipdb_call(resolved_ip)
         result_dict = _format_abuseipdb(data, resolved_ip)
@@ -194,29 +194,29 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
         })
         return result_dict
     except Exception as exc:
-        return {**base, "status": "error", "message": f"Errore API AbuseIPDB su IP {resolved_ip}: {exc}"}
+        return {**base, "status": "error", "message": f"Error API AbuseIPDB su IP {resolved_ip}: {exc}"}
     
 def check_file_hash(sha256: str) -> dict:
     base = {"sha256": sha256, "malicious": 0, "suspicious": 0, "total_engines": 0}
     if not sha256: return {**base, "status": "skipped", "message": "No hash"}
-    if not VIRUSTOTAL_API_KEY: return {**base, "status": "skipped", "message": "VT key assente"}
+    if not VIRUSTOTAL_API_KEY: return {**base, "status": "skipped", "message": "VT key missing"}
     
     url = f"{VIRUSTOTAL_ENDPOINT}/{sha256}"
     headers = {"x-apikey": VIRUSTOTAL_API_KEY}
     try:
         response = _session.get(url, headers=headers, timeout=5)
         if response.status_code == 404:
-            return {**base, "status": "not_found", "message": "Hash non trovato su VT"}
+            return {**base, "status": "not_found", "message": "Hash not found on VT"}
         response.raise_for_status()
         return _format_vt_file(response.json(), base)
     except Exception as exc:
-        return {**base, "status": "error", "message": f"Errore VT: {exc}"}
+        return {**base, "status": "error", "message": f"Error VT: {exc}"}
 
 
 def geolocate_ip(ip: str) -> dict:
     base = {"ip": ip, "country": "", "is_proxy": False, "is_hosting": False}
     if not ip or ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("127."):
-        return {**base, "status": "skipped", "message": "IP privato o assente"}
+        return {**base, "status": "skipped", "message": "Private or missing IP"}
     try:
         response = _session.get(IPAPI_ENDPOINT.format(ip=ip), timeout=4)
         response.raise_for_status()
@@ -229,7 +229,7 @@ def geolocate_ip(ip: str) -> dict:
             "message": f"{data.get('city')}, {data.get('country')}",
         }
     except Exception as exc:
-        return {**base, "status": "error", "message": f"Errore geo: {exc}"}
+        return {**base, "status": "error", "message": f"Error geo: {exc}"}
 
 
 if __name__ == "__main__":
@@ -238,4 +238,4 @@ if __name__ == "__main__":
     if ABUSEIPDB_API_KEY:
         print(json.dumps(check_ip_reputation("8.8.8.8"), indent=2))
     else:
-        print("API Key non configurata. Salta il test locale.")
+        print("API key not configured. Skipping the local test.")

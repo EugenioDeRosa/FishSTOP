@@ -1,77 +1,11 @@
 import datetime
 import base64
-from urllib.parse import urlparse
-
 import requests
 
 VIRUSTOTAL_ENDPOINT = "https://www.virustotal.com/api/v3/files"
 VIRUSTOTAL_URL_ENDPOINT = "https://www.virustotal.com/api/v3/urls"
 _session = requests.Session()
 
-
-def _normalize_host(host: str) -> str:
-    return (host or "").strip().lower().rstrip(".")
-
-
-def _registered_domain(host: str) -> str:
-    parts = _normalize_host(host).split(".")
-    if len(parts) >= 2:
-        return ".".join(parts[-2:])
-    return _normalize_host(host)
-
-
-def _destination_matches(original_url: str, final_url: str) -> bool:
-    original = urlparse(original_url or "")
-    final = urlparse(final_url or "")
-    original_host = _normalize_host(original.hostname or "")
-    final_host = _normalize_host(final.hostname or "")
-    if not original_host or not final_host:
-        return False
-    return _registered_domain(original_host) == _registered_domain(final_host)
-
-
-def _resolve_final_url(url: str) -> dict:
-    base = {
-        "resolved_url": url or "",
-        "resolved_host": _normalize_host(urlparse(url or "").hostname or ""),
-        "redirect_count": 0,
-        "destination_status": "unavailable",
-        "destination_match": False,
-        "destination_message": "",
-    }
-
-    if not url:
-        return {**base, "destination_message": "Nessuna URL fornita"}
-
-    try:
-        resp = _session.get(url, allow_redirects=True, timeout=10, stream=True)
-        try:
-            final_url = resp.url or url
-            final_host = _normalize_host(urlparse(final_url).hostname or "")
-            redirect_count = max(len(resp.history), 0)
-            destination_match = _destination_matches(url, final_url)
-            if destination_match:
-                destination_status = "match"
-                destination_message = "La destinazione finale corrisponde al dominio atteso"
-            else:
-                destination_status = "mismatch"
-                destination_message = "La destinazione finale differisce dal dominio originale"
-
-            return {
-                **base,
-                "resolved_url": final_url,
-                "resolved_host": final_host,
-                "redirect_count": redirect_count,
-                "destination_status": destination_status,
-                "destination_match": destination_match,
-                "destination_message": destination_message,
-            }
-        finally:
-            resp.close()
-    except requests.exceptions.Timeout:
-        return {**base, "destination_message": "Timeout durante la risoluzione della URL"}
-    except Exception as exc:
-        return {**base, "destination_message": f"Errore durante la risoluzione della URL: {exc}"}
 
 def _epoch_to_iso(val) -> str:
     if not val:
@@ -122,7 +56,7 @@ def _format_vt_file(data: dict, base: dict) -> dict:
         "file_name":        file_name,
         "first_submission": _epoch_to_iso(attrs.get("first_submission_date")),
         "last_analysis":    _epoch_to_iso(attrs.get("last_analysis_date")),
-        "message":          " — ".join(message_parts),
+        "message":          " - ".join(message_parts),
     }
 
 def check_file_hash(api_key: str, sha256: str) -> dict:
@@ -132,7 +66,7 @@ def check_file_hash(api_key: str, sha256: str) -> dict:
         "suspicious":       0,
         "undetected":       0,
         "total_engines":    0,
-        "detection_ratio":  "—",
+        "detection_ratio":  "-",
         "threat_label":     "",
         "file_type":        "",
         "file_name":        "",
@@ -144,7 +78,7 @@ def check_file_hash(api_key: str, sha256: str) -> dict:
     if not sha256:
         return {**base, "status": "skipped", "message": "Nessun hash fornito"}
     if not api_key:
-        return {**base, "status": "skipped", "message": "API key VirusTotal non configurata — lookup saltato"}
+        return {**base, "status": "skipped", "message": "API key VirusTotal non configurata - lookup saltato"}
 
     url = f"{VIRUSTOTAL_ENDPOINT}/{sha256}"
     headers = {"x-apikey": api_key, "Accept": "application/json"}
@@ -164,7 +98,7 @@ def check_file_hash(api_key: str, sha256: str) -> dict:
             return {**base, "status": "error", "message": "Rate limit VirusTotal superato (4 req/min)"}
         return {**base, "status": "error", "message": f"VirusTotal HTTP {code}: {exc.response.reason}"}
     except Exception as exc:
-        return {**base, "status": "error", "message": f"Errore VirusTotal: {exc}"}
+        return {**base, "status": "error", "message": f"Error VirusTotal: {exc}"}
 
 
 def _url_id(url: str) -> str:
@@ -205,13 +139,11 @@ def _format_vt_url(data: dict, base: dict) -> dict:
         "last_analysis": _epoch_to_iso(attrs.get("last_analysis_date")),
         "reputation": attrs.get("reputation", 0),
         "title": attrs.get("title", ""),
-        "final_url": attrs.get("last_final_url") or base["url"],
         "message": f"{detections} engine su {total} segnalano questa URL",
     }
 
 
 def check_url(api_key: str, url: str) -> dict:
-    resolution = _resolve_final_url(url)
     base = {
         "url": url or "",
         "status": "skipped",
@@ -225,47 +157,28 @@ def check_url(api_key: str, url: str) -> dict:
         "last_analysis": "",
         "reputation": 0,
         "title": "",
-        "final_url": url or "",
-        "final_host": resolution["resolved_host"],
-        "redirect_count": resolution["redirect_count"],
-        "destination_status": resolution["destination_status"],
-        "destination_match": resolution["destination_match"],
-        "destination_message": resolution["destination_message"],
         "permalink": f"https://www.virustotal.com/gui/url/{_url_id(url) if url else ''}",
         "message": "",
     }
 
     if not url:
-        return {**base, "status": "skipped", "message": "Nessuna URL fornita"}
+        return {**base, "status": "skipped", "message": "No URL provided"}
     if not api_key:
         return {
             **base,
             "status": "skipped",
-            "message": "API key VirusTotal non configurata - lookup saltato",
-            "final_url": resolution["resolved_url"],
-            "final_host": resolution["resolved_host"],
-            "redirect_count": resolution["redirect_count"],
-            "destination_status": resolution["destination_status"],
-            "destination_match": resolution["destination_match"],
-            "destination_message": resolution["destination_message"],
+            "message": "VirusTotal API key is not configured - lookup skipped",
         }
 
     headers = {"x-apikey": api_key, "Accept": "application/json"}
     try:
         resp = _session.get(f"{VIRUSTOTAL_URL_ENDPOINT}/{_url_id(url)}", headers=headers, timeout=10)
         resp.raise_for_status()
-        result = _format_vt_url(resp.json(), base)
-        result["final_url"] = resolution["resolved_url"] or result.get("final_url") or url
-        result["final_host"] = resolution["resolved_host"]
-        result["redirect_count"] = resolution["redirect_count"]
-        result["destination_status"] = resolution["destination_status"]
-        result["destination_match"] = resolution["destination_match"]
-        result["destination_message"] = resolution["destination_message"]
-        return result
+        return _format_vt_url(resp.json(), base)
     except requests.exceptions.HTTPError as exc:
         code = exc.response.status_code
         if code == 404:
-            return {**base, "status": "not_found", "message": "URL non trovata su VirusTotal"}
+            return {**base, "status": "not_found", "message": "URL not found su VirusTotal"}
         if code == 401:
             return {**base, "status": "error", "message": "API key VirusTotal non valida (HTTP 401)"}
         if code == 429:
@@ -274,4 +187,4 @@ def check_url(api_key: str, url: str) -> dict:
     except requests.exceptions.Timeout:
         return {**base, "status": "error", "message": "Timeout durante il lookup VirusTotal"}
     except Exception as exc:
-        return {**base, "status": "error", "message": f"Errore VirusTotal URL: {exc}"}
+        return {**base, "status": "error", "message": f"Error VirusTotal URL: {exc}"}

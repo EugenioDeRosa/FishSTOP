@@ -1,5 +1,5 @@
 """
-analyzer/received_parser.py — Parsing degli header di routing email (Enterprise Level).
+analyzer/received_parser.py - Parsing degli header di routing email (Enterprise Level).
 
 Espone:
   - parse_received_hop(raw)    : dizionario strutturato per un singolo hop Received
@@ -20,7 +20,7 @@ _BY_RE = re.compile(r"\bby\s+(\[[^\]]+\]|[^\s;()]+)", re.IGNORECASE)
 _FROM_RE = re.compile(r"\bfrom\s+(\[[^\]]+\]|[^\s;()]+)\s*(?:\(([^)]*)\))?", re.IGNORECASE)
 _FOR_RE = re.compile(r"\bfor\s+<([^>]+)>", re.IGNORECASE)
 
-# TLS regex più tollerante per gli standard moderni (inclusi TLSv1.3 e formati estesi)
+# More tolerant TLS regex for modern standards (including TLSv1.3 and extended formats)
 _TLS_RE = re.compile(
     r"(?:version=)?(TLSv?[\d.]+)\s+(?:cipher|version)=([\w\-]+)", re.IGNORECASE
 )
@@ -42,7 +42,7 @@ _AUTH_IDENTITY_RE = re.compile(
 
 def _extract_valid_ips(text: str) -> List[str]:
     """
-    Trova tutti i candidati IP nel testo e restituisce solo quelli che superano
+    Finds all IP candidates in the text and returns only those that pass
     la validazione rigorosa del modulo ipaddress di Python, rimuovendo i duplicati.
     """
     valid_ips: Dict[str, bool] = {}
@@ -131,7 +131,7 @@ def parse_received_hop(raw: str) -> Dict[str, Any]:
         parts = [p.strip("()[]:,") for p in parenthetical.split() if p.strip("()[]:,")]
         if parts:
             first_part = parts[0]
-            # Se la prima parte non è un IP valido, la consideriamo il dominio dichiarato
+            # If the first part is not a valid IP, treat it as the declared domain
             try:
                 ipaddress.ip_address(first_part.lower().replace("ipv6:", ""))
                 hop["sender_domain"] = None

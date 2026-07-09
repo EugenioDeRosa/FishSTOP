@@ -165,7 +165,7 @@ pred_out = trainer.predict(test_tok)
 y_true = pred_out.label_ids
 y_pred = np.argmax(pred_out.predictions, axis=1)
 print("\\nClassification report:")
-print(classification_report(y_true, y_pred, target_names=["Legittima", "Phishing"], zero_division=0))
+print(classification_report(y_true, y_pred, target_names=["Legitimate", "Phishing"], zero_division=0))
 print("\\nConfusion matrix:")
 print(confusion_matrix(y_true, y_pred))
 
@@ -187,7 +187,7 @@ with open(os.path.join(OUTPUT_DIR, "training_meta.json"), "w", encoding="utf-8")
 !cd /content && zip -r fishstop_bert_model.zip fishstop_bert_model
 !cp /content/fishstop_bert_model.zip /content/drive/MyDrive/fishstop_bert_model.zip
 
-print("\\nFatto. Scarica da Drive: fishstop_bert_model.zip")
+print("\\nDone. Download from Drive: fishstop_bert_model.zip")
 '''
 
     notebook = {
@@ -197,7 +197,7 @@ print("\\nFatto. Scarica da Drive: fishstop_bert_model.zip")
                 "metadata": {},
                 "source": [
                     "# FishStop Colab Training\\n",
-                    "Carica `fishstop_train.csv` in `MyDrive`, esegui tutto, poi pubblica il modello su Hugging Face per usarlo nella web app.\\n",
+                    "Upload `fishstop_train.csv` to `MyDrive`, run everything, then publish the model on Hugging Face to use it in the web app.\\n",
                 ],
             },
             {
@@ -222,7 +222,7 @@ print("\\nFatto. Scarica da Drive: fishstop_bert_model.zip")
 def render():
     st.header("Colab Training")
     st.markdown(
-        "Prepara il CSV e apri il notebook in Google Colab con GPU. "
+        "Prepare the CSV and open the notebook in Google Colab with GPU. "
         "La web app carica il modello solo da Hugging Face."
     )
 
@@ -232,52 +232,52 @@ def render():
 
     st.subheader("1. Dataset")
     c1, c2, c3 = st.columns(3)
-    c1.metric("Custom totali", stats["total"])
-    c2.metric("Legittime custom", stats["legitimate"])
-    c3.metric("Phishing custom", stats["phishing"])
+    c1.metric("Total custom", stats["total"])
+    c2.metric("Custom legitimate", stats["legitimate"])
+    c3.metric("Custom phishing", stats["phishing"])
 
     include_public = st.checkbox(
-        "Includi dataset pubblico bilanciato",
+        "Include balanced public dataset",
         value=public_path.exists(),
         disabled=not public_path.exists(),
     )
     if public_path.exists():
-        st.caption(f"Dataset pubblico trovato: `{public_path}`")
+        st.caption(f"Public dataset found: `{public_path}`")
     else:
-        st.caption("Dataset pubblico non trovato. Puoi crearlo dalla sezione Public Datasets.")
+        st.caption("Public dataset not found. You can create it from the Public Datasets section.")
 
-    include_custom = st.checkbox("Includi dataset custom EML", value=stats["total"] > 0)
+    include_custom = st.checkbox("Include custom EML dataset", value=stats["total"] > 0)
     export_df = _build_export_df(include_public=include_public, include_custom=include_custom)
 
     if export_df.empty:
-        st.warning("Nessun dato disponibile per esportare il training CSV.")
+        st.warning("No data available to export the training CSV.")
     else:
         d1, d2, d3 = st.columns(3)
-        d1.metric("Righe export", len(export_df))
-        d2.metric("Legittime", int((export_df["label"] == 0).sum()))
+        d1.metric("Export rows", len(export_df))
+        d2.metric("Legitimate", int((export_df["label"] == 0).sum()))
         d3.metric("Phishing", int((export_df["label"] == 1).sum()))
 
         st.download_button(
-            "Scarica fishstop_train.csv",
+            "Download fishstop_train.csv",
             data=_csv_bytes(export_df),
             file_name="fishstop_train.csv",
             mime="text/csv",
             use_container_width=True,
         )
 
-        with st.expander("Anteprima export", expanded=False):
+        with st.expander("Export preview", expanded=False):
             st.dataframe(export_df.head(200), hide_index=True, width="stretch")
 
     st.divider()
     st.subheader("2. Notebook Colab")
     st.download_button(
-        "Scarica notebook Colab",
+        "Download Colab notebook",
         data=_colab_notebook_bytes(),
         file_name="fishstop_colab_training.ipynb",
         mime="application/x-ipynb+json",
         use_container_width=True,
     )
     st.markdown(
-        "Carica `fishstop_train.csv` in Google Drive, cartella `MyDrive`. "
+        "Upload `fishstop_train.csv` to Google Drive, folder `MyDrive`. "
         "Apri il notebook in Colab, attiva GPU, esegui tutto e pubblica il modello aggiornato su Hugging Face."
     )

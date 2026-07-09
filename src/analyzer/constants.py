@@ -1,14 +1,14 @@
 """
-analyzer/constants.py — Costanti condivise per l'analisi statica delle email.
+analyzer/constants.py - Costanti condivise per l'analisi statica delle email.
 
 Contiene:
   - KNOWN_BRANDS       : database di domini brand noti per il lookalike check
-  - _HOMOGLYPH_MAP     : mappa omoglifi Unicode → ASCII
+  - _HOMOGLYPH_MAP     : mappa omoglifi Unicode -> ASCII
   - MAGIC_BYTES        : firme binarie per l'identificazione reale degli allegati
-  - CONTENT_TYPE_TO_EXT: mapping Content-Type MIME → estensioni attese
+  - CONTENT_TYPE_TO_EXT: mapping Content-Type MIME -> estensioni attese
 """
 
-# Domini di brand noti — usati come riferimento per il lookalike check.
+# Domini di brand noti - usati come riferimento per il lookalike check.
 # Ampliabile con i brand rilevanti per il contesto aziendale.
 KNOWN_BRANDS: list[str] = [
     "paypal.com", "amazon.com", "amazon.it", "apple.com", "microsoft.com",
@@ -20,7 +20,7 @@ KNOWN_BRANDS: list[str] = [
     "ups.com", "brt.it", "gls-italy.com",
 ]
 
-# Caratteri Unicode omoglifi → ASCII equivalente
+# Caratteri Unicode omoglifi -> ASCII equivalente
 # (sottoinsieme rilevante per phishing; non serve un mapping completo)
 HOMOGLYPH_MAP: dict[str, str] = {
     "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x",

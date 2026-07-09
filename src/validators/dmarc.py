@@ -1,6 +1,6 @@
 """DMARC header-only check.
 
-FishSTOP usa il risultato DMARC gia calcolato dall'MTA e presente negli header
+FishSTOP uses the DMARC result already calculated by the MTA and present in the headers
 dell'EML.
 """
 
@@ -67,7 +67,7 @@ def check_dmarc(
         return {
             **base,
             "status": "error",
-            "message": "Impossibile estrarre il dominio dall'header From",
+            "message": "Unable to extract the domain from the From header",
         }
 
     spf_aligned = (
@@ -94,12 +94,12 @@ def check_dmarc(
             "status": "pass",
             "message": (
                 f"DMARC PASS stimato dagli header locali tramite {' + '.join(aligned_via)}; "
-                "nessun controllo live eseguito"
+                "no live check executed"
             ),
         }
 
     return {
         **base,
         "status": "none",
-        "message": "Controllo DMARC live disattivato: usare il risultato DMARC presente negli header EML",
+        "message": "Live DMARC check disabled: use the DMARC result present in the EML headers",
     }

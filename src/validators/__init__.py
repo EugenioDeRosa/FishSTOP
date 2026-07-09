@@ -37,7 +37,7 @@ class EmailSecurityValidator:
     def check_ip_reputation(self, ip: str) -> dict:
         return check_ip_reputation(ip)
 
-    # 🟢 Anche la pipeline ora ha i suoi 4 spazi di rientro ed è un metodo della classe a tutti gli effetti
+    # 🟢 The pipeline now has its 4-space indentation and is a full class method
     def pipeline_analisi_veloce(self, sender_ip: str, mail_from: str, domain: str, sha256: str = "") -> dict:
         """
         Esegue i controlli di reputazione e geolocalizzazione in PARALLELO.

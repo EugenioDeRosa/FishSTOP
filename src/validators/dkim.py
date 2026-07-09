@@ -20,7 +20,7 @@ def check_dkim(raw_eml_bytes: bytes) -> dict:
         return {
             "status": "none",
             "signatures": [],
-            "message": "Nessuna firma DKIM presente nell'email",
+            "message": "No DKIM signature present in the email",
             "library": "header-only",
         }
 
@@ -36,12 +36,12 @@ def check_dkim(raw_eml_bytes: bytes) -> dict:
             "d_domain": d_domain or "?",
             "selector": selector or "?",
             "result": "present",
-            "message": "Firma DKIM presente nell'EML; nessun controllo live eseguito",
+            "message": "DKIM signature present in the EML; no live check executed",
         })
 
     return {
         "status": "present",
         "signatures": signatures,
-        "message": f"{len(signatures)} firma/e DKIM presente/i; nessun controllo live eseguito",
+        "message": f"{len(signatures)} DKIM signature(s) present; no live check executed",
         "library": "header-only",
     }

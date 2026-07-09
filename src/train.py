@@ -1,15 +1,15 @@
 import os
 import sys
 
-# Forza Python a riconoscere la cartella radice per trovare 'src.parser'
+# Force Python to recognize the root folder to find 'src.parser'
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Carica variabili d'ambiente da .env (Kaggle, API keys, ecc.)
+# Load environment variables from .env (Kaggle, API keys, etc.)
 try:
     from dotenv import load_dotenv
     load_dotenv(override=False)
 except ImportError:
-    pass  # python-dotenv opzionale — le variabili devono essere già in env
+    pass  # optional python-dotenv - variables must already be in env
 
 
 import hashlib
@@ -36,7 +36,7 @@ from src.eml_dataset_builder import EmlDatasetBuilder
 kagglehub=""
 class BERTPhishingTrainer:
     def __init__(self, model_name="bert-base-uncased", num_labels=2):
-        print("[*] Inizializzazione di BERT Tokenizer e Modello...")
+        print("[*] Initializing BERT tokenizer and model...")
         self.tokenizer = BertTokenizer.from_pretrained(model_name)
         self.model = BertForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
 
@@ -56,7 +56,7 @@ class BERTPhishingTrainer:
             print("[☁️ AMBIENTE: CLOUD/CPU DETECTED] Esecuzione su CPU standard (perfetto per Codespaces).")
 
         self.model.to(self.device)
-        print(f"[+] Modello configurato sul dispositivo di calcolo: {self.device}")
+        print(f"[+] Model configured on compute device: {self.device}")
 
     # ------------------------------------------------------------------
     # DATA
@@ -69,12 +69,12 @@ class BERTPhishingTrainer:
         custom_legitimate/custom_phishing, custom_dataset.csv) come ultimo step,
         dopo aver unito tutto in df_combined.
 
-        Prima questa normalizzazione era fatta in modo diverso per ogni fonte
+        Previously this normalization was done differently for each source
         (solo .lower() per Kaggle/personal/custom_*, pulizia aggressiva con
         rimozione di punteggiatura/URL per il CSV custom): il modello rischiava
-        di imparare a riconoscere la "fonte" del dato invece del fenomeno reale.
-        Ora è identica ovunque: lowercase + collasso spazi, punteggiatura e URL
-        preservati perché sono segnali utili per il phishing detection.
+        learning to recognize the data "source" instead of the real phenomenon.
+        Now it is identical everywhere: lowercase + space collapse, punctuation and URLs
+        preserved because they are useful signals for phishing detection.
         """
         return re.sub(r"\s+", " ", str(text).lower()).strip()
 
@@ -85,11 +85,11 @@ class BERTPhishingTrainer:
         custom_phishing + custom_dataset.csv) e applica una normalizzazione
         testuale UNICA a tutte le fonti, seguita da un dedup globale per hash
         prima dello split train/val/test (evita sia duplicati naturali tra
-        fonti diverse sia il doppio conteggio delle email aggiunte dal tab
+        fonti diverse sia il doppio conteggio delle email added dal tab
         "Dataset Builder", che vengono salvate sia come .eml su disco sia come
         riga nel CSV custom).
         """
-        print("[*] Interrogazione e recupero del dataset principale da KaggleHub...")
+        print("[*] Querying and retrieving the main dataset from KaggleHub...")
         kaggle_dir = kagglehub.dataset_download("naserabdullahalam/phishing-email-dataset")
 
         csv_path = os.path.join(kaggle_dir, "phishing_email.csv")
@@ -114,8 +114,8 @@ class BERTPhishingTrainer:
         if rename_dict:
             df_kaggle.rename(columns=rename_dict, inplace=True)
 
-        # Campionamento — 15.000 righe come da notebook
-        print(f"[*] Campionamento di {sample_size} righe...")
+        # Campionamento - 15.000 rows come da notebook
+        print(f"[*] Campionamento di {sample_size} rows...")
         if len(df_kaggle) > sample_size:
             df_kaggle = df_kaggle.sample(n=sample_size, random_state=42).reset_index(drop=True)
 
@@ -132,9 +132,9 @@ class BERTPhishingTrainer:
         df_list = []
 
         # 1. Email personali dell'utente (FIX: il parametro personal_eml_folder
-        #    veniva accettato ma non usato — qualunque cosa ci fosse dentro
+        #    veniva accettato ma non usato - qualunque cosa ci fosse dentro
         #    veniva ignorata in silenzio). Assunte LEGITTIME (archivio reale
-        #    dell'utente): se non è il tuo caso, passa label diversa qui sotto.
+        #    user): if this is not your case, pass a different label below.
         if os.path.exists(personal_eml_folder):
             df_personal = parser.load_batch_emls(personal_eml_folder)
             if not df_personal.empty:
@@ -144,7 +144,7 @@ class BERTPhishingTrainer:
                 }))
                 print(f"[*] Caricate {len(df_personal)} email personali da '{personal_eml_folder}' (assunte LEGITTIME, Label 0).")
 
-        # 2. Email legittime custom (Label 0) — popolata anche dal Dataset Builder UI
+        # 2. Email legitimate custom (Label 0) - popolata anche dal Dataset Builder UI
         if os.path.exists(personal_legit_folder):
             df_legit = parser.load_batch_emls(personal_legit_folder)
             if not df_legit.empty:
@@ -175,10 +175,10 @@ class BERTPhishingTrainer:
             df_combined = df_kaggle
 
         # ── Integrazione dataset custom (EmlDatasetBuilder) ───────────────
-        # Legge data/custom_dataset.csv se esiste — prodotto dal tab
+        # Legge data/custom_dataset.csv se esiste - prodotto dal tab
         # "Dataset Builder" dell'app. NB: le stesse email sono anche salvate
         # come .eml in custom_legitimate/custom_phishing sopra: l'eventuale
-        # doppione viene rimosso dal dedup globale qualche riga più sotto.
+        # duplicate is removed by global dedup a few lines below.
         try:
             custom_builder = EmlDatasetBuilder()
             df_custom = custom_builder.load_for_training()
@@ -187,31 +187,31 @@ class BERTPhishingTrainer:
                 df_combined = pd.concat([df_combined, df_custom], ignore_index=True)
                 s = custom_builder.stats()
                 print(
-                    f"[*] Dataset custom caricato: {len(df_custom)} righe "
-                    f"({s['legitimate']} legittime, {s['phishing']} phishing)"
+                    f"[*] Dataset custom caricato: {len(df_custom)} rows "
+                    f"({s['legitimate']} legitimate, {s['phishing']} phishing)"
                 )
             else:
-                print("[!] Nessun dato custom trovato in data/custom_dataset.csv — ignorato.")
+                print("[!] Nessun dato custom trovato in data/custom_dataset.csv - ignorato.")
         except Exception as e:
-            print(f"[!] Impossibile caricare il dataset custom: {e} — ignorato.")
+            print(f"[!] Impossibile caricare il dataset custom: {e} - ignorato.")
 
         # ── Normalizzazione testuale UNICA per tutte le fonti ──────────────
         df_combined['text'] = df_combined['text'].apply(self._normalize_text)
 
-        # ── Dedup globale per hash del testo normalizzato ──────────────────
+        # ── Global dedup by normalized text hash ──────────────────
         before = len(df_combined)
         text_hash = df_combined['text'].apply(lambda t: hashlib.sha256(t.encode('utf-8')).hexdigest())
         df_combined = df_combined.loc[~text_hash.duplicated(keep='first')].reset_index(drop=True)
         removed = before - len(df_combined)
         if removed:
-            print(f"[*] Dedup globale: rimossi {removed} duplicati su {before} righe totali "
+            print(f"[*] Dedup globale: rimossi {removed} duplicati su {before} rows totali "
                   f"(include i doppioni Dataset Builder/CSV descritti sopra).")
 
         print(f"[+] Pool dei dati pronto. Dimensione totale campioni: {len(df_combined)}")
         return df_combined
 
     # ------------------------------------------------------------------
-    # SPLIT  —  70 / 10 / 20  identico al notebook
+    # SPLIT  -  70 / 10 / 20  identico al notebook
     # ------------------------------------------------------------------
 
     def prepare_datasets(self, df):
@@ -223,7 +223,7 @@ class BERTPhishingTrainer:
         train_val_df, test_df = train_test_split(
             df, test_size=0.20, random_state=42, stratify=df['label']
         )
-        # 2. Dal rimanente 80% prendi 12.5% come val → 10% del totale
+        # 2. Dal rimanente 80% prendi 12.5% come val -> 10% del totale
         train_df, val_df = train_test_split(
             train_val_df, test_size=0.125, random_state=42, stratify=train_val_df['label']
         )
@@ -236,7 +236,7 @@ class BERTPhishingTrainer:
         )
 
     # ------------------------------------------------------------------
-    # TOKENIZZAZIONE  —  DataCollatorWithPadding (lazy padding) come notebook
+    # TOKENIZZAZIONE  -  DataCollatorWithPadding (lazy padding) come notebook
     # ------------------------------------------------------------------
 
     def _tokenize_function(self, examples):
@@ -248,7 +248,7 @@ class BERTPhishingTrainer:
         return self.tokenizer(examples['text'], truncation=True, max_length=512)
 
     # ------------------------------------------------------------------
-    # METRICHE  —  accuracy, f1, precision, recall come da notebook
+    # METRICHE  -  accuracy, f1, precision, recall come da notebook
     # ------------------------------------------------------------------
 
     @staticmethod
@@ -268,7 +268,7 @@ class BERTPhishingTrainer:
         Tokenizza i dataset e avvia il fine-tuning di BERT con i parametri
         allineati al notebook:
           - 5 epoche
-          - metric_for_best_model = "f1"  (più robusta di accuracy su classi sbilanciate)
+          - metric_for_best_model = "f1"  (more robust than accuracy on imbalanced classes)
           - optimizer adamw_torch esplicito
           - batch size adattivo all'hardware con gradient accumulation
         """
@@ -280,7 +280,7 @@ class BERTPhishingTrainer:
 
         # Configurazione hardware-aware del batch size
         if self.is_mac:
-            # Mac Apple Silicon (MPS): batch più grande, bf16 nativo
+            # Apple Silicon Mac (MPS): larger batch, native bf16
             train_batch = 16
             grad_accum  = 1
             use_bf16    = True
@@ -348,7 +348,7 @@ class BERTPhishingTrainer:
         os.makedirs(output_dir, exist_ok=True)
         self.model.save_pretrained(output_dir)
         self.tokenizer.save_pretrained(output_dir)
-        print(f"[+] Modello e tokenizer salvati in: {output_dir}")
+        print(f"[+] Model and tokenizer saved in: {output_dir}")
         return trainer
 
     # ------------------------------------------------------------------
@@ -356,8 +356,8 @@ class BERTPhishingTrainer:
     # ------------------------------------------------------------------
 
     # Soglie minime per garantire un training significativo
-    MIN_SAMPLES_PER_CLASS = 20   # sotto questa soglia il training è inaffidabile
-    IMBALANCE_RATIO_WARN  = 5    # avvisa se la classe maggioritaria è >5x la minoritaria
+    MIN_SAMPLES_PER_CLASS = 20   # below this threshold training is unreliable
+    IMBALANCE_RATIO_WARN  = 5    # warn if the majority class is >5x the minority class
 
     def finetune_on_custom(
         self,
@@ -371,9 +371,9 @@ class BERTPhishingTrainer:
         (data/custom_dataset.csv). Nessuna dipendenza da Kaggle o API esterne.
 
         Flusso:
-          1. Carica il dataset custom da EmlDatasetBuilder
+          1. Load the custom dataset from EmlDatasetBuilder
           2. Valida soglie minime (campioni per classe, bilanciamento)
-          3. Carica il modello base (saved_models o bert-base-uncased come fallback)
+          3. Load the base model (saved_models o bert-base-uncased come fallback)
           4. Split 70/10/20 con stratify
           5. Fine-tuning con iperparametri conservativi (lr bassa per preservare
              la conoscenza generale di BERT sul phishing)
@@ -394,20 +394,20 @@ class BERTPhishingTrainer:
             if progress_callback:
                 progress_callback(step, pct)
 
-        _progress("Caricamento dataset custom…", 0)
+        _progress("Caricamento dataset custom...", 0)
 
-        # ── 1. Carica e valida il dataset ──────────────────────────────────
+        # ── 1. Load and validate the dataset ──────────────────────────────────
         try:
             custom_builder = EmlDatasetBuilder()
             df = custom_builder.load_for_training()
         except Exception as exc:
-            return {"status": "error", "message": f"Errore lettura dataset: {exc}",
+            return {"status": "error", "message": f"Error lettura dataset: {exc}",
                     "metrics": None, "model_path": ""}
 
         if df.empty:
             return {
                 "status":  "insufficient_data",
-                "message": "Il dataset custom è vuoto. Aggiungi email prima di addestrare.",
+                "message": "The custom dataset is empty. Add emails before training.",
                 "metrics": None, "model_path": "",
             }
 
@@ -422,7 +422,7 @@ class BERTPhishingTrainer:
             return {
                 "status":  "insufficient_data",
                 "message": (
-                    f"Dataset troppo piccolo: {n_legit} email legittime, {n_phishing} phishing. "
+                    f"Dataset troppo piccolo: {n_legit} email legitimate, {n_phishing} phishing. "
                     f"Servono almeno {self.MIN_SAMPLES_PER_CLASS} campioni per classe. "
                     "Aggiungi altre email e riprova."
                 ),
@@ -434,17 +434,17 @@ class BERTPhishingTrainer:
         if n_legit > 0 and n_phishing > 0:
             ratio = max(n_legit, n_phishing) / min(n_legit, n_phishing)
             if ratio > self.IMBALANCE_RATIO_WARN:
-                minority = "legittime" if n_legit < n_phishing else "phishing"
+                minority = "legitimate" if n_legit < n_phishing else "phishing"
                 imbalance_warning = (
                     f"⚠️ Dataset sbilanciato ({ratio:.1f}x): poche email {minority}. "
                     "Il modello potrebbe essere meno preciso su quella classe."
                 )
                 print(f"[!] {imbalance_warning}")
 
-        _progress(f"Dataset: {n_total} campioni ({n_legit} legittime, {n_phishing} phishing)", 5)
+        _progress(f"Dataset: {n_total} campioni ({n_legit} legitimate, {n_phishing} phishing)", 5)
 
-        # ── 2. Carica modello base ─────────────────────────────────────────
-        _progress("Caricamento modello base…", 10)
+        # ── 2. Load base model ─────────────────────────────────────────
+        _progress("Caricamento modello base...", 10)
         try:
             from transformers import AutoTokenizer, AutoModelForSequenceClassification
             if os.path.isdir(base_model_path):
@@ -452,26 +452,26 @@ class BERTPhishingTrainer:
                 self.model     = AutoModelForSequenceClassification.from_pretrained(
                     base_model_path, num_labels=2
                 )
-                print(f"[+] Modello base caricato da: {base_model_path}")
+                print(f"[+] Base model loaded from: {base_model_path}")
             else:
                 # Fallback a bert-base-uncased se il modello base non esiste
                 self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
                 self.model     = AutoModelForSequenceClassification.from_pretrained(
                     "bert-base-uncased", num_labels=2
                 )
-                print("[!] Modello base non trovato — uso bert-base-uncased come fallback")
+                print("[!] Base model not found - using bert-base-uncased as fallback")
             self.model.to(self.device)
         except Exception as exc:
-            return {"status": "error", "message": f"Errore caricamento modello: {exc}",
+            return {"status": "error", "message": f"Error loading modello: {exc}",
                     "metrics": None, "model_path": ""}
 
         # ── 3. Split 70/10/20 con stratify ────────────────────────────────
-        _progress("Preparazione split train/val/test…", 15)
+        _progress("Preparazione split train/val/test...", 15)
         try:
             train_val_df, test_df = train_test_split(
                 df, test_size=0.20, random_state=42, stratify=df["label"]
             )
-            # Se il dataset è piccolo adattiamo la val (min 1 campione per classe)
+            # If the dataset is small, adapt validation (min 1 sample per class)
             val_size = max(0.125, 2 / len(train_val_df)) if len(train_val_df) >= 4 else 0.25
             train_df, val_df = train_test_split(
                 train_val_df, test_size=val_size, random_state=42,
@@ -479,7 +479,7 @@ class BERTPhishingTrainer:
             )
         except ValueError as exc:
             return {"status": "error",
-                    "message": f"Errore nello split — probabilmente dataset ancora troppo piccolo: {exc}",
+                    "message": f"Error nello split - probabilmente dataset ancora troppo piccolo: {exc}",
                     "metrics": None, "model_path": ""}
 
         print(f"[*] Split -> Train: {len(train_df)} | Val: {len(val_df)} | Test: {len(test_df)}")
@@ -489,7 +489,7 @@ class BERTPhishingTrainer:
         test_ds  = Dataset.from_pandas(test_df.reset_index(drop=True))
 
         # ── 4. Tokenizzazione ─────────────────────────────────────────────
-        _progress("Tokenizzazione…", 20)
+        _progress("Tokenizzazione...", 20)
         train_tok = train_ds.map(self._tokenize_function, batched=True)
         val_tok   = val_ds.map(self._tokenize_function,   batched=True)
         test_tok  = test_ds.map(self._tokenize_function,  batched=True)
@@ -497,9 +497,9 @@ class BERTPhishingTrainer:
         data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
 
         # ── 5. Iperparametri ──────────────────────────────────────────────
-        # Learning rate più bassa (1e-5) rispetto al training Kaggle (2e-5):
+        # Lower learning rate (1e-5) rispetto al training Kaggle (2e-5):
         # preserva la conoscenza generale e riduce l'overfitting su dataset piccoli.
-        # Epoche più basse sul dataset piccolo per lo stesso motivo.
+        # Fewer epochs on the small dataset for the same reason.
         if self.is_mac:
             train_batch, grad_accum, use_bf16 = 8, 1, True
         elif self.device == "cuda":
@@ -509,7 +509,7 @@ class BERTPhishingTrainer:
 
         os.makedirs(output_dir, exist_ok=True)
 
-        _progress("Avvio training…", 25)
+        _progress("Avvio training...", 25)
 
         training_args = TrainingArguments(
             output_dir=output_dir,
@@ -547,11 +547,11 @@ class BERTPhishingTrainer:
         try:
             trainer.train()
         except Exception as exc:
-            return {"status": "error", "message": f"Errore durante il training: {exc}",
+            return {"status": "error", "message": f"Error durante il training: {exc}",
                     "metrics": None, "model_path": ""}
 
         # ── 6. Salva il modello aziendale ─────────────────────────────────
-        _progress("Salvataggio modello…", 85)
+        _progress("Salvataggio modello...", 85)
         self.model.save_pretrained(output_dir)
         self.tokenizer.save_pretrained(output_dir)
 
@@ -571,7 +571,7 @@ class BERTPhishingTrainer:
         }
 
         # ── 7. Valutazione test set ────────────────────────────────────────
-        _progress("Valutazione sul test set…", 90)
+        _progress("Valutazione sul test set...", 90)
         try:
             preds_out = trainer.predict(test_tok)
             y_true = test_tok["label"]
@@ -583,7 +583,7 @@ class BERTPhishingTrainer:
                 "f1":        round(float(f1_score(y_true, y_pred, zero_division=0)),        4),
             }
             meta["metrics"] = metrics
-            print(f"\n[+] Test set — Accuracy: {metrics['accuracy']} | F1: {metrics['f1']} | "
+            print(f"\n[+] Test set - Accuracy: {metrics['accuracy']} | F1: {metrics['f1']} | "
                   f"Precision: {metrics['precision']} | Recall: {metrics['recall']}")
         except Exception as exc:
             metrics = None
@@ -593,9 +593,9 @@ class BERTPhishingTrainer:
         with open(os.path.join(output_dir, "training_meta.json"), "w") as f:
             json.dump(meta, f, indent=2)
 
-        _progress("Completato ✅", 100)
+        _progress("Completed ✅", 100)
 
-        msg = f"Modello aziendale addestrato su {n_total} email e salvato in `{output_dir}`."
+        msg = f"Company model trained on {n_total} emails and saved in `{output_dir}`."
         if imbalance_warning:
             msg += f"\n{imbalance_warning}"
 
@@ -608,7 +608,7 @@ class BERTPhishingTrainer:
         }
 
     # ------------------------------------------------------------------
-    # VALUTAZIONE TEST SET  —  allineata al notebook (+ confusion matrix)
+    # VALUTAZIONE TEST SET  -  allineata al notebook (+ confusion matrix)
     # ------------------------------------------------------------------
 
     def evaluate_test_set(self, trainer, test_dataset):
@@ -636,13 +636,13 @@ class BERTPhishingTrainer:
         print(f"\n{sep}")
         print("  CLASSIFICATION REPORT")
         print(sep)
-        print(classification_report(y_true, y_pred, target_names=["Legittima", "Phishing"]))
+        print(classification_report(y_true, y_pred, target_names=["Legitimate", "Phishing"]))
         print(f"\n{sep}")
         print("  CONFUSION MATRIX")
         print(sep)
         cm = confusion_matrix(y_true, y_pred)
-        print(f"                  Pred Legittima  Pred Phishing")
-        print(f"  Reale Legittima       {cm[0][0]:>6}         {cm[0][1]:>6}")
+        print(f"                  Pred Legitimate  Pred Phishing")
+        print(f"  Reale Legitimate       {cm[0][0]:>6}         {cm[0][1]:>6}")
         print(f"  Reale Phishing        {cm[1][0]:>6}         {cm[1][1]:>6}")
         print(sep)
 
@@ -659,7 +659,7 @@ if __name__ == "__main__":
     if trainer_pipeline.is_mac or trainer_pipeline.device == "cuda":
         target_samples = 15000
     else:
-        target_samples = 6000   # CPU: subset ridotto ma più grande del precedente
+        target_samples = 6000   # CPU: reduced subset, but larger than the previous one
 
     try:
         # Manteniamo il parametro personal_eml_folder intatto come a monte per evitare disallineamenti
@@ -674,5 +674,5 @@ if __name__ == "__main__":
 
     except Exception as e:
         import traceback
-        print(f"\n[!] Errore bloccante nell'esecuzione: {e}")
+        print(f"\n[!] Error bloccante nell'esecuzione: {e}")
         traceback.print_exc()

@@ -38,7 +38,7 @@ def geolocate_ip(ip: str) -> dict:
     }
 
     if not ip:
-        return {**base, "status": "skipped", "message": "Nessun IP fornito"}
+        return {**base, "status": "skipped", "message": "No IP fornito"}
 
     if not _is_geolocatable_ip(ip):
         return {
@@ -52,7 +52,7 @@ def geolocate_ip(ip: str) -> dict:
         resp.raise_for_status()
         data = resp.json()
     except requests.exceptions.RequestException as exc:
-        return {**base, "status": "error", "message": f"Errore ip-api.com: {exc}"}
+        return {**base, "status": "error", "message": f"Error ip-api.com: {exc}"}
 
     if data.get("status") != "success":
         return {

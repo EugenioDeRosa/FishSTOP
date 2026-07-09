@@ -1,7 +1,7 @@
 """
-eml_dataset_builder.py — Costruisce e gestisce un dataset custom da file .eml
+eml_dataset_builder.py - Costruisce e gestisce un dataset custom da file .eml
 
-Il testo prodotto è allineato al preprocessing applicato in train.py a TUTTE
+The produced text is aligned with the preprocessing applied in train.py to ALL
 le fonti (Kaggle, personal_emails, custom_legitimate/custom_phishing):
   - subject + " " + body
   - HTML stripping (BeautifulSoup se disponibile, fallback regex)
@@ -10,15 +10,15 @@ le fonti (Kaggle, personal_emails, custom_legitimate/custom_phishing):
   (punteggiatura/URL preservati: sono un segnale per il phishing detection)
 
 Il CSV prodotto (data/custom_dataset.csv) viene poi letto da train.py
-come terza fonte dati, concatenata al pool Kaggle + personal_emails, con
+as a third data source, concatenated with the Kaggle + personal_emails pool, with
 dedup globale per hash prima dello split train/val/test.
 
 Colonne del CSV:
-  xt_combined  — testo preprocessato (allineato alle altre fonti)
-  label        — 0 (legittima) | 1 (phishing)
-  source_file  — nome del file .eml originale
-  text_hash    — SHA-256 del testo per deduplicazione
-  added_at     — timestamp ISO 8601
+  xt_combined  - preprocessed text (aligned with the other sources)
+  label        - 0 (legittima) | 1 (phishing)
+  source_file  - nome del file .eml originale
+  text_hash    - SHA-256 of the text for deduplication
+  added_at     - timestamp ISO 8601
 """
 
 import os
@@ -88,22 +88,22 @@ def _preprocess(subject: str, body: str) -> str:
     Preprocessing MINIMO, allineato a quello applicato in train.py a Kaggle e
     alle cartelle personal_emails/custom_*: lowercase + collasso spazi soltanto.
 
-    NON rimuove più punteggiatura/URL/simboli: erano un segnale importante per
+    Does NOT remove punctuation/URLs/symbols anymore: they were an important signal for
     il phishing detection (link sospetti, ripetizioni di simboli, ecc.) e la
-    rimozione era applicata SOLO a questa fonte, creando un preprocessing
+    removal was applied ONLY to this source, creating preprocessing
     incoerente tra le diverse fonti del training (il modello rischiava di
-    imparare a distinguere "fonte" invece di "phishing vs legittima").
+    learn to distinguish "source" instead of "phishing vs legitimate").
 
       1. Concatena subject + " " + body
-      2. Strip HTML se presente
+      2. Strip HTML if present
       3. Lowercase
       4. Collassa spazi multipli
       5. Strip finale
 
-    NB: se hai già un data/custom_dataset.csv costruito con la versione
-    precedente di questa funzione, gli hash/testo lì dentro sono stati
-    calcolati con la pulizia "aggressiva" e non sono più coerenti col resto
-    della pipeline — vedi le istruzioni di migrazione per rigenerarlo.
+    Note: if you already have a data/custom_dataset.csv built with the version
+    previous to this function, the hashes/text inside it were
+    calculated with "aggressive" cleaning and are no longer consistent with the rest
+    della pipeline - vedi le istruzioni di migrazione per rigenerarlo.
     """
     raw = f"{subject} {body}"
 
@@ -120,7 +120,7 @@ def _text_hash(text: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Estrazione corpo dall'EML
+# Body extraction from EML
 # ---------------------------------------------------------------------------
 
 def _extract_from_eml(eml_bytes: bytes) -> dict:
@@ -157,7 +157,7 @@ def _extract_from_eml(eml_bytes: bytes) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Classe principale
+# Main class
 # ---------------------------------------------------------------------------
 
 class EmlDatasetBuilder:
@@ -201,7 +201,7 @@ class EmlDatasetBuilder:
         filename:  str,
         label:     int,
         overwrite: bool = False,
-        _existing_hashes: set | None = None,  # opzionale: riusa set già caricato
+        _existing_hashes: set | None = None,  # optional: reuse already loaded set
     ) -> dict:
         """
         Processa un singolo .eml e lo aggiunge al dataset.
@@ -226,7 +226,7 @@ class EmlDatasetBuilder:
                     "status":  "error",
                     "hash":    "",
                     "text":    text,
-                    "message": f"Testo troppo corto dopo preprocessing ({len(text)} car.) — file ignorato",
+                    "message": f"Text too short after preprocessing ({len(text)} car.) - file ignored",
                     "_raw":    None,
                     "_dest":   None,
                 }
@@ -240,7 +240,7 @@ class EmlDatasetBuilder:
                     "status":  "duplicate",
                     "hash":    h,
                     "text":    text,
-                    "message": f"'{filename}' già presente nel dataset (hash: {h[:12]}…)",
+                    "message": f"'{filename}' already present in the dataset (hash: {h[:12]}...)",
                     "_raw":    None,
                     "_dest":   None,
                 }
@@ -258,30 +258,30 @@ class EmlDatasetBuilder:
 
             # Calcola il percorso di destinazione del file .eml.
             # Usiamo sempre il suffisso hash per evitare collisioni nel batch parallelo
-            # (os.path.exists non è affidabile quando i file non sono ancora stati scritti).
+            # (os.path.exists is not reliable when files have not been written yet).
             dest_folder = self.phishing_folder if label == 1 else self.legit_folder
             stem        = Path(filename).stem
             ext         = Path(filename).suffix or ".eml"
             dest_path   = os.path.join(dest_folder, f"{stem}_{h[:8]}{ext}")
 
-            label_str = "Phishing" if label == 1 else "Legittima"
+            label_str = "Phishing" if label == 1 else "Legitimate"
             return {
                 "status":  "added",
                 "hash":    h,
                 "text":    text,
-                "message": f"'{filename}' aggiunta come {label_str} (hash: {h[:12]}…)",
+                "message": f"'{filename}' added as {label_str} (hash: {h[:12]}...)",
                 "_row":    row,
                 "_raw":    eml_bytes,
                 "_dest":   dest_path,
             }
 
         except Exception as exc:
-            logger.exception("Errore in add_eml per %s", filename)
+            logger.exception("Error in add_eml per %s", filename)
             return {
                 "status":  "error",
                 "hash":    "",
                 "text":    "",
-                "message": f"Errore durante il processing di '{filename}': {exc}",
+                "message": f"Error durante il processing di '{filename}': {exc}",
                 "_raw":    None,
                 "_dest":   None,
             }
@@ -302,7 +302,7 @@ class EmlDatasetBuilder:
 
         Ottimizzazioni rispetto al loop singolo:
           - _load_hashes() chiamata UNA VOLTA sola per tutto il batch
-          - CSV aperto in append UNA VOLTA sola per tutte le righe "added"
+          - CSV aperto in append UNA VOLTA sola per tutte le rows "added"
           - Salvataggio file .eml su disco parallelizzato (ThreadPoolExecutor)
 
         Parameters
@@ -310,15 +310,15 @@ class EmlDatasetBuilder:
         items             : lista di (eml_bytes, filename, label)
         overwrite         : se True sovrascrive i duplicati
         max_file_workers  : thread per il salvataggio parallelo dei file .eml
-        progress_callback : callable(done: int, total: int) — notifica avanzamento
+        progress_callback : callable(done: int, total: int) - notifica avanzamento
         """
         total   = len(items)
         results = []
 
-        # ── 1. Carica gli hash esistenti UNA SOLA VOLTA ───────────────────
+        # ── 1. Load existing hashes ONCE ───────────────────
         existing_hashes: set = self._load_hashes()
 
-        rows_to_write:  list[dict]               = []  # righe CSV da appendere
+        rows_to_write:  list[dict]               = []  # rows CSV da appendere
         files_to_write: list[tuple[bytes, str]]  = []  # (raw_bytes, dest_path)
 
         # ── 2. Processing in-memory (CPU-bound, non parallelizzato per
@@ -365,7 +365,7 @@ class EmlDatasetBuilder:
                 for fut in as_completed(futures):
                     exc = fut.exception()
                     if exc:
-                        logger.warning("Errore salvataggio file %s: %s", futures[fut], exc)
+                        logger.warning("Error salvataggio file %s: %s", futures[fut], exc)
 
         return results
 
@@ -404,7 +404,7 @@ class EmlDatasetBuilder:
     def load_for_training(self) -> pd.DataFrame:
         """
         Restituisce solo le colonne necessarie per il training,
-        con 'text' al posto di 'xt_combined' — pronto per essere
+        con 'text' al posto di 'xt_combined' - pronto per essere
         concatenato al pool Kaggle in train.py.
         """
         df = self.load_df()
@@ -444,7 +444,7 @@ class EmlDatasetBuilder:
 
 
 # ---------------------------------------------------------------------------
-# Script standalone — uso da riga di comando
+# Script standalone - uso da riga di comando
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
     import sys
@@ -458,7 +458,7 @@ if __name__ == "__main__":
     label  = int(sys.argv[2])
 
     if label not in (0, 1):
-        print("[!] Label deve essere 0 (legittima) o 1 (phishing)")
+        print("[!] Label must be 0 (legitimate) or 1 (phishing)")
         sys.exit(1)
 
     builder = EmlDatasetBuilder()
@@ -473,7 +473,7 @@ if __name__ == "__main__":
 
     def _cli_progress(done: int, total: int) -> None:
         if done % 50 == 0 or done == total:
-            print(f"  … {done}/{total} processati", flush=True)
+            print(f"  ... {done}/{total} processed", flush=True)
 
     results = builder.add_batch(batch_items, progress_callback=_cli_progress)
 
@@ -485,6 +485,6 @@ if __name__ == "__main__":
         elif status == "duplicate": skipped += 1
         else:                       errors  += 1
 
-    print(f"\n✅ Completato: {added} aggiunte | {skipped} duplicate | {errors} errori")
+    print(f"\n✅ Completed: {added} added | {skipped} duplicate | {errors} errors")
     s = builder.stats()
-    print(f"📊 Dataset totale: {s['total']} righe ({s['legitimate']} legittime, {s['phishing']} phishing)")
+    print(f"📊 Total dataset: {s['total']} rows ({s['legitimate']} legitimate, {s['phishing']} phishing)")

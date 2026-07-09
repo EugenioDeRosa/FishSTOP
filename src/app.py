@@ -161,7 +161,7 @@ def render_home():
     st.title("FishStop")
     st.markdown("Email Security Platform")
     st.divider()
-    st.markdown("### Seleziona una sezione")
+    st.markdown("### Select a section")
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
@@ -187,7 +187,7 @@ with st.sidebar:
     st.caption(f"Build: `{APP_VERSION}`")
 
     if st.session_state.page != "home":
-        if st.button("Menu principale", use_container_width=True):
+        if st.button("Main menu", use_container_width=True):
             st.session_state.page = "home"
             st.rerun()
         st.divider()
@@ -197,7 +197,7 @@ with st.sidebar:
             st.markdown("### Raw EML Debugger (Cleaned)")
             current_file_name = st.session_state.get("current_eml_name", "default")
             st.text_area(
-                label="Contenuto MIME (senza blocchi encoded)",
+                label="MIME content (without encoded blocks)",
                 value=st.session_state["raw_eml_debug_data"],
                 height=500,
                 disabled=True,

@@ -1,11 +1,11 @@
 """
-analyzer/lookalike.py — Rilevamento domini lookalike anti-phishing.
+analyzer/lookalike.py - Rilevamento domini lookalike anti-phishing.
 
 Espone:
   - levenshtein(a, b)             : distanza di edit tra due stringhe
   - normalize_homoglyphs(domain)  : sostituisce omoglifi Unicode con ASCII
-  - strip_public_suffix(domain)   : isola il dominio di secondo livello
-  - is_ip_url(host)               : True se host è un IP nudo
+  - strip_public_suffix(domain)   : isolates the second-level domain
+  - is_ip_url(host)               : True if host is a bare IP
   - check_lookalike_domains(...)  : analisi euristica completa (edit distance,
                                     omoglifi, typosquatting)
 """
@@ -40,7 +40,7 @@ def levenshtein(a: str, b: str) -> int:
 
 def normalize_homoglyphs(domain: str) -> str:
     """
-    Normalizza un dominio sostituendo i caratteri omoglifi Unicode con
+    Normalizes a domain by replacing Unicode homoglyph characters with
     il loro equivalente ASCII. Gestisce anche la forma NFC/NFKC.
     """
     domain = unicodedata.normalize("NFKC", domain.lower())
@@ -78,9 +78,9 @@ def strip_public_suffix(domain: str) -> str:
     """
     Ritorna il 'registered domain' (etichette - TLD) in forma semplificata.
     Non usa una libreria PSL completa: rimuove solo l'ultimo label (TLD)
-    per confronti di distanza più significativi.
+    for more meaningful distance comparisons.
 
-    Esempio: mail.paypa1.com → paypa1
+    Esempio: mail.paypa1.com -> paypa1
     """
     parts = domain.rstrip(".").split(".")
     if len(parts) >= 2:
@@ -90,7 +90,7 @@ def strip_public_suffix(domain: str) -> str:
 
 
 def is_ip_url(host: str) -> bool:
-    """True se l'host è un indirizzo IPv4 o IPv6."""
+    """True if the host is an IPv4 or IPv6 address."""
     try:
         ipaddress.ip_address((host or "").strip("[]"))
         return True
@@ -104,15 +104,15 @@ def check_lookalike_domains(
     edit_distance_threshold: int = 2,
 ) -> list[dict]:
     """
-    Per ogni link controlla se il dominio assomiglia a un brand noto
+    For each link, checks whether the domain looks like a known brand
     usando tre tecniche combinate:
 
       1. Levenshtein distance sull'SLD (Second-Level Domain) ≤ threshold
-      2. Omografia Unicode — caratteri visivamente identici ad ASCII
-      3. Typosquatting patterns — inserimento/duplicazione consonanti,
+      2. Omografia Unicode - caratteri visivamente identici ad ASCII
+      3. Typosquatting patterns - inserimento/duplicazione consonanti,
          sostituzione 0↔o / 1↔l / rn↔m, aggiunta prefissi ingannevoli
 
-    Restituisce solo gli alert (lista vuota = nessun sospetto trovato).
+    Returns only alerts (empty list = no suspicion found).
 
     Ogni alert:
       {
@@ -203,7 +203,7 @@ def check_lookalike_domains(
             # Tecnica 2: Omografia Unicode
             if host_norm != host.lower() and levenshtein(host_norm, brand_norm) <= edit_distance_threshold:
                 _alert(url, host, brand, "homoglyph",
-                       f"Il dominio `{host}` contiene caratteri Unicode omoglifi "
+                       f"The domain `{host}` contains Unicode homoglyph characters "
                        f"che lo rendono visivamente simile a `{brand}`")
                 continue
 
@@ -227,7 +227,7 @@ def check_lookalike_domains(
                     )
                     continue
 
-            # Tecnica 4: Typosquatting — prefissi ingannatori
+            # Tecnica 4: Typosquatting - prefissi ingannatori
             for prefix in ("secure-", "login-", "verify-", "account-",
                            "update-", "signin-", "support-", "my-", "auth-"):
                 candidate = host_norm.removeprefix("www.")
@@ -235,17 +235,17 @@ def check_lookalike_domains(
                     inner = candidate[len(prefix):]
                     if levenshtein(strip_public_suffix(inner), brand_sld) <= 1:
                         _alert(url, host, brand, "typosquatting",
-                               f"Prefisso ingannatorio `{prefix}` davanti a un dominio "
+                               f"Deceptive prefix `{prefix}` before a domain "
                                f"simile a `{brand}`")
                         break
 
-            # Typosquatting — sostituzione caratteri (0↔o, 1↔i/l, rn↔m)
+            # Typosquatting - sostituzione caratteri (0↔o, 1↔i/l, rn↔m)
             subst = (host_sld
                      .replace("0", "o").replace("1", "i").replace("1", "l")
                      .replace("rn", "m").replace("vv", "w"))
             if subst != host_sld and levenshtein(subst, brand_sld) == 0:
                 _alert(url, host, brand, "typosquatting",
-                       f"Sostituzione caratteri (`{host_sld}` → `{subst}`) "
+                       f"Sostituzione caratteri (`{host_sld}` -> `{subst}`) "
                        f"replica `{brand_sld}` (brand: {brand})")
 
     return alerts

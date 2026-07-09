@@ -1,8 +1,8 @@
 """
-analyzer/html_utils.py — Pulizia e normalizzazione HTML per l'analisi email.
+analyzer/html_utils.py - Pulizia e normalizzazione HTML per l'analisi email.
 
 Espone:
-  - strip_html(html)  : converte HTML grezzo in testo pulito
+  - strip_html(html)  : converts raw HTML into clean text
 
 Gli attaccanti inseriscono tag o commenti HTML invisibili in mezzo alle parole
 (es. Pa<!-- x -->ypal) per aggirare i filtri basati su stringhe. Senza
@@ -21,16 +21,16 @@ except ImportError:
 
 def strip_html(html: str) -> str:
     """
-    Converte HTML grezzo in testo pulito adatto all'analisi AI e ai controlli
+    Converts raw HTML into clean text suitable for AI analysis and checks
     testuali.
 
     Strategia (in ordine):
       1. BeautifulSoup (lxml > html.parser come backend) per un parsing robusto
          che gestisce HTML malformato, encoding errors e tag annidati.
-      2. Rimozione di <script> e <style> prima dell'estrazione del testo, per
+      2. Removes <script> and <style> before text extraction to
          evitare che codice JS o CSS venga passato al modello.
       3. Separatore '\\n' tra i tag per preservare la struttura dei paragrafi.
-      4. Fallback regex se BeautifulSoup non è installato: rimuove tutti i tag
+      4. Regex fallback if BeautifulSoup is not installed: removes all tags
          con un pattern greedy-safe e decodifica le entity HTML principali.
     """
     if not html or not html.strip():
@@ -71,7 +71,7 @@ def sanitize_html_for_preview(html: str) -> str:
     """
     Restituisce HTML renderizzabile nella dashboard senza contenuti attivi.
 
-    La preview serve all'analista per capire layout e testo del messaggio, non
+    The preview helps the analyst understand the message layout and text, not
     per eseguire codice dell'email o consentire click verso risorse esterne.
     Rimuove quindi script, iframe, form, embed, event handler inline e tutte le
     destinazioni href/src/action.
@@ -126,7 +126,7 @@ def sanitize_html_for_preview(html: str) -> str:
             if attr_l in {"href", "src", "xlink:href", "action"}:
                 del tag.attrs[attr]
                 if tag.name == "a":
-                    tag.attrs["title"] = "Link rimosso per sicurezza: usa la box Link presenti nella mail."
+                    tag.attrs["title"] = "Link rimosso per sicurezza: usa la box Links found in the email."
                     tag.attrs["style"] = "color: inherit; text-decoration: none; cursor: default;"
 
     body = soup.body.decode_contents() if soup.body else str(soup)

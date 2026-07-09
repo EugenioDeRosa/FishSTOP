@@ -1,7 +1,7 @@
 """
 public_dataset_builder.py - Costruzione dataset pubblico per training FishStop.
 
-Produce un CSV pulito con colonne:
+Produces a clean CSV with columns:
   text,label,source,source_file,text_hash
 
 Label:
@@ -116,7 +116,7 @@ def text_hash(text: str) -> str:
 
 def template_hash(text: str) -> str:
     """
-    Fingerprint piu aggressiva del testo per rimuovere quasi-duplicati:
+    More aggressive text fingerprint to remove near duplicates:
     stesso template con URL, email, numeri o tracking id diversi.
     """
     text = normalize_text(text)
@@ -176,7 +176,7 @@ def _download(url: str, dest: Path, progress: Callable[[str], None] | None = Non
     dest.parent.mkdir(parents=True, exist_ok=True)
     if dest.exists() and dest.stat().st_size > 0:
         if progress:
-            progress(f"Già presente: {dest.name}")
+            progress(f"Already present: {dest.name}")
         return dest
     if progress:
         progress(f"Download: {url}")
@@ -263,7 +263,7 @@ def _normalize_dataset_frame(df: pd.DataFrame) -> pd.DataFrame:
 def _dedupe_templates(df: pd.DataFrame) -> tuple[pd.DataFrame, dict]:
     """
     Deduplica quasi-duplicati/template entro la stessa label.
-    Se la stessa fingerprint appare con label diverse, scarta tutte le righe
+    Se la stessa fingerprint appare con label diverse, scarta tutte le rows
     coinvolte: meglio perdere campioni ambigui che insegnare segnali contraddittori.
     """
     df = _normalize_dataset_frame(df)
@@ -386,7 +386,7 @@ def add_nazario(
         except Exception as exc:
             errors_total += 1
             if progress:
-                progress(f"Errore Nazario {name}: {exc}")
+                progress(f"Error Nazario {name}: {exc}")
 
     _save_rows(all_rows, output_csv)
     return BuildResult("nazario", len(all_rows), added_total, skipped_total, errors_total, "Nazario phishing importato")
@@ -598,7 +598,7 @@ def build_balanced_public_dataset(
 ) -> dict:
     _ensure_dirs()
     if not selected_sources:
-        return {"status": "error", "message": "Seleziona almeno una fonte.", "results": []}
+        return {"status": "error", "message": "Select at least one source.", "results": []}
 
     selected_sources = list(dict.fromkeys(selected_sources))
     skipped_overlap: list[str] = []
@@ -629,24 +629,24 @@ def build_balanced_public_dataset(
                 0,
                 0,
                 0,
-                "Fonte saltata: gia inclusa nel Kaggle Phishing Email Dataset combinato.",
+                "Source saltata: gia inclusa nel Kaggle Phishing Email Dataset combinato.",
             )
         )
 
     for source in selected_sources:
         step = source_steps.get(source)
         if step is None:
-            results.append(BuildResult(source, 0, 0, 0, 1, "Fonte non riconosciuta"))
+            results.append(BuildResult(source, 0, 0, 0, 1, "Source non riconosciuta"))
             continue
         if progress:
-            progress(f"Import fonte: {source}")
+            progress(f"Import source: {source}")
         results.append(step())
 
     stats = dataset_stats(staging_csv)
     if stats["legitimate"] == 0 or stats["phishing"] == 0:
         return {
             "status": "error",
-            "message": "Servono almeno una fonte legittima e una fonte phishing per creare un bilanciato 50/50.",
+            "message": "At least one legitimate source and one phishing source are required to create a balanced 50/50 dataset.",
             "results": results,
             "stats": stats,
         }

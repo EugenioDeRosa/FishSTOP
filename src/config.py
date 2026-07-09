@@ -14,7 +14,7 @@ _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 
 
 def _load_env_fallback(path: str) -> bool:
-    """Carica KEY=VALUE da .env senza dipendenze esterne."""
+    """Loads KEY=VALUE from .env without external dependencies."""
     if not os.path.exists(path):
         return False
 
@@ -81,8 +81,8 @@ def print_config_status():
     print("=" * 55)
     print(f"  .env caricato          : {_DOTENV_LOADED}")
     print(f"  Streamlit secrets OK   : {_is_streamlit_cloud()}")
-    print(f"  ABUSEIPDB_API_KEY      : {'presente' if ABUSEIPDB_API_KEY else 'mancante'}")
-    print(f"  VIRUSTOTAL_API_KEY     : {'presente' if VIRUSTOTAL_API_KEY else 'mancante'}")
+    print(f"  ABUSEIPDB_API_KEY      : {'present' if ABUSEIPDB_API_KEY else 'missing'}")
+    print(f"  VIRUSTOTAL_API_KEY     : {'present' if VIRUSTOTAL_API_KEY else 'missing'}")
     print("=" * 55)
 
 

@@ -1,6 +1,6 @@
 """SPF header-only check.
 
-FishSTOP usa il risultato SPF gia calcolato dall'MTA e presente negli header
+FishSTOP uses the SPF result already calculated by the MTA and present in the headers
 dell'EML.
 """
 
@@ -38,6 +38,6 @@ def check_spf(
         "domain": domain,
         "sender_ip": sender_ip,
         "mail_from": address or "<>",
-        "message": "Controllo SPF live disattivato: usare il risultato SPF presente negli header EML",
+        "message": "Live SPF check disabled: use the SPF result present in the EML headers",
         "library": "header-only",
     }

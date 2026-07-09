@@ -1,15 +1,15 @@
 """
-components/email_globe.py — Globo 3D interattivo del percorso email.
+components/email_globe.py - Globo 3D interattivo del percorso email.
 
 Visualizza la catena Received hop-by-hop su un mappamondo 3D rotante
 costruito con D3.js (geoOrthographic) senza dipendenze Python aggiuntive.
-Il globo ruota automaticamente, si può trascinare con il mouse e mostra
+The globe rotates automatically, can be dragged with the mouse, and shows
 archi animati tra gli hop con popup dettagliati.
 
 Utilizzo in app.py:
     from src.components.email_globe import render_email_globe
 
-    with st.expander("🌍 Percorso geografico email", expanded=True):
+    with st.expander("🌍 Email geographic route", expanded=True):
         render_email_globe(soc, validator)
 """
 
@@ -84,9 +84,9 @@ def _build_globe_html(hops_data: list[dict]) -> str:
             "role":      h["role"],
             "color":     _risk_color(risk),
             "risk":      risk,
-            "ip":        hop.get("sender_ip") or "—",
-            "fromHost":  hop.get("from_host") or "—",
-            "byHost":    hop.get("by_host") or "—",
+            "ip":        hop.get("sender_ip") or "-",
+            "fromHost":  hop.get("from_host") or "-",
+            "byHost":    hop.get("by_host") or "-",
             "tls":       " ".join(part for part in (hop.get("tls_version"), hop.get("tls_cipher")) if part),
             "hopNumber":  total_hops - route_index,
             "routeIndex": route_index + 1,
@@ -116,11 +116,11 @@ def _build_globe_html(hops_data: list[dict]) -> str:
             }.get(h["role"], h["role"]),
         })
 
-    # I Received header sono in ordine inverso: [0]=recipient … [-1]=sender.
-    # Invertiamo così gli archi sul globo vanno da sender → recipient.
+    # I Received header sono in ordine inverso: [0]=recipient ... [-1]=sender.
+    # Invert so arcs on the globe go from sender -> recipient.
     js_hops = list(reversed(js_hops))
 
-    # Se più hop hanno la stessa città/coordinate, i marker si coprono.
+    # If multiple hops have the same city/coordinates, markers overlap.
     # Li separiamo solo graficamente; il tooltip conserva IP e dati reali.
     coordinate_groups: dict[tuple[float, float], list[int]] = {}
     for idx, hop in enumerate(js_hops):
@@ -200,13 +200,13 @@ def _build_globe_html(hops_data: list[dict]) -> str:
   <canvas id="globe"></canvas>
   <div id="tooltip"></div>
   <div id="legend">
-    <div><span style="background:#E24B4A"></span>Alto rischio / origine</div>
-    <div><span style="background:#EF9F27"></span>Medio rischio / relay</div>
-    <div><span style="background:#1D9E75"></span>Pulito / destinatario</div>
+    <div><span style="background:#E24B4A"></span>High risk / origin</div>
+    <div><span style="background:#EF9F27"></span>Medium risk / relay</div>
+    <div><span style="background:#1D9E75"></span>Clean / recipient</div>
     <div><span style="background:#888780"></span>Sconosciuto</div>
   </div>
   <div id="controls">
-    <button id="btn-play" title="Avvia/ferma rotazione">&#9654;</button>
+    <button id="btn-play" title="Start/stop rotation">&#9654;</button>
     <button id="btn-fit"  title="Centra sul percorso">&#x2316;</button>
   </div>
 </div>
@@ -331,7 +331,7 @@ function drawGlobe() {{
     const px = proj([h.lon, h.lat]);
     if (!px) return;
 
-    // Verifica se è sul lato visibile
+    // Check whether it is on the visible side
     const visible = d3.geoContains(
       {{type:'Sphere', coordinates:[]}},
       [h.lon, h.lat]
@@ -410,14 +410,14 @@ function escapeHtml(value) {{
 
 function shortRaw(value) {{
   const raw = String(value || '').replace(/\\s+/g, ' ').trim();
-  return raw.length > 260 ? raw.slice(0, 260) + '…' : raw;
+  return raw.length > 260 ? raw.slice(0, 260) + '...' : raw;
 }}
 
 function renderHopTooltip(h, px, sticky=false) {{
   const score = h.score !== null ? h.score + '/100' : 'N/D';
   const reports = h.reports !== null && h.reports !== undefined ? h.reports : 'N/D';
   const riskCls = 'risk-' + h.risk;
-  const loc = [h.city, h.region, h.country].filter(Boolean).join(', ') || '—';
+  const loc = [h.city, h.region, h.country].filter(Boolean).join(', ') || '-';
   const tlsRow = h.tls ? `<div class="tt-row"><span class="tt-label">TLS</span><span>${{escapeHtml(h.tls)}}</span></div>` : '';
   const domainRow = h.senderDomain ? `<div class="tt-row"><span class="tt-label">HELO</span><span>${{escapeHtml(h.senderDomain)}}</span></div>` : '';
   const forRow = h.forAddress ? `<div class="tt-row"><span class="tt-label">For</span><span>${{escapeHtml(h.forAddress)}}</span></div>` : '';
@@ -425,7 +425,7 @@ function renderHopTooltip(h, px, sticky=false) {{
   const asnRow = h.asn ? `<div class="tt-row"><span class="tt-label">ASN</span><span>${{escapeHtml(h.asn)}}</span></div>` : '';
   const usageRow = h.usageType ? `<div class="tt-row"><span class="tt-label">Uso</span><span>${{escapeHtml(h.usageType)}}</span></div>` : '';
   const lastRow = h.lastReport ? `<div class="tt-row"><span class="tt-label">Ultima</span><span>${{escapeHtml(h.lastReport)}}</span></div>` : '';
-  const allIps = (h.allIps || []).length ? escapeHtml((h.allIps || []).join(', ')) : '—';
+  const allIps = (h.allIps || []).length ? escapeHtml((h.allIps || []).join(', ')) : '-';
   const badges = (h.isProxy ? '<span style="color:#E24B4A"> ⚠ Proxy/VPN</span>' : '')
                + (h.isHosting ? '<span style="color:#EF9F27"> ☁ Datacenter</span>' : '');
   const rawRow = h.raw ? `<details style="margin-top:6px"><summary style="cursor:pointer;color:#8b949e">Raw Received</summary><div style="font-family:monospace;font-size:11px;line-height:1.45;margin-top:4px">${{escapeHtml(shortRaw(h.raw))}}</div></details>` : '';
@@ -439,7 +439,7 @@ function renderHopTooltip(h, px, sticky=false) {{
     ${{forRow}}
     ${{tlsRow}}
     <div class="tt-row"><span class="tt-label">Luogo</span><span>${{escapeHtml(loc)}}</span></div>
-    <div class="tt-row"><span class="tt-label">ISP</span><span>${{escapeHtml(h.isp || '—')}}</span></div>
+    <div class="tt-row"><span class="tt-label">ISP</span><span>${{escapeHtml(h.isp || '-')}}</span></div>
     ${{orgRow}}
     ${{asnRow}}
     ${{usageRow}}
@@ -568,7 +568,7 @@ setTimeout(() => {{ resizeGlobe(); centerOnRoute(); }}, 150);
 setTimeout(() => {{ resizeGlobe(); centerOnRoute(); }}, 650);
 setTimeout(() => {{ resizeGlobe(); centerOnRoute(); }}, 1500);
 
-// Carica topologia mondo
+// Load world topology
 d3.json('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
   .then(w => {{ world = w; }})
   .catch(() => {{ world = null; }});
@@ -587,7 +587,7 @@ def render_email_globe(soc: dict, validator) -> None:
 
     Sostituisce (o affianca) render_email_path_map in app.py:
 
-        with st.expander("🌍 Percorso geografico email", expanded=True):
+        with st.expander("🌍 Email geographic route", expanded=True):
             render_email_globe(soc, validator)
     """
     hops = soc.get("received_hops", [])
@@ -611,7 +611,7 @@ def render_email_globe(soc: dict, validator) -> None:
             return {"status": "skipped"}, {"status": "skipped"}
         return validator.geolocate_ip(ip), validator.check_ip_reputation(ip)
 
-    with st.spinner("Geolocalizzazione hop in corso…"):
+    with st.spinner("Geolocation hop in corso..."):
         with ThreadPoolExecutor(max_workers=min(n, 6)) as ex:
             results = list(ex.map(_fetch, hops))
 
@@ -635,7 +635,7 @@ def render_email_globe(soc: dict, validator) -> None:
         )
         return
 
-    # Riepilogo card sopra il globo — ordine sender→recipient, coerente col globo
+    # Summary cards above the globe - sender->recipient order, consistent with the globe
     hops_data_display = list(reversed(hops_data))
     cols = st.columns(max(n, 1))
     risk_icon = {"high": "🔴", "medium": "🟠", "low": "🟢", "unknown": "⚪"}
@@ -644,12 +644,12 @@ def render_email_globe(soc: dict, validator) -> None:
         "relay": "Relay",    "recipient": "Destinatario",
     }
     for col, h in zip(cols, hops_data_display):
-        ip     = h["hop"].get("sender_ip") or "—"
+        ip     = h["hop"].get("sender_ip") or "-"
         city   = h["geo"].get("city", "")
         country= h["geo"].get("country", "")
         score  = h["rep"].get("abuseConfidenceScore") if h["rep"].get("status") == "ok" else None
         risk   = _score_to_risk(score)
-        loc    = ", ".join(p for p in [city, country] if p) or ("IP privato" if not h["coords"] else "—")
+        loc    = ", ".join(p for p in [city, country] if p) or ("IP privato" if not h["coords"] else "-")
         with col:
             st.markdown(
                 f"**{risk_icon[risk]} {role_label.get(h['role'], h['role'])}**  \n"
@@ -661,7 +661,7 @@ def render_email_globe(soc: dict, validator) -> None:
     skipped = len(hops_data) - len(located)
     if skipped:
         st.caption(
-            f"{skipped} hop non sono sul globo perché hanno IP privati, riservati "
+            f"{skipped} hops are not on the globe because they have private or reserved IPs "
             "o non geolocalizzabili; restano visibili nel dettaglio Routing sotto."
         )
 

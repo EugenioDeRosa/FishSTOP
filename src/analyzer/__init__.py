@@ -1,7 +1,7 @@
 """
-analyzer/__init__.py — Public API del package analyzer.
+analyzer/__init__.py - Public API del package analyzer.
 
-Importa le classi e funzioni principali così gli altri moduli
+Imports the main classes and functions so other modules
 possono fare:
     from src.analyzer import EmlSOCAnalyzer
     from src.analyzer import extract_links, check_lookalike_domains

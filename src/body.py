@@ -1,5 +1,5 @@
 """
-analysis/body.py — HTML stripping and email body extraction.
+analysis/body.py - HTML stripping and email body extraction.
 
 Responsibilities:
   - _strip_html(): converts raw HTML to clean text for BERT and text analysis.
@@ -75,9 +75,9 @@ def extract_body_parts(msg) -> dict:
     Walks a parsed email.message object and extracts all body parts.
 
     Returns a dict with keys:
-      body             : str  — raw body text (plain preferred, HTML fallback)
-      body_html        : str | None — raw HTML if present
-      body_clean       : str  — text after HTML stripping (BERT input)
+      body             : str  - raw body text (plain preferred, HTML fallback)
+      body_html        : str | None - raw HTML if present
+      body_clean       : str  - text after HTML stripping (BERT input)
       body_source      : "text/plain" | "text/html" | "empty"
       html_strip_applied : bool
     """
