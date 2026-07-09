@@ -1,1 +1,1 @@
-APP_VERSION = "dev-2026-07-06-phi4-vt-lookalike"
+APP_VERSION = "dev-09-07-2026-v0.1.0"

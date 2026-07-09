@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -415,7 +415,7 @@ def _render_vt_url(rep: dict):
         st.markdown(f"[Apri scheda VirusTotal]({permalink})")
 
 
-def _auth_status_box(title: str, status: str):
+def _auth_status_box(title: str, status: str, show_help: bool = True):
     status = (status or "unknown").lower()
     help_texts = {
         "SPF": "SPF indica quali IP sono autorizzati a inviare email per il dominio mittente.",
@@ -433,11 +433,75 @@ def _auth_status_box(title: str, status: str):
 
     label = f"{title}: {status.upper()}"
     help_text = html_escape(help_texts.get(title.upper(), "Controllo di autenticazione email."), quote=True)
+    help_icon = (
+        f'''
+        <span class="auth-help" tabindex="0" aria-label="{help_text}">
+            <span class="auth-help__icon">?</span>
+            <span class="auth-help__card">{help_text}</span>
+        </span>
+        '''
+        if show_help
+        else ""
+    )
+    help_style = """
+        <style>
+        .auth-help {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            outline: none;
+        }
+        .auth-help__icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border: 1px solid currentColor;
+            border-radius: 50%;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: default;
+            opacity: .85;
+            line-height: 1;
+        }
+        .auth-help__card {
+            position: absolute;
+            top: calc(100% + 6px);
+            right: 0;
+            width: 240px;
+            padding: 8px 10px;
+            border-radius: 8px;
+            border: 1px solid rgba(0, 0, 0, 0.12);
+            background: rgba(255, 255, 255, 0.98);
+            color: #1f2937;
+            font-size: 12px;
+            line-height: 1.35;
+            font-weight: 500;
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-4px);
+            transition: opacity 120ms ease, transform 120ms ease, visibility 120ms ease;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .auth-help:hover .auth-help__card,
+        .auth-help:focus-within .auth-help__card {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        </style>
+    """
     st.markdown(
-        f"""
+        help_style
+        + f"""
         <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; padding:10px 12px; margin:0 0 8px 0; border:1px solid {border}; border-radius:8px; background:{bg}; color:{color}; font-weight:600;">
-          <span>{html_escape(label)}</span>
-          <span title="{help_text}" style="display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; width:18px; height:18px; border:1px solid currentColor; border-radius:50%; font-size:12px; font-weight:700; cursor:help; opacity:.85;">?</span>
+            <span>{html_escape(label)}</span>
+            {help_icon}
         </div>
         """,
         unsafe_allow_html=True,
@@ -688,9 +752,9 @@ def render():
                     _copyable_value("Message-ID", soc.get("message_id"), "overview_message_id")
                 with right:
                     st.markdown("#### Signal Matrix")
-                    _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"))
-                    _auth_status_box("DKIM", eml_auth["dkim"].get("status", "unknown"))
-                    _auth_status_box("DMARC", eml_auth["dmarc"].get("status", "unknown"))
+                    _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"), show_help=False)
+                    _auth_status_box("DKIM", eml_auth["dkim"].get("status", "unknown"), show_help=False)
+                    _auth_status_box("DMARC", eml_auth["dmarc"].get("status", "unknown"), show_help=False)
                     if lookalike_alerts:
                         st.error(f"Lookalike domains: {len(lookalike_alerts)}")
                     else:
