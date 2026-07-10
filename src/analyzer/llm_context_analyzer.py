@@ -224,6 +224,7 @@ def _has_actionable_text_risk(signals: list[str]) -> bool:
     neutral_markers = (
         "no explicit",
         "no actionable",
+        "no local keyword match",
         "without a sensitive-data request",
         "deadline/follow-up wording is present without",
         "credential/password wording is present without",
@@ -376,9 +377,10 @@ def build_fast_email_prompt(soc: dict) -> str:
             rep = link_reputation.get(link.get("url") or "", {})
             vt_status = rep.get("status", "unknown")
             ratio = rep.get("detection_ratio", "0 / 0")
+            context_summary = rep.get("crowdsourced_context_summary") or "no crowdsourced context"
             link_lines.append(
                 f"- link_type={_anonymized_link_hint(link)} vt_status={vt_status} detections={ratio} "
-                f"hint={_link_hint(link)}"
+                f"crowdsourced_context={context_summary} hint={_link_hint(link)}"
             )
     elif links:
         link_lines.append(
@@ -433,10 +435,10 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
             "content": (
                 "Analyze in two internal steps, then answer in one concise English paragraph (do not label the steps in the output).\n"
                 "Step 1: detect the language, translate the intent mentally if needed, and infer the requested action from meaning, not keyword lists "
-                "(pay, login, share credentials, open a form, reply, accept a promo, register for a prize/giveaway, handle an invoice, or normal admin task). "
+                "(pay, login, share credentials, open a form, reply, accept a promo, activate an offer/free trial/subscription, register for a prize/giveaway, handle an invoice, or normal admin task). "
                 "Ignore [EMAIL]/[URL]/[IP]/[PHONE]/[IBAN]/[POSSIBLE_CARD_OR_ACCOUNT] placeholders as identity clues.\n"
                 "Step 2: use only the structured FishSTOP facts below (semantic analysis from BERT, SPF/DKIM/DMARC, Return-Path/Reply-To mismatch, "
-                "display-name spoofing, VirusTotal, attachment anomalies, SOC flags) as corroboration only - never invent new risks.\n\n"
+                "display-name spoofing, VirusTotal detections and crowdsourced context, attachment anomalies, SOC flags) as corroboration only - never invent new risks.\n\n"
                 "Start the paragraph with exactly one of:\n"
                 "- The email provided is suspicious because\n"
                 "- The email provided is not suspicious because\n"
@@ -451,20 +453,26 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "a normal body.\n"
                 "Never claim money/payment/bank-detail, credential, urgency, or click evidence unless it is explicitly present in "
                 "the Text risk signals or visible body. Do not treat password/security wording alone as credential theft; require a link, form, click/open instruction, "
-                "or an explicit request to enter/share credentials. If Text risk signals says no explicit money/credential/bank-detail wording, "
+                "or an explicit request to enter/share credentials. If Text risk signals says no explicit/no actionable/no local keyword match for money/credential/bank-detail wording, "
                 "do not mention those categories as evidence. Never cite IP, geolocation, routing, full URLs, emails, phone numbers, "
                 "IBANs, account numbers or other PII as evidence. Treat links as neutral unless VirusTotal flags them malicious or the body asks for a risky "
                 "action through them - embedding, repetition, Google redirects, or a single recipient are not evidence. "
                 "In any language, promotional prize/giveaway/finalist/exclusive-chance/free-product claims paired with a request to click/open/follow/redeem/claim/register through a link "
-                "are a clear scam pattern even if there is no money, credential, or bank-detail request. Discount, coupon, voucher, prize, sale, or promotional wording paired with a request to click/open/follow/redeem/claim a link "
-                "is a relevant phishing signal, especially when supported by malicious VirusTotal, failed authentication, identity mismatch, or BERT.\n"
+                "are a clear scam pattern even if there is no money, credential, or bank-detail request. Commercial promotional offers for services/products "
+                "(for example streaming/IPTV, subscriptions, free trials, limited deals, vouchers, coupons, discounts, or activation offers) that include a CTA to activate/try/register/subscribe/unsubscribe/follow a link "
+                "should usually be classified as suspicious unless the body and technical context strongly show a legitimate known sender. Clean VirusTotal does not make such a promotional CTA safe. "
+                "Discount, coupon, voucher, prize, sale, or promotional wording paired with a request to click/open/follow/redeem/claim/activate a link "
+                "is a relevant phishing/scam signal, especially when supported by missing/failed authentication, identity mismatch, or BERT.\n"
                 "Treat as explicit scam signals even without a money/credential ask yet: lottery/prize/donation/inheritance "
                 "claims, unexpected large sums, celebrity/CEO impersonation, vague business/investment lures, "
-                "international-collaboration pitches, prize/giveaway/finalist or discount/coupon offers that ask the recipient to click, register, claim, or redeem a link, "
+                "international-collaboration pitches, prize/giveaway/finalist or discount/coupon/commercial-service offers that ask the recipient to click, activate, try, subscribe, register, claim, or redeem a link, "
                 "or requests to reply to a personal/free address for details. "
-                "Normal admin asks (sign timesheets/hours/attendance), personal scheduling notes, absence notices, exam/course logistics, "
-                "and academic publication invitations are not suspicious unless paired with money, credential submission, bank details, malicious links, "
-                "external sensitive forms, impersonation, or unusual coercive urgency.\n"
+                "Normal admin asks (sign timesheets/hours/attendance), including Italian attendance-sheet wording such as scheda presenze, firmare le presenze, "
+                "or signing weekly attendance, personal scheduling notes, absence notices, exam/course logistics, and academic publication invitations are not suspicious "
+                "unless paired with money, credential submission, bank details, malicious links, external sensitive forms, impersonation, or unusual coercive urgency. "
+                "If Text risk signals contain both no local keyword match/no actionable wording and normal administrative work request, classify the email as not suspicious "
+                "unless VirusTotal is malicious or there is a concrete identity/authentication/attachment anomaly; missing or absent SPF/DKIM/DMARC alone is not enough.\n"
+                "If Link estratti says links were found, do not say there are no links; instead explain whether the body asks the recipient to use them. "
                 "Mention the content-based reason first, then one short clause on whether the technical checks support, "
                 "weaken, or don't change that assessment (lead with a technical failure only if the body is empty/unreadable). "
                 "Use semantic analysis from BERT only as corroboration, never as the sole reason to classify the email as suspicious. "

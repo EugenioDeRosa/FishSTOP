@@ -398,6 +398,19 @@ def _render_vt_url(rep: dict):
     )
     if rep.get("last_analysis"):
         st.caption(f"Last analysis: `{rep['last_analysis']}`")
+    context_items = rep.get("crowdsourced_context") or []
+    if context_items:
+        with st.expander("VirusTotal crowdsourced context", expanded=False):
+            st.caption(rep.get("crowdsourced_context_summary") or "Additional context reported by VirusTotal users/sources.")
+            for item in context_items:
+                label = f"[{item.get('severity', 'INFO')}] {item.get('title') or 'Context'}"
+                if item.get("source"):
+                    label += f" - source: {item['source']}"
+                if item.get("date"):
+                    label += f" - {item['date']}"
+                st.write(label)
+                for detail in item.get("details") or []:
+                    st.caption(detail)
     if permalink:
         st.markdown(f"[Open VirusTotal page]({permalink})")
 
@@ -607,7 +620,10 @@ def _summarize_link_reputation(results: dict) -> str:
         status = rep.get("status", "error")
         counts[status] = counts.get(status, 0) + 1
 
+    context_count = sum(len(rep.get("crowdsourced_context") or []) for rep in results.values())
     parts = [f"{value} {key}" for key, value in counts.items() if value]
+    if context_count:
+        parts.append(f"{context_count} crowdsourced context item(s)")
     worst = "clean"
     if counts.get("malicious"):
         worst = "malicious"
@@ -704,7 +720,7 @@ def render():
             c5.metric("Attachments", len(attachments))
             st.caption(severity_caption)
 
-            phi4_key = f"phi4_analysis_v7_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
+            phi4_key = f"phi4_analysis_v9_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
             with st.container(border=True):
                 phi4_placeholder = _render_phi4_analysis(soc, phi4_key, auto_run=True)
 

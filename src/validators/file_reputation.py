@@ -106,6 +106,98 @@ def _url_id(url: str) -> str:
     return encoded.rstrip("=")
 
 
+def _as_list(value) -> list:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return value
+    if isinstance(value, dict):
+        for key in ("data", "items", "results"):
+            if isinstance(value.get(key), list):
+                return value[key]
+        if value.get("attributes") or value.get("title") or value.get("severity") or value.get("context"):
+            return [value]
+        return list(value.values())
+    return [value]
+
+
+def _short_text(value, limit: int = 220) -> str:
+    value = str(value or "").strip()
+    if len(value) <= limit:
+        return value
+    return value[:limit].rstrip() + "..."
+
+
+def _normalize_context_details(value) -> list[str]:
+    details: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if item in (None, "", [], {}):
+                continue
+            details.append(_short_text(f"{key}: {item}"))
+    elif isinstance(value, list):
+        for item in value:
+            if isinstance(item, dict):
+                details.extend(_normalize_context_details(item))
+            elif item not in (None, ""):
+                details.append(_short_text(item))
+    elif value not in (None, ""):
+        details.append(_short_text(value))
+    return details[:8]
+
+
+def _extract_crowdsourced_context(attrs: dict) -> list[dict]:
+    raw_items = (
+        attrs.get("crowdsourced_context")
+        or attrs.get("crowdsourced_contexts")
+        or attrs.get("crowdsourced_context_items")
+        or []
+    )
+    context_items: list[dict] = []
+    for raw in _as_list(raw_items):
+        if not isinstance(raw, dict):
+            continue
+        item = raw.get("attributes") if isinstance(raw.get("attributes"), dict) else raw
+        title = (
+            item.get("title")
+            or item.get("name")
+            or item.get("summary")
+            or item.get("context")
+            or item.get("indicator")
+            or "Crowdsourced context"
+        )
+        severity = str(item.get("severity") or item.get("level") or item.get("type") or "INFO").upper()
+        if severity not in {"HIGH", "MEDIUM", "LOW", "INFO", "SUCCESS"}:
+            severity = "INFO"
+        source = item.get("source") or item.get("source_name") or item.get("provider") or ""
+        details = []
+        for key in ("details", "description", "classification_description", "contextual_indicators", "metadata"):
+            details.extend(_normalize_context_details(item.get(key)))
+        context_items.append({
+            "severity": severity,
+            "title": _short_text(title, 180),
+            "source": _short_text(source, 120),
+            "date": _epoch_to_iso(item.get("timestamp") or item.get("date") or item.get("created") or item.get("created_at")),
+            "details": details[:8],
+        })
+    return context_items[:10]
+
+
+def _summarize_crowdsourced_context(items: list[dict]) -> str:
+    if not items:
+        return ""
+    counts = {"HIGH": 0, "MEDIUM": 0, "LOW": 0, "INFO": 0, "SUCCESS": 0}
+    for item in items:
+        severity = item.get("severity") or "INFO"
+        counts[severity] = counts.get(severity, 0) + 1
+    count_text = ", ".join(f"{key}={value}" for key, value in counts.items() if value)
+    highlights = []
+    for item in items[:3]:
+        source = f" source={item['source']}" if item.get("source") else ""
+        highlights.append(f"{item.get('severity', 'INFO')} {item.get('title', 'context')}{source}")
+    return "Crowdsourced context: " + count_text + "; " + " | ".join(highlights)
+
+
 def _format_vt_url(data: dict, base: dict) -> dict:
     attrs = data.get("data", {}).get("attributes", {})
     stats = attrs.get("last_analysis_stats", {})
@@ -126,6 +218,9 @@ def _format_vt_url(data: dict, base: dict) -> dict:
     elif total > 0:
         status = "clean"
 
+    crowdsourced_context = _extract_crowdsourced_context(attrs)
+    crowdsourced_context_summary = _summarize_crowdsourced_context(crowdsourced_context)
+
     return {
         **base,
         "status": status,
@@ -139,6 +234,8 @@ def _format_vt_url(data: dict, base: dict) -> dict:
         "last_analysis": _epoch_to_iso(attrs.get("last_analysis_date")),
         "reputation": attrs.get("reputation", 0),
         "title": attrs.get("title", ""),
+        "crowdsourced_context": crowdsourced_context,
+        "crowdsourced_context_summary": crowdsourced_context_summary,
         "message": f"{detections} engine su {total} segnalano questa URL",
     }
 
@@ -157,6 +254,8 @@ def check_url(api_key: str, url: str) -> dict:
         "last_analysis": "",
         "reputation": 0,
         "title": "",
+        "crowdsourced_context": [],
+        "crowdsourced_context_summary": "",
         "permalink": f"https://www.virustotal.com/gui/url/{_url_id(url) if url else ''}",
         "message": "",
     }

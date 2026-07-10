@@ -36,6 +36,17 @@ _ANCHOR_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _OPAQUE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{4,32}$")
+_WEB_SCHEMES = {"http", "https"}
+
+
+def _is_web_url_candidate(value: str) -> bool:
+    value = (value or "").strip()
+    if not value:
+        return False
+    parsed = urlparse(value)
+    if parsed.scheme:
+        return parsed.scheme.lower() in _WEB_SCHEMES
+    return value.lower().startswith("www.") or bool(_BARE_DOMAIN_RE.fullmatch(value.rstrip(".,;)")))
 
 
 def _contains_non_ascii(value: str) -> bool:
@@ -46,6 +57,8 @@ def _with_scheme(value: str) -> str:
     value = (value or "").strip()
     if not value:
         return ""
+    if value.startswith("//"):
+        return "https:" + value
     if value.lower().startswith("www.") or "://" not in value:
         return "http://" + value
     return value
@@ -113,16 +126,21 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
     links: list[dict] = []
 
     def _add(url: str, display: str, source: str) -> None:
-        url = _with_scheme((url or "").strip().rstrip(".,;)"))
+        raw_url = (url or "").strip().rstrip(".,;)")
+        if not _is_web_url_candidate(raw_url):
+            return
+        url = _with_scheme(raw_url)
         if not url or url in seen:
             return
-        seen.add(url)
         try:
             parsed = urlparse(url)
             host = (parsed.hostname or "").lower()
             scheme = parsed.scheme.lower()
         except Exception:
             return
+        if scheme not in _WEB_SCHEMES or not host:
+            return
+        seen.add(url)
 
         display_text = (display or "").strip()
         display_url, display_host = _extract_display_destination(display_text)
