@@ -44,7 +44,7 @@ def geolocate_ip(ip: str) -> dict:
         return {
             **base,
             "status": "skipped",
-            "message": f"`{ip}` non e' un indirizzo pubblico geolocalizzabile",
+            "message": f"`{ip}` is not a public IP address (private, reserved, or invalid)",
         }
 
     try:

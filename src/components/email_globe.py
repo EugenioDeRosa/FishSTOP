@@ -630,8 +630,8 @@ def render_email_globe(soc: dict, validator) -> None:
 
     if not located:
         st.info(
-            "Tutti gli IP sono privati o non risolvibili. "
-            "Il globo richiede almeno un IP pubblico geolocalizzabile."
+            "All hops are private or not geolocalizable. "
+            "The globe requires at least one public geolocalizable IP."
         )
         return
 

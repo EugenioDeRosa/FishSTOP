@@ -237,6 +237,15 @@ def _auth_status(soc: dict, protocol: str) -> str:
     return (result.get("status") or "none").lower()
 
 
+def _semantic_analysis_label(soc: dict) -> str:
+    result = str(soc.get("bert_ai_result") or "").strip().lower()
+    if result == "phishing":
+        return "phishing"
+    if result == "legitimate":
+        return "legitimate"
+    return "not available"
+
+
 def _technical_context_lines(soc: dict) -> list[str]:
     spf_status = _auth_status(soc, "SPF")
     dkim_status = _auth_status(soc, "DKIM")
@@ -255,6 +264,7 @@ def _technical_context_lines(soc: dict) -> list[str]:
         f"Reply-To mismatch: {bool(soc.get('reply_to_mismatch'))}",
         f"Return-Path domain mismatch: {bool(soc.get('return_path_domain_mismatch'))}",
         f"Display name spoofing: {soc.get('display_name_spoofing') or 'none'}",
+        f"Semantic analysis (BERT): {_semantic_analysis_label(soc)}",
     ]
 
     attachments = soc.get("attachments") or []
@@ -381,7 +391,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "Step 1: from the anonymized subject/body, detect the language and infer the requested action "
                 "(pay, login, share credentials, open a form, reply, accept a promo, handle an invoice, or normal admin task). "
                 "Ignore [EMAIL]/[URL]/[IP]/[PHONE]/[IBAN]/[POSSIBLE_CARD_OR_ACCOUNT] placeholders as identity clues.\n"
-                "Step 2: use only the structured FishSTOP facts below (SPF/DKIM/DMARC, Return-Path/Reply-To mismatch, "
+                "Step 2: use only the structured FishSTOP facts below (semantic analysis from BERT, SPF/DKIM/DMARC, Return-Path/Reply-To mismatch, "
                 "display-name spoofing, VirusTotal, attachment anomalies, SOC flags) as corroboration only - never invent new risks.\n\n"
                 "Start the paragraph with exactly one of:\n"
                 "- The email provided is suspicious because\n"
@@ -402,6 +412,8 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "credentials, bank details, external forms, or unusual urgency.\n"
                 "Mention the content-based reason first, then one short clause on whether the technical checks support, "
                 "weaken, or don't change that assessment (lead with a technical failure only if the body is empty/unreadable). "
+                "If semantic analysis from BERT is available, add one short final assessment sentence before the verification sentence: "
+                "Use the actual BERT label in that sentence, for example: Additionally, semantic analysis indicates the email as phishing. "
                 "End with: Please verify with your IT team.\n\n"
                 f"{build_fast_email_prompt(soc)}"
             ),

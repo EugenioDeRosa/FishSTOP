@@ -1,4 +1,4 @@
-﻿import json
+import json
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -190,7 +190,7 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
         "Hosted Phi-4 mini analysis: evaluates plain and HTML content, urgency, money, IBANs, "
-        "payments, credentials, and external forms; then uses SPF/DKIM/DMARC, links, and attachments only as context."
+        "payments, credentials, and external forms; then uses semantic analysis, SPF/DKIM/DMARC, links, and attachments only as context."
     )
 
     result_key = f"{analysis_key}_result"
@@ -704,7 +704,7 @@ def render():
             c5.metric("Attachments", len(attachments))
             st.caption(severity_caption)
 
-            phi4_key = f"phi4_analysis_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
+            phi4_key = f"phi4_analysis_v3_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
             with st.container(border=True):
                 phi4_placeholder = _render_phi4_analysis(soc, phi4_key, auto_run=True)
 
@@ -826,6 +826,8 @@ def render():
 
                 st.markdown("#### Routing")
                 hops = soc.get("received_hops", [])
+                routing_hops = list(reversed(hops))
+
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Received hops", len(hops))
                 c2.metric("Injection IP", soc.get("injection_sender_ip") or "-")
@@ -834,7 +836,7 @@ def render():
                 with st.expander("Email geographic route", expanded=False):
                     render_email_globe(soc, validator)
 
-                for idx, hop in enumerate(hops, start=1):
+                for idx, hop in enumerate(routing_hops, start=1):
                     title = f"Hop {idx}: {_hop_from_label(hop)} -> {_hop_by_label(hop)}"
                     with st.expander(title):
                         st.write(f"**Sender IP:** `{hop.get('sender_ip') or '-'}`")
@@ -944,6 +946,7 @@ def render():
                 st.info("BERT model loaded from Hugging Face.")
 
                 if not email_text or email_text.lower() == "subject:":
+                    soc["bert_ai_result"] = "not available"
                     st.warning("Email has no meaningful text for classification.")
                 else:
                     with st.spinner("BERT is analyzing the content..."):
@@ -958,8 +961,10 @@ def render():
                     c1.metric("Legitimate", f"{prob_safe:.2f}%")
                     c2.metric("Phishing", f"{prob_phishing:.2f}%")
                     if prob_phishing > prob_safe:
+                        soc["bert_ai_result"] = "phishing"
                         st.error("AI result: possible phishing")
                     else:
+                        soc["bert_ai_result"] = "legitimate"
                         st.success("AI result: email probably legitimate")
                     with st.expander("Raw logits"):
                         st.json({"logits": logits.flatten().tolist()})
