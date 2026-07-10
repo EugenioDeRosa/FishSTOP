@@ -137,6 +137,18 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
         "sconto", "sconti", "promo", "promozione", "offerta", "offerte",
         "discount", "sale", "newsletter", "coupon", "voucher",
     )
+    click_words = (
+        "clicca", "cliccare", "fai clic", "premi qui", "apri il link", "apri questo link",
+        "visita", "segui il link", "click", "click here", "tap here", "open the link",
+        "follow the link", "visit", "claim", "redeem", "get offer", "activate offer",
+    )
+    credential_submission_words = (
+        "inserisci la password", "inserire la password", "conferma la password",
+        "confermare la password", "fornisci la password", "fornire la password",
+        "send your password", "share your password", "enter your password",
+        "confirm your password", "provide your password", "verify your password",
+        "submit your credentials", "enter your credentials", "confirm your credentials",
+    )
 
     has_money = any(word in text for word in money_words)
     has_credentials = any(word in text for word in credential_words)
@@ -146,14 +158,37 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
     has_vague_lure = any(word in text for word in vague_lure_words)
     has_impersonation = any(word in text for word in impersonation_words)
     has_marketing = any(word in text for word in marketing_words)
+    has_click_request = any(word in text for word in click_words)
+    has_credential_submission = any(word in text for word in credential_submission_words)
+    has_links = bool(links)
+    risky_credentials = has_credentials and (
+        has_form
+        or has_links
+        or has_click_request
+        or has_credential_submission
+    )
+
+    risky_urgency = has_urgency and (
+        has_money
+        or risky_credentials
+        or has_form
+        or has_validation
+        or has_vague_lure
+        or has_impersonation
+        or (has_marketing and (has_click_request or has_links))
+    )
 
     if has_money:
         signals.append("money/payment/bank-detail wording is present")
-    if has_credentials:
-        signals.append("credential or account-verification wording is present")
-    if has_urgency:
-        signals.append("urgency or pressure wording is present")
-    if has_form and (has_money or has_credentials):
+    if risky_credentials:
+        signals.append("credential/password wording is paired with a link, form, click request, or credential-submission request")
+    elif has_credentials:
+        neutral_notes.append("credential/password wording is present without a link, form, click request, or credential-submission request")
+    if risky_urgency:
+        signals.append("urgency or pressure wording is paired with a risky request")
+    elif has_urgency:
+        neutral_notes.append("deadline/follow-up wording is present without money, credential, form, or suspicious offer requests")
+    if has_form and (has_money or risky_credentials):
         signals.append("external form or survey is paired with sensitive money/account wording")
     elif has_form:
         neutral_notes.append("external form or survey link is present without a sensitive-data request")
@@ -163,6 +198,10 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
         signals.append("money/prize claim impersonates a well-known executive or brand")
     if has_vague_lure:
         signals.append("vague profitable business opportunity or international-collaboration lure asks for a reply")
+    if has_marketing and (has_click_request or has_links):
+        signals.append("discount/promotional wording asks the recipient to click or follow a link")
+    elif has_click_request and not risky_credentials:
+        neutral_notes.append("click/open-link request is present without money, credential, form, or promotional lure")
 
     neutral_admin_words = (
         "firma ore", "firmare le ore", "firmarmi le ore", "timesheet",
@@ -170,13 +209,13 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
     )
     if any(word in text for word in neutral_admin_words):
         neutral_notes.append("normal administrative work request wording is present")
-    if has_marketing and not (has_credentials or has_form or has_validation):
-        neutral_notes.append("promotional or discount wording is present without credential or sensitive-form requests")
+    if has_marketing and not (risky_credentials or has_form or has_validation or has_click_request or has_links):
+        neutral_notes.append("promotional or discount wording is present without credential, click, link, or sensitive-form requests")
 
     if signals:
         return signals + neutral_notes
     return [
-        "no explicit money, credential, bank-detail, sensitive-form, or unusual-urgency wording found",
+        "no local keyword match for actionable money, credential-submission, bank-detail, sensitive-form, or unusual-urgency wording; this is not proof of safety, especially for non-English text",
         *neutral_notes,
     ]
 
@@ -184,8 +223,13 @@ def _detect_text_risk_signals(subject: str, body: str, links: list[dict]) -> lis
 def _has_actionable_text_risk(signals: list[str]) -> bool:
     neutral_markers = (
         "no explicit",
+        "no actionable",
         "without a sensitive-data request",
+        "deadline/follow-up wording is present without",
+        "credential/password wording is present without",
+        "click/open-link request is present without",
         "normal administrative work request",
+        "promotional or discount wording is present without",
     )
     return any(
         not any(marker in signal for marker in neutral_markers)
@@ -388,32 +432,45 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
             "role": "user",
             "content": (
                 "Analyze in two internal steps, then answer in one concise English paragraph (do not label the steps in the output).\n"
-                "Step 1: from the anonymized subject/body, detect the language and infer the requested action "
-                "(pay, login, share credentials, open a form, reply, accept a promo, handle an invoice, or normal admin task). "
+                "Step 1: detect the language, translate the intent mentally if needed, and infer the requested action from meaning, not keyword lists "
+                "(pay, login, share credentials, open a form, reply, accept a promo, register for a prize/giveaway, handle an invoice, or normal admin task). "
                 "Ignore [EMAIL]/[URL]/[IP]/[PHONE]/[IBAN]/[POSSIBLE_CARD_OR_ACCOUNT] placeholders as identity clues.\n"
                 "Step 2: use only the structured FishSTOP facts below (semantic analysis from BERT, SPF/DKIM/DMARC, Return-Path/Reply-To mismatch, "
                 "display-name spoofing, VirusTotal, attachment anomalies, SOC flags) as corroboration only - never invent new risks.\n\n"
                 "Start the paragraph with exactly one of:\n"
                 "- The email provided is suspicious because\n"
                 "- The email provided is not suspicious because\n"
-                "Lead with the body's intent. Classify suspicious if the body shows a clear scam pattern, even if technical "
-                "checks pass. Classify not suspicious if the body is normal, unless technical evidence is strong and "
-                "multi-indicator: a lone VirusTotal 'suspicious' is not enough on its own (note it as manual-check only); "
+                "Lead with the body's intent. Classify suspicious only if the body shows a clear scam pattern or if technical evidence "
+                "is strong and multi-indicator. Classify not suspicious when the body is a normal personal, academic, scheduling, "
+                "administrative, newsletter, password-change notice, account notification, or ordinary follow-up message, "
+                "even if it mentions a deadline, asks for a reply, or mentions password/security. A credential or password-change email "
+                "is suspicious only when it asks the user to click/open a link, fill a form, or enter/share credentials, or when strong technical evidence supports it. "
+                "Do not treat 'no local keyword match' or 'no actionable wording found' in Text risk signals as proof of safety; it is only a limited local precheck. "
+                "A lone VirusTotal 'suspicious' is not enough on its own (note it as manual-check only); "
                 "only a malicious VirusTotal result, or 'suspicious' plus an identity/auth/attachment anomaly, may override "
                 "a normal body.\n"
-                "Never cite IP, geolocation, routing, full URLs, emails, phone numbers, IBANs, account numbers or other PII "
-                "as evidence. Treat links as neutral unless VirusTotal flags them malicious or the body asks for a risky "
-                "action through them - embedding, repetition, Google redirects, or a single recipient are not evidence; "
-                "promos/newsletters/discounts with links are not phishing per se.\n"
+                "Never claim money/payment/bank-detail, credential, urgency, or click evidence unless it is explicitly present in "
+                "the Text risk signals or visible body. Do not treat password/security wording alone as credential theft; require a link, form, click/open instruction, "
+                "or an explicit request to enter/share credentials. If Text risk signals says no explicit money/credential/bank-detail wording, "
+                "do not mention those categories as evidence. Never cite IP, geolocation, routing, full URLs, emails, phone numbers, "
+                "IBANs, account numbers or other PII as evidence. Treat links as neutral unless VirusTotal flags them malicious or the body asks for a risky "
+                "action through them - embedding, repetition, Google redirects, or a single recipient are not evidence. "
+                "In any language, promotional prize/giveaway/finalist/exclusive-chance/free-product claims paired with a request to click/open/follow/redeem/claim/register through a link "
+                "are a clear scam pattern even if there is no money, credential, or bank-detail request. Discount, coupon, voucher, prize, sale, or promotional wording paired with a request to click/open/follow/redeem/claim a link "
+                "is a relevant phishing signal, especially when supported by malicious VirusTotal, failed authentication, identity mismatch, or BERT.\n"
                 "Treat as explicit scam signals even without a money/credential ask yet: lottery/prize/donation/inheritance "
                 "claims, unexpected large sums, celebrity/CEO impersonation, vague business/investment lures, "
-                "international-collaboration pitches, or requests to reply to a personal/free address for details. "
-                "Normal admin asks (sign timesheets/hours/attendance) are not suspicious unless paired with money, "
-                "credentials, bank details, external forms, or unusual urgency.\n"
+                "international-collaboration pitches, prize/giveaway/finalist or discount/coupon offers that ask the recipient to click, register, claim, or redeem a link, "
+                "or requests to reply to a personal/free address for details. "
+                "Normal admin asks (sign timesheets/hours/attendance), personal scheduling notes, absence notices, exam/course logistics, "
+                "and academic publication invitations are not suspicious unless paired with money, credential submission, bank details, malicious links, "
+                "external sensitive forms, impersonation, or unusual coercive urgency.\n"
                 "Mention the content-based reason first, then one short clause on whether the technical checks support, "
                 "weaken, or don't change that assessment (lead with a technical failure only if the body is empty/unreadable). "
-                "If semantic analysis from BERT is available, add one short final assessment sentence before the verification sentence: "
-                "Use the actual BERT label in that sentence, for example: Additionally, semantic analysis indicates the email as phishing. "
+                "Use semantic analysis from BERT only as corroboration, never as the sole reason to classify the email as suspicious. "
+                "If BERT conflicts with a normal body and weak technical evidence, say that semantic analysis flags it but the content evidence is insufficient. "
+                "If BERT supports the assessment, add one short final assessment sentence before the verification sentence, for example: "
+                "Additionally, semantic analysis indicates the email as phishing. "
                 "End with: Please verify with your IT team.\n\n"
                 f"{build_fast_email_prompt(soc)}"
             ),

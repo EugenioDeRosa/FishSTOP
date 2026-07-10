@@ -704,7 +704,7 @@ def render():
             c5.metric("Attachments", len(attachments))
             st.caption(severity_caption)
 
-            phi4_key = f"phi4_analysis_v3_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
+            phi4_key = f"phi4_analysis_v7_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
             with st.container(border=True):
                 phi4_placeholder = _render_phi4_analysis(soc, phi4_key, auto_run=True)
 
