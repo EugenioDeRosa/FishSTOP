@@ -1,14 +1,14 @@
 import streamlit as st
 
-from src.analyzer import EmlSOCAnalyzer
-from src.parser import EmailParserPipeline
-from src.validators import EmailSecurityValidator
-
 HF_MODEL_ID = "eugenioderodev/fishstop-bert"
 
 
 @st.cache_resource
 def init_core_backend():
+    from src.analyzer import EmlSOCAnalyzer
+    from src.parser import EmailParserPipeline
+    from src.validators import EmailSecurityValidator
+
     parser = EmailParserPipeline()
     validator = EmailSecurityValidator()
     analyzer = EmlSOCAnalyzer()
@@ -40,9 +40,8 @@ def get_content_model():
 
 
 def get_model_source() -> str:
-    return init_content_model()[2]
+    return f"huggingface ({HF_MODEL_ID})"
 
 
 def warm_up_backend():
     init_core_backend()
-    init_content_model()

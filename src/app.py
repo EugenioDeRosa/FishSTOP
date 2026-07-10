@@ -5,17 +5,17 @@ from pathlib import Path
 import streamlit as st
 
 
-st.set_page_config(
-    page_title="FishStop - Triage & Phishing Detection",
-    page_icon="shield",
-    layout="wide",
-)
+def configure_page() -> None:
+    st.set_page_config(
+        page_title="FishStop - Triage & Phishing Detection",
+        page_icon="shield",
+        layout="wide",
+    )
+
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-
-from src.views.backend import warm_up_backend
 
 
 def _load_app_version() -> str:
@@ -39,8 +39,10 @@ PAGES = {
     "analyze": "src.views.analyzer",
 }
 
-if st.session_state.get("page") not in {"home", *PAGES}:
-    st.session_state.page = "home"
+
+def initialize_session_state() -> None:
+    if st.session_state.get("page") not in {"home", *PAGES}:
+        st.session_state.page = "home"
 
 
 def _render_startup_splash():
@@ -164,14 +166,11 @@ def _render_startup_splash():
     )
 
 
-if not st.session_state.get("startup_ready"):
-    _render_startup_splash()
-    warm_up_backend()
-    st.session_state.startup_ready = True
-    st.rerun()
+def set_page(page_name: str) -> None:
+    st.session_state.page = page_name
 
 
-def render_home():
+def render_home() -> None:
     st.title("FishStop")
     st.markdown("Email Security Platform")
     st.divider()
@@ -179,57 +178,79 @@ def render_home():
 
     c1, c2, c3, c4 = st.columns(4)
     with c1:
-        if st.button("Settings", use_container_width=True, type="primary"):
-            st.session_state.page = "settings"
-            st.rerun()
+        st.button(
+            "Settings",
+            use_container_width=True,
+            type="primary",
+            on_click=set_page,
+            args=("settings",),
+        )
     with c2:
-        if st.button("Colab Training", use_container_width=True, type="primary"):
-            st.session_state.page = "train"
-            st.rerun()
+        st.button(
+            "Colab Training",
+            use_container_width=True,
+            type="primary",
+            on_click=set_page,
+            args=("train",),
+        )
     with c3:
-        if st.button("Analyze EML", use_container_width=True, type="primary"):
-            st.session_state.page = "analyze"
-            st.rerun()
+        st.button(
+            "Analyze EML",
+            use_container_width=True,
+            type="primary",
+            on_click=set_page,
+            args=("analyze",),
+        )
     with c4:
-        if st.button("Public Datasets", use_container_width=True, type="primary"):
-            st.session_state.page = "dataset_sources"
-            st.rerun()
+        st.button(
+            "Public Datasets",
+            use_container_width=True,
+            type="primary",
+            on_click=set_page,
+            args=("dataset_sources",),
+        )
 
 
-with st.sidebar:
-    st.markdown("## FishStop")
-    st.caption(f"Build: `{APP_VERSION}`")
+def render_sidebar() -> None:
+    with st.sidebar:
+        st.markdown("## FishStop")
+        st.caption(f"Build: `{APP_VERSION}`")
 
-    if st.session_state.page != "home":
-        if st.button("Main menu", use_container_width=True):
-            st.session_state.page = "home"
-            st.rerun()
-        st.divider()
-
-    if st.session_state.page == "analyze":
-        if st.session_state.get("raw_eml_debug_data"):
-            st.markdown("### Raw EML Debugger (Cleaned)")
-            current_file_name = st.session_state.get("current_eml_name", "default")
-            st.text_area(
-                label="MIME content (without encoded blocks)",
-                value=st.session_state["raw_eml_debug_data"],
-                height=500,
-                disabled=True,
-                key=f"sidebar_debug_{current_file_name}",
+        if st.session_state.page != "home":
+            st.button(
+                "Main menu",
+                use_container_width=True,
+                on_click=set_page,
+                args=("home",),
             )
             st.divider()
 
-    st.caption("FishStop - Email Security Platform")
+        if st.session_state.page == "analyze":
+            if st.session_state.get("raw_eml_debug_data"):
+                st.markdown("### Raw EML Debugger (Cleaned)")
+                current_file_name = st.session_state.get("current_eml_name", "default")
+                st.text_area(
+                    label="MIME content (without encoded blocks)",
+                    value=st.session_state["raw_eml_debug_data"],
+                    height=500,
+                    disabled=True,
+                    key=f"sidebar_debug_{current_file_name}",
+                )
+                st.divider()
+
+        st.caption("FishStop - Email Security Platform")
 
 
-if st.session_state.page == "home":
-    render_home()
-else:
+def render_selected_page(page_name: str) -> None:
     import importlib
     import traceback
 
-    page_name = st.session_state.page
     module_name = PAGES.get(page_name)
+    if not module_name:
+        st.session_state.page = "home"
+        render_home()
+        return
+
     try:
         importlib.invalidate_caches()
         page_module = importlib.import_module(module_name)
@@ -242,4 +263,14 @@ else:
             st.code("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)), language="text")
         if st.button("Back to main menu", use_container_width=True):
             st.session_state.page = "home"
-            st.rerun()
+
+
+def main() -> None:
+    configure_page()
+    initialize_session_state()
+    render_sidebar()
+
+    if st.session_state.page == "home":
+        render_home()
+    else:
+        render_selected_page(st.session_state.page)
