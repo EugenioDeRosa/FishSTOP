@@ -1,3 +1,4 @@
+import re
 import sys
 from pathlib import Path
 
@@ -14,8 +15,21 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.version import APP_VERSION
 from src.views.backend import warm_up_backend
+
+
+def _load_app_version() -> str:
+    try:
+        version_text = (PROJECT_ROOT / "src" / "version.py").read_text(encoding="utf-8-sig")
+        match = re.search(r'APP_VERSION\s*=\s*["\']([^"\']+)["\']', version_text)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    return "unknown"
+
+
+APP_VERSION = _load_app_version()
 
 
 PAGES = {
