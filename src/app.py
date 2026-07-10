@@ -226,6 +226,20 @@ if st.session_state.page == "home":
     render_home()
 else:
     import importlib
+    import traceback
 
-    page_module = importlib.import_module(PAGES[st.session_state.page])
-    page_module.render()
+    page_name = st.session_state.page
+    module_name = PAGES.get(page_name)
+    try:
+        importlib.invalidate_caches()
+        page_module = importlib.import_module(module_name)
+        render = getattr(page_module, "render")
+        render()
+    except Exception as exc:
+        st.error(f"Unable to render page `{page_name}`.")
+        st.caption("The app caught the error instead of leaving a blank screen.")
+        with st.expander("Error details", expanded=True):
+            st.code("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)), language="text")
+        if st.button("Back to main menu", use_container_width=True):
+            st.session_state.page = "home"
+            st.rerun()
