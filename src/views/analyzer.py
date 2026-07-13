@@ -650,7 +650,8 @@ def render():
     st.title("FishStop SOC Console")
     st.caption("Email triage, authentication checks, threat intelligence e classificazione AI")
 
-    col_upload, col_results = st.columns([0.9, 2.1], gap="large")
+    col_upload = st.container(border=True)
+    col_results = st.container()
 
     with col_upload:
         st.subheader("Case Intake")
@@ -670,8 +671,9 @@ def render():
                 f.write(uploaded_file.getbuffer())
 
             st.success("File pronto per il triage")
-            st.metric("Nome file", uploaded_file.name)
-            st.metric("Dimensione", f"{len(uploaded_file.getbuffer()) / 1024:.1f} KB")
+            file_col, size_col = st.columns([2, 1])
+            file_col.metric("Nome file", uploaded_file.name)
+            size_col.metric("Dimensione", f"{len(uploaded_file.getbuffer()) / 1024:.1f} KB")
 
     with col_results:
         if uploaded_file is None:
@@ -1064,3 +1066,4 @@ def render():
             st.error(f"An error occurred during analysis: {exc}")
             with st.expander("Error details"):
                 st.exception(exc)
+
