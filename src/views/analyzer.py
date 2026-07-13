@@ -3,6 +3,7 @@ import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from html import escape as html_escape
+from urllib.parse import urlsplit, urlunsplit
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -93,6 +94,23 @@ def _field_value(label: str, value: str | None):
     st.write(f"**{label}:** `{value}`")
 
 
+def _defang_url(url: str) -> str:
+    value = str(url or "").strip()
+    if not value:
+        return ""
+    try:
+        parsed = urlsplit(value)
+    except Exception:
+        return value.replace("://", "[://]").replace(".", "[.]")
+
+    if not parsed.scheme or not parsed.netloc:
+        return value.replace("://", "[://]").replace(".", "[.]")
+
+    host = parsed.netloc.replace(".", "[.]")
+    path = urlunsplit(("", "", parsed.path, parsed.query, parsed.fragment))
+    return f"{parsed.scheme}[://]{host}{path}"
+
+
 def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
     st.markdown(f"##### {label}")
     if not values:
@@ -111,7 +129,7 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
             <div style="display:flex; align-items:stretch; gap:8px; width:100%; margin:0 0 8px 0;">
               <code style="flex:1; display:block; overflow-wrap:anywhere; padding:9px 10px;
                            border:1px solid #d0d7de; border-radius:6px; background:#f6f8fa;
-                           color:#24292f; font-size:12px; line-height:1.35; user-select:text;">
+                           color:#24292f; font-size:12px; line-height:1.35; font-weight:600; user-select:text;">
                 {escaped_value}
               </code>
               <button id="{element_id}" title="Copy indicator" aria-label="Copy indicator"
@@ -956,7 +974,7 @@ def render():
                         result.append(value)
                     return result
 
-                url_iocs = unique_values(link.get("url") for link in links)
+                url_iocs = unique_values(_defang_url(link.get("url")) for link in links)
                 domain_iocs = unique_values(
                     [link.get("host") for link in links]
                     + [alert.get("host") for alert in lookalike_alerts]
