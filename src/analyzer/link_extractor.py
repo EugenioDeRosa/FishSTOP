@@ -35,7 +35,6 @@ _ANCHOR_RE = re.compile(
     r"""<a\b[^>]*href\s*=\s*["']?(?P<href>https?://[^\s"'<>]+)["']?[^>]*>(?P<text>.*?)</a>""",
     re.IGNORECASE | re.DOTALL,
 )
-_OPAQUE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{4,32}$")
 _WEB_SCHEMES = {"http", "https"}
 
 
@@ -84,33 +83,6 @@ def _extract_display_destination(display: str) -> tuple[str, str]:
     return candidate, (parsed.hostname or "").lower()
 
 
-def _looks_opaque_token(segment: str) -> bool:
-    if not _OPAQUE_TOKEN_RE.match(segment or ""):
-        return False
-    has_alpha = any(ch.isalpha() for ch in segment)
-    has_digit = any(ch.isdigit() for ch in segment)
-    mixed_case = any(ch.islower() for ch in segment) and any(ch.isupper() for ch in segment)
-    return len(segment) >= 5 and has_alpha and (has_digit or mixed_case or "_" in segment or "-" in segment)
-
-
-def _possible_shortener(url: str, host: str) -> tuple[bool, str]:
-    try:
-        parsed = urlparse(url)
-    except Exception:
-        return False, ""
-    segments = [seg for seg in parsed.path.split("/") if seg]
-    if not host or not segments:
-        return False, ""
-
-    first = segments[0]
-    sld = _registered_domain(host).split(".")[0]
-    if len(sld) <= 5 and _OPAQUE_TOKEN_RE.match(first):
-        return True, "short domain with opaque token in path"
-    if len(segments) <= 2 and not parsed.query and _looks_opaque_token(first) and len(first) <= 16:
-        return True, "percorso breve e opaco tipico di redirector/short link"
-    return False, ""
-
-
 def _same_registered_domain(left: str, right: str) -> bool:
     return bool(left and right and _registered_domain(left) == _registered_domain(right))
 
@@ -144,7 +116,6 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
 
         display_text = (display or "").strip()
         display_url, display_host = _extract_display_destination(display_text)
-        is_shortener, shortener_reason = _possible_shortener(url, host)
 
         links.append({
             "url": url,
@@ -156,8 +127,6 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
             "scheme": scheme,
             "source": source,
             "is_ip": is_ip_url(host),
-            "is_possible_shortener": is_shortener,
-            "shortener_reason": shortener_reason,
         })
 
     def _add_unicode_bare_domains(text: str, source: str) -> None:

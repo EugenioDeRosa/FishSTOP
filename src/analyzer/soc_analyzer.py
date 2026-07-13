@@ -302,20 +302,25 @@ class EmlSOCAnalyzer:
         def flag(level: str, field: str, message: str):
             flags.append({"level": level, "field": field, "message": message})
 
-        # SPF
+        # SPF: useful for triage, but auth-only findings should not dominate verdicts.
         spf = report["auth_results"].get("SPF") or report["arc_auth_results"].get("SPF")
         if spf:
-            if spf["status"] != "pass":
-                flag("HIGH", "SPF", f"SPF {spf['status'].upper()} - domain does not authorize the sender server")
+            spf_status = (spf.get("status") or "unknown").lower()
+            if spf_status != "pass":
+                flag("MEDIUM", "SPF", f"SPF {spf_status.upper()} - sender authorization should be reviewed")
         else:
-            flag("MEDIUM", "SPF", "No SPF result found in headers")
+            flag("LOW", "SPF", "No SPF result found in headers")
 
-        # DKIM
-        if not report["dkim_signature_present"]:
-            flag("MEDIUM", "DKIM", "DKIM signature missing from headers")
+        # DKIM: missing/none is an absence of evidence, not a strong malicious signal.
         dkim = report["auth_results"].get("DKIM") or report["arc_auth_results"].get("DKIM")
-        if dkim and dkim["status"] != "pass":
-            flag("HIGH", "DKIM", f"DKIM {dkim['status'].upper()}")
+        dkim_status = (dkim.get("status") or "") .lower() if dkim else ""
+        if dkim_status and dkim_status != "pass":
+            if dkim_status in {"fail", "permerror"}:
+                flag("MEDIUM", "DKIM", f"DKIM {dkim_status.upper()} - signature validation should be reviewed")
+            else:
+                flag("LOW", "DKIM", f"DKIM {dkim_status.upper()} - no valid DKIM pass in headers")
+        elif not report["dkim_signature_present"]:
+            flag("LOW", "DKIM", "DKIM signature missing from headers")
 
         # DMARC
         dmarc = report["auth_results"].get("DMARC") or report["arc_auth_results"].get("DMARC")
@@ -391,12 +396,6 @@ class EmlSOCAnalyzer:
                     "The link shows `" + (lnk.get("display_host") or "?")
                     + "` but points to `" + (lnk.get("host") or "?")
                     + "`: possible masked link in HTML.",
-                )
-            if lnk.get("is_possible_shortener"):
-                flag(
-                    "MEDIUM", "Link",
-                    "Possible short link/redirector without whitelist: `" + lnk["url"]
-                    + "` - " + (lnk.get("shortener_reason") or "suspicious pattern"),
                 )
         for alert in report.get("lookalike_alerts", []):
             technique_label = {

@@ -126,8 +126,8 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
         escaped_value = html_escape(value)
         components.html(
             f'''
-            <div style="display:flex; align-items:stretch; gap:8px; width:100%; margin:0 0 8px 0;">
-              <code style="flex:1; display:block; overflow-wrap:anywhere; padding:9px 10px;
+            <div style="display:flex; align-items:center; gap:8px; width:100%; margin:0 0 8px 0;">
+              <code style="flex:1; display:block; min-width:0; overflow-x:auto; white-space:nowrap; padding:9px 10px;
                            border:1px solid #d0d7de; border-radius:6px; background:#f6f8fa;
                            color:#24292f; font-size:12px; line-height:1.35; font-weight:600; user-select:text;">
                 {escaped_value}
@@ -620,26 +620,30 @@ def _summarize_link_reputation(results: dict) -> str:
     if not results:
         return "No links found."
 
-    counts = {"malicious": 0, "suspicious": 0, "clean": 0, "not_found": 0, "skipped": 0, "error": 0}
+    neutral_statuses = {"not_found", "skipped", "error", "unknown"}
+    counts = {"malicious": 0, "suspicious": 0, "clean": 0, "not_found": 0, "skipped": 0, "error": 0, "unknown": 0}
     for rep in results.values():
-        status = rep.get("status", "error")
+        status = rep.get("status") or "unknown"
         counts[status] = counts.get(status, 0) + 1
 
     context_count = sum(len(rep.get("crowdsourced_context") or []) for rep in results.values())
+    positive_evidence = counts.get("malicious", 0) + counts.get("suspicious", 0)
+    neutral_count = sum(counts.get(status, 0) for status in neutral_statuses)
     parts = [f"{value} {key}" for key, value in counts.items() if value]
     if context_count:
         parts.append(f"{context_count} crowdsourced context item(s)")
 
-    risk_label = "Clean"
     if counts.get("malicious"):
         risk_label = "High risk"
     elif counts.get("suspicious"):
-        risk_label = "Requires review"
-    elif counts.get("error") or counts.get("skipped"):
-        risk_label = "Incomplete"
+        risk_label = "Manual review only"
+    elif positive_evidence == 0 and neutral_count:
+        risk_label = "No positive VT evidence"
+    else:
+        risk_label = "Clean"
 
     breakdown = ", ".join(parts) if parts else "no analyzed links"
-    return f"VirusTotal link intelligence: {risk_label} - {breakdown}"
+    return f"VirusTotal link intelligence: {risk_label} - {breakdown}. Not found, skipped, unknown, timeout, or rate-limit errors are neutral and must not increase risk."
 
 
 def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_javascript: bool = False) -> None:
@@ -729,7 +733,7 @@ def render():
             c5.metric("Attachments", len(attachments))
             st.caption(severity_caption)
 
-            phi4_key = f"phi4_analysis_v9_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
+            phi4_key = f"phi4_analysis_v12_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
             with st.container(border=True):
                 phi4_placeholder = _render_phi4_analysis(soc, phi4_key, auto_run=True)
 
@@ -907,7 +911,6 @@ def render():
                         rep = vt_url_results.get(lnk["url"], {})
                         risky = rep.get("status") in ("malicious", "suspicious")
                         display_mismatch = lnk.get("display_mismatch")
-                        possible_shortener = lnk.get("is_possible_shortener")
                         with st.container(border=True):
                             top_left, top_right = st.columns([3, 1])
                             with top_left:
@@ -920,8 +923,6 @@ def render():
                                     st.error("Direct IP")
                                 elif display_mismatch:
                                     st.error("different text")
-                                elif possible_shortener:
-                                    st.warning("short link")
                                 elif risky:
                                     st.warning(rep.get("status", "suspicious"))
                                 else:
