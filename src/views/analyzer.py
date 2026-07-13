@@ -88,78 +88,65 @@ def _render_flag(flag: dict):
         st.caption(label)
 
 
-def _copyable_value(label: str, value: str | None, key: str):
+def _field_value(label: str, value: str | None):
     value = str(value or "-")
-    js_value = json.dumps(value)
-    element_id = f"copy_{re.sub(r'[^a-zA-Z0-9_]', '_', key)}"
-    text_col, button_col = st.columns([0.86, 0.14], vertical_alignment="center")
-    with text_col:
-        st.write(f"**{label}:** `{value}`")
-    with button_col:
+    st.write(f"**{label}:** `{value}`")
+
+
+def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
+    st.markdown(f"##### {label}")
+    if not values:
+        st.info("No indicators in this category.")
+        return
+
+    for idx, value in enumerate(values, start=1):
+        value = str(value or "").strip()
+        if not value:
+            continue
+        element_id = f"ioc_copy_{re.sub(r'[^a-zA-Z0-9_]', '_', key_prefix)}_{idx}"
+        js_value = json.dumps(value)
+        escaped_value = html_escape(value)
         components.html(
-            f"""
-            <button id="{element_id}"
-              style="width: 100%; padding: 6px 8px; border: 1px solid #d0d7de;
-                     border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">
-              Copy
-            </button>
+            f'''
+            <div style="display:flex; align-items:stretch; gap:8px; width:100%; margin:0 0 8px 0;">
+              <code style="flex:1; display:block; overflow-wrap:anywhere; padding:9px 10px;
+                           border:1px solid #d0d7de; border-radius:6px; background:#f6f8fa;
+                           color:#24292f; font-size:12px; line-height:1.35; user-select:text;">
+                {escaped_value}
+              </code>
+              <button id="{element_id}" title="Copy indicator" aria-label="Copy indicator"
+                style="width:40px; min-width:40px; border:1px solid #d0d7de; border-radius:6px;
+                       background:#ffffff; color:#080341; cursor:pointer; display:flex;
+                       align-items:center; justify-content:center; padding:0;">
+                <svg width="19" height="19" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                  <path fill-rule="evenodd" clip-rule="evenodd" d="M19.5 16.5L19.5 4.5L18.75 3.75H9L8.25 4.5L8.25 7.5L5.25 7.5L4.5 8.25V20.25L5.25 21H15L15.75 20.25V17.25H18.75L19.5 16.5ZM15.75 15.75L15.75 8.25L15 7.5L9.75 7.5V5.25L18 5.25V15.75H15.75ZM6 9L14.25 9L14.25 19.5L6 19.5L6 9Z" fill="currentColor"/>
+                </svg>
+              </button>
+            </div>
             <script>
               const button_{element_id} = document.getElementById("{element_id}");
               button_{element_id}.onclick = async () => {{
                 try {{
                   await navigator.clipboard.writeText({js_value});
-                  button_{element_id}.innerText = "Copied";
-                  setTimeout(() => button_{element_id}.innerText = "Copy", 1200);
+                  button_{element_id}.style.background = "#ecfdf3";
+                  button_{element_id}.style.color = "#067647";
+                  setTimeout(() => {{
+                    button_{element_id}.style.background = "#ffffff";
+                    button_{element_id}.style.color = "#080341";
+                  }}, 900);
                 }} catch (err) {{
-                  button_{element_id}.innerText = "Copy failed";
-                  setTimeout(() => button_{element_id}.innerText = "Copy", 1200);
+                  button_{element_id}.style.background = "#fef3f2";
+                  button_{element_id}.style.color = "#b42318";
+                  setTimeout(() => {{
+                    button_{element_id}.style.background = "#ffffff";
+                    button_{element_id}.style.color = "#080341";
+                  }}, 900);
                 }}
               }};
             </script>
-            """,
-            height=38,
+            ''',
+            height=48,
         )
-
-
-def _confirm_copyable_link(url: str, key: str) -> None:
-    url = str(url or "")
-    if not url:
-        return
-
-    js_value = json.dumps(url)
-    element_id = f"copy_link_{re.sub(r'[^a-zA-Z0-9_]', '_', key)}"
-    components.html(
-        f"""
-        <div style="display: flex; gap: 8px; align-items: stretch; width: 100%;">
-          <code style="flex: 1; display: block; overflow-wrap: anywhere; padding: 8px 10px;
-                       border: 1px solid #d0d7de; border-radius: 6px; background: #f6f8fa;
-                       color: #24292f; font-size: 12px; line-height: 1.35;">{html_escape(url)}</code>
-          <button id="{element_id}"
-            style="min-width: 86px; padding: 6px 10px; border: 1px solid #d0d7de;
-                   border-radius: 6px; background: white; cursor: pointer; font-size: 13px;">
-            Copy
-          </button>
-        </div>
-        <script>
-          const button_{element_id} = document.getElementById("{element_id}");
-          button_{element_id}.onclick = async () => {{
-            const confirmed = window.confirm(
-              "This link comes from a potentially dangerous email. Do you really want to copy it?"
-            );
-            if (!confirmed) return;
-            try {{
-              await navigator.clipboard.writeText({js_value});
-              button_{element_id}.innerText = "Copyto";
-              setTimeout(() => button_{element_id}.innerText = "Copy", 1200);
-            }} catch (err) {{
-              button_{element_id}.innerText = "Error";
-              setTimeout(() => button_{element_id}.innerText = "Copy", 1200);
-            }}
-          }};
-        </script>
-        """,
-        height=46,
-    )
 
 
 def _render_extracted_links_box(links: list[dict], key_prefix: str) -> None:
@@ -174,7 +161,7 @@ def _render_extracted_links_box(links: list[dict], key_prefix: str) -> None:
 
     with st.container(border=True):
         st.markdown("#### Links found in the email")
-        st.caption("La preview HTML non contiene link cliccabili. Copy un URL solo se serve per analisi in ambiente sicuro.")
+        st.caption("La preview HTML non contiene link cliccabili. Gli indicatori copiabili sono disponibili nella tab IoC.")
         if not unique_links:
             st.info("No links found in the email.")
             return
@@ -183,7 +170,7 @@ def _render_extracted_links_box(links: list[dict], key_prefix: str) -> None:
             host = link.get("host") or "-"
             source = link.get("source") or "-"
             st.caption(f"{idx}. Host: `{host}` · Source: `{source}`")
-            _confirm_copyable_link(link.get("url", ""), f"{key_prefix}_{idx}")
+            st.code(link.get("url", ""), language="text")
 
 
 def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
@@ -736,13 +723,14 @@ def render():
                     if len(flags) > 5:
                         st.caption(f"Altri {len(flags) - 5} indicators are available in the SOC Details tab.")
 
-            overview, identity, auth, links_tab, attach_tab, content_tab, raw_tab = st.tabs(
+            overview, identity, auth, links_tab, attach_tab, ioc_tab, content_tab, raw_tab = st.tabs(
                 [
                     "Overview",
                     "Identity",
                     "Auth & Routing",
                     "Link Intel",
                     "Attachments",
+                    "IoC",
                     "AI & Body",
                     "Raw",
                 ]
@@ -752,11 +740,11 @@ def render():
                 left, right = st.columns([1, 1])
                 with left:
                     st.markdown("#### Email Snapshot")
-                    _copyable_value("From", soc.get("from_"), "overview_from")
-                    _copyable_value("To", soc.get("to"), "overview_to")
-                    _copyable_value("Subject", soc.get("subject"), "overview_subject")
+                    _field_value("From", soc.get("from_"))
+                    _field_value("To", soc.get("to"))
+                    _field_value("Subject", soc.get("subject"))
                     st.write(f"**Date:** `{soc.get('date') or '-'}`")
-                    _copyable_value("Message-ID", soc.get("message_id"), "overview_message_id")
+                    _field_value("Message-ID", soc.get("message_id"))
                 with right:
                     st.markdown("#### Signal Matrix")
                     _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"), show_help=False)
@@ -779,8 +767,8 @@ def render():
                 c1, c2 = st.columns(2)
                 with c1:
                     st.write(f"**Delivered-To:** `{soc.get('delivered_to') or '-'}`")
-                    _copyable_value("Return-Path", soc.get("return_path"), "identity_return_path")
-                    _copyable_value("Reply-To", soc.get("reply_to"), "identity_reply_to")
+                    _field_value("Return-Path", soc.get("return_path"))
+                    _field_value("Reply-To", soc.get("reply_to"))
                     st.write(f"**Errors-To:** `{soc.get('errors_to') or '-'}`")
                 with c2:
                     st.write(f"**Content-Type:** `{soc.get('content_type') or '-'}`")
@@ -952,6 +940,74 @@ def render():
                                 with st.spinner("Running VirusTotal attachment lookup..."):
                                     _render_virustotal(validator.check_file_hash(att["hash_sha256"]))
 
+
+            with ioc_tab:
+                st.markdown("#### Indicators of Compromise")
+                st.caption("Valori utili per bloccare, monitorare o cercare future email simili. Copia solo gli indicatori che vuoi usare in strumenti di sicurezza.")
+
+                def unique_values(values):
+                    result = []
+                    seen = set()
+                    for value in values:
+                        value = str(value or "").strip()
+                        if not value or value == "-" or value in seen:
+                            continue
+                        seen.add(value)
+                        result.append(value)
+                    return result
+
+                url_iocs = unique_values(link.get("url") for link in links)
+                domain_iocs = unique_values(
+                    [link.get("host") for link in links]
+                    + [alert.get("host") for alert in lookalike_alerts]
+                    + [soc.get("return_path_domain")]
+                )
+                ip_iocs = unique_values(
+                    [soc.get("injection_sender_ip")]
+                    + [ip for hop in soc.get("received_hops", []) for ip in (hop.get("all_ips") or [])]
+                )
+                hash_iocs = unique_values(att.get("hash_sha256") for att in attachments)
+                sender_iocs = unique_values([soc.get("from_"), soc.get("reply_to"), soc.get("return_path")])
+
+                ioc_groups = {
+                    "URLs": url_iocs,
+                    "Domains": domain_iocs,
+                    "IPs": ip_iocs,
+                    "SHA-256 hashes": hash_iocs,
+                    "Senders": sender_iocs,
+                }
+
+                all_iocs_text = "\n".join(
+                    line
+                    for label, values in ioc_groups.items()
+                    for line in ([f"# {label}"] + values + [""] if values else [])
+                ).strip()
+
+                c1, c2, c3, c4, c5 = st.columns(5)
+                c1.metric("URLs", len(url_iocs))
+                c2.metric("Domains", len(domain_iocs))
+                c3.metric("IPs", len(ip_iocs))
+                c4.metric("Hashes", len(hash_iocs))
+                c5.metric("Senders", len(sender_iocs))
+
+                if all_iocs_text:
+                    st.download_button(
+                        "Download IoC list",
+                        data=all_iocs_text,
+                        file_name="fishstop_iocs.txt",
+                        mime="text/plain",
+                        use_container_width=True,
+                    )
+                else:
+                    st.info("No IoC extracted from this email.")
+
+                col_left, col_right = st.columns(2)
+                for idx, (label, values) in enumerate(ioc_groups.items()):
+                    target = col_left if idx % 2 == 0 else col_right
+                    with target:
+                        key_label = label.lower().replace(" ", "_").replace("-", "_")
+                        _render_ioc_values(label, values, f"{phi4_key}_ioc_{key_label}")
+
             with content_tab:
                 import torch
                 st.markdown("#### AI Content Analysis")
@@ -980,12 +1036,17 @@ def render():
                     c1, c2 = st.columns(2)
                     c1.metric("Legitimate", f"{prob_safe:.2f}%")
                     c2.metric("Phishing", f"{prob_phishing:.2f}%")
-                    if prob_phishing > prob_safe:
+                    soc["bert_phishing_probability"] = prob_phishing
+                    soc["bert_legitimate_probability"] = prob_safe
+                    if prob_phishing >= 65:
                         soc["bert_ai_result"] = "phishing"
                         st.error("AI result: possible phishing")
-                    else:
+                    elif prob_safe >= 65:
                         soc["bert_ai_result"] = "legitimate"
                         st.success("AI result: email probably legitimate")
+                    else:
+                        soc["bert_ai_result"] = "uncertain"
+                        st.warning("AI result: inconclusive content signal")
                     with st.expander("Raw logits"):
                         st.json({"logits": logits.flatten().tolist()})
 

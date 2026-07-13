@@ -83,12 +83,14 @@ def print_config_status():
     print(f"  Streamlit secrets OK   : {_is_streamlit_cloud()}")
     print(f"  ABUSEIPDB_API_KEY      : {'present' if ABUSEIPDB_API_KEY else 'missing'}")
     print(f"  VIRUSTOTAL_API_KEY     : {'present' if VIRUSTOTAL_API_KEY else 'missing'}")
+    print(f"  HF_TOKEN               : {'present' if HF_TOKEN else 'missing'}")
     print("=" * 55)
 
 
 ABUSEIPDB_API_KEY = get_secret("ABUSEIPDB_API_KEY")
 VIRUSTOTAL_API_KEY = get_secret("VIRUSTOTAL_API_KEY")
 GITHUB_MODELS_TOKEN = get_secret("GITHUB_MODELS_TOKEN")
+HF_TOKEN = get_secret("HF_TOKEN")
 
 
 if __name__ == "__main__":

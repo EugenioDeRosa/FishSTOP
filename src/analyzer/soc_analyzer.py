@@ -32,6 +32,17 @@ def _extract_domain(email_or_addr: str) -> str:
     return m.group(1).lower() if m else ""
 
 
+def _registered_domain(domain: str) -> str:
+    parts = (domain or "").lower().rstrip(".").split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return domain or ""
+
+
+def _same_registered_domain(left: str, right: str) -> bool:
+    return bool(left and right and _registered_domain(left) == _registered_domain(right))
+
+
 def _decode_text_part(part) -> str:
     payload = part.get_payload(decode=True)
     charset = part.get_content_charset() or "utf-8"
@@ -114,7 +125,7 @@ class EmlSOCAnalyzer:
         from_domain        = _extract_domain(from_addr or "") if from_addr else ""
         report["return_path_domain_mismatch"] = bool(
             return_path_domain and from_domain
-            and return_path_domain.lower() != from_domain.lower()
+            and not _same_registered_domain(return_path_domain, from_domain)
         )
         report["return_path_domain"] = return_path_domain
 
@@ -324,10 +335,10 @@ class EmlSOCAnalyzer:
                 EmlSOCAnalyzer._extract_address(report.get("from_") or "") or ""
             )
             flag(
-                "HIGH", "Return-Path",
-                f"The Return-Path domain (`{report['return_path_domain']}`) differisce dal "
-                f"From domain (`{_from_domain}`) - the server that will receive bounces "
-                "is not controlled by the declared sender. Typical of phishing or BEC."
+                "MEDIUM", "Return-Path",
+                f"The Return-Path domain (`{report['return_path_domain']}`) differs from "
+                f"the From domain (`{_from_domain}`). This can be legitimate for bulk senders, "
+                "but it should be reviewed with authentication and link evidence."
             )
         elif report.get("return_path") and not report.get("return_path_domain"):
             flag("LOW", "Return-Path", "Return-Path present but domain cannot be extracted")
