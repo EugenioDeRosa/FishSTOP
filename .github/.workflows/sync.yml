@@ -1,0 +1,18 @@
+name: Sync to Hugging Face Hub
+on:
+  push:
+    branches: [main] # Cambia in master se il tuo branch principale si chiama così
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Sync with Hugging Face Hub
+        uses: huggingface/hub-sync@v0.1.0
+        with:
+          github_repo_id: ${{ github.repository }}
+          huggingface_repo_id: eugenioderodev/FishSTOP
+          hf_token: ${{ secrets.HF_TOKEN }}
+          space_sdk: static
