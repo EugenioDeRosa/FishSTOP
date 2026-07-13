@@ -241,6 +241,7 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
         bool(soc.get("return_path_domain_mismatch")),
         bool(soc.get("display_name_spoofing")),
         any(att.get("anomaly") for att in attachments),
+        any((att.get("pdf_security") or {}).get("suspicious") for att in attachments),
         any(link.get("is_ip") or link.get("display_mismatch") for link in links),
         bool(lookalike_alerts),
         any(status in {"malicious", "suspicious"} for status in useful_vt_statuses),
@@ -281,7 +282,9 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
                 f"ext={att.get('extension_from_filename') or '-'} "
                 f"mime={att.get('content_type') or '-'} "
                 f"magic={att.get('magic_detected_format') or '-'} "
-                f"anomaly={att.get('anomaly') or 'none'}"
+                f"anomaly={att.get('anomaly') or 'none'} "
+                f"pdf_risk={(att.get('pdf_security') or {}).get('risk_level') or '-'} "
+                f"pdf_findings={(att.get('pdf_security') or {}).get('summary') or '-'}"
             )
 
     body_text_for_flags = cleaned_body or str(

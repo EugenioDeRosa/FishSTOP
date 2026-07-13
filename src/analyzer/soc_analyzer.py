@@ -376,6 +376,19 @@ class EmlSOCAnalyzer:
             if att.get("anomaly"):
                 flag("HIGH", "Attachment",
                      f"'{att['filename']}': {att['anomaly']}")
+            pdf_security = att.get("pdf_security") or {}
+            if pdf_security.get("suspicious"):
+                flag(
+                    "HIGH",
+                    "PDF Attachment",
+                    f"'{att['filename']}': risky PDF features detected - {pdf_security.get('summary')}",
+                )
+            elif pdf_security.get("risk_level") in {"medium", "low"}:
+                flag(
+                    "INFO",
+                    "PDF Attachment",
+                    f"'{att['filename']}': PDF static scan - {pdf_security.get('summary')}",
+                )
             if att.get("magic_bytes_hex"):
                 flag("INFO", "Attachment",
                      f"'{att['filename']}': magic bytes {att['magic_bytes_hex'][:8]}... "

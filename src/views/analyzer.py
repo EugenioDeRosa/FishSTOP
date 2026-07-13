@@ -953,6 +953,19 @@ def render():
                         else:
                             st.warning("File consistency cannot be determined.")
 
+                        pdf_security = att.get("pdf_security") or {}
+                        if pdf_security:
+                            risk_level = pdf_security.get("risk_level") or "unknown"
+                            if pdf_security.get("suspicious"):
+                                st.error(f"PDF static scan: {risk_level.upper()} - {pdf_security.get('summary')}")
+                            else:
+                                st.info(f"PDF static scan: {risk_level.upper()} - {pdf_security.get('summary')}")
+                            indicators = pdf_security.get("indicators") or []
+                            if indicators:
+                                with st.expander("PDF indicators"):
+                                    for item in indicators:
+                                        st.write(f"- {item.get('label')} x{item.get('count')}")
+
                         if att.get("hash_sha256"):
                             with st.expander("Hash and VirusTotal"):
                                 st.code(att["hash_sha256"], language="text")

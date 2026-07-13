@@ -18,3 +18,4 @@ requests>=2.31.0
 folium
 kagglehub
 lfs
+pypdf>=6.14.0
