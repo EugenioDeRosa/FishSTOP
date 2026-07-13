@@ -624,15 +624,17 @@ def _summarize_link_reputation(results: dict) -> str:
     parts = [f"{value} {key}" for key, value in counts.items() if value]
     if context_count:
         parts.append(f"{context_count} crowdsourced context item(s)")
-    worst = "clean"
-    if counts.get("malicious"):
-        worst = "malicious"
-    elif counts.get("suspicious"):
-        worst = "suspicious"
-    elif counts.get("error") or counts.get("skipped"):
-        worst = "unknown"
 
-    return f"VirusTotal link reputation: worst={worst}; " + ", ".join(parts)
+    risk_label = "Clean"
+    if counts.get("malicious"):
+        risk_label = "High risk"
+    elif counts.get("suspicious"):
+        risk_label = "Requires review"
+    elif counts.get("error") or counts.get("skipped"):
+        risk_label = "Incomplete"
+
+    breakdown = ", ".join(parts) if parts else "no analyzed links"
+    return f"VirusTotal link intelligence: {risk_label} - {breakdown}"
 
 
 def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_javascript: bool = False) -> None:
