@@ -75,14 +75,13 @@ def test_phi4_prompt_forbids_clean_technical_checks_overriding_payment_request()
     _ = build_fast_email_prompt(soc)
     prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
 
-    assert "classify the email as suspicious based on content intent" in prompt_source
-    assert "must not override this content-based verdict" in prompt_source
-    assert "ignore BERT for the verdict" in prompt_source
+    assert "pay/settle/transfer money" in prompt_source
+    assert "unless it includes a risky action above" in prompt_source
 
 def test_phi4_prompt_forbids_not_suspicious_payment_clean_vt_reasoning():
     prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
 
-    assert "This is a hard verdict rule" in prompt_source
-    assert "the final paragraph must start with 'The email provided is suspicious because'" in prompt_source
-    assert "Never write that an email is not suspicious because a payment or bank-transfer request has clean VirusTotal results" in prompt_source
-    assert "that reasoning is invalid for this task" in prompt_source
+    assert "Start exactly with 'The email provided is suspicious because'" in prompt_source
+    assert "pay/settle/transfer money" in prompt_source
+    assert "If there is no risky requested action and no strong support" in prompt_source
+    assert "use technical facts only as support" in prompt_source
