@@ -166,6 +166,24 @@ def _render_startup_splash():
     )
 
 
+def run_startup_warmup() -> bool:
+    if st.session_state.get("startup_warmup_done"):
+        return True
+
+    _render_startup_splash()
+    try:
+        from src.views.backend import warm_up_backend
+
+        warm_up_backend(preload_content_model=True)
+        st.session_state["startup_warmup_error"] = None
+    except Exception as exc:
+        st.session_state["startup_warmup_error"] = str(exc)
+    st.session_state["startup_warmup_done"] = True
+    st.rerun()
+    return False
+
+
+
 def set_page(page_name: str) -> None:
     st.session_state.page = page_name
 
@@ -268,6 +286,8 @@ def render_selected_page(page_name: str) -> None:
 def main() -> None:
     configure_page()
     initialize_session_state()
+    if not run_startup_warmup():
+        return
     render_sidebar()
 
     if st.session_state.page == "home":

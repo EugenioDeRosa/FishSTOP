@@ -1100,7 +1100,8 @@ def render():
                 else:
                     with st.spinner("BERT is analyzing the content..."):
                         inputs = tokenizer(email_text, return_tensors="pt", truncation=True, max_length=512)
-                        with torch.no_grad():
+                        model.eval()
+                        with torch.inference_mode():
                             outputs = model(**inputs)
                             logits = outputs.logits
                             probabilities = torch.softmax(logits, dim=1).flatten().tolist()

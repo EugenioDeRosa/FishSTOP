@@ -24,6 +24,7 @@ def init_content_model(hf_token: str = ""):
     hf_auth = {"token": hf_token} if hf_token else {}
     tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_ID, **hf_auth)
     model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_ID, **hf_auth)
+    model.eval()
 
     return tokenizer, model, "huggingface"
 
@@ -34,7 +35,7 @@ def get_core_backend():
 
 def get_backend():
     parser, validator, analyzer = init_core_backend()
-    tokenizer, model, model_source = init_content_model()
+    tokenizer, model, model_source = get_content_model()
     return parser, validator, analyzer, tokenizer, model, model_source
 
 
@@ -46,5 +47,7 @@ def get_model_source() -> str:
     return f"huggingface ({HF_MODEL_ID})"
 
 
-def warm_up_backend():
+def warm_up_backend(preload_content_model: bool = True):
     init_core_backend()
+    if preload_content_model:
+        get_content_model()
