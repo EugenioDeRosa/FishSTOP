@@ -26,6 +26,50 @@ from .lookalike       import check_lookalike_domains, is_ip_url
 from .received_parser import parse_received_hop, parse_auth_results
 
 
+NO_REPLY_LOCAL_PARTS = {
+    "no-reply",
+    "noreply",
+    "do-not-reply",
+    "donotreply",
+    "notification",
+    "notifications",
+    "newsletter",
+    "news",
+    "mail",
+    "mailer",
+}
+
+GENERIC_REPLY_LOCAL_PARTS = {
+    "support",
+    "help",
+    "helpdesk",
+    "contact",
+    "contacts",
+    "info",
+    "assistenza",
+    "assistance",
+    "customer",
+    "customerservice",
+    "customer-service",
+    "service",
+    "reply",
+    "replies",
+}
+
+BULK_OR_CRM_HEADERS = {
+    "List-Unsubscribe",
+    "List-Id",
+    "List-Help",
+    "Precedence",
+    "X-Mailer",
+    "X-Campaign",
+    "X-Campaign-Id",
+    "X-Mailgun-Tag",
+    "X-MC-User",
+    "X-SFDC-LK",
+}
+
+
 def _extract_domain(email_or_addr: str) -> str:
     """Returns the domain portion of an email address, lowercased."""
     m = re.search(r"@([\w.\-]+)", email_or_addr or "")
@@ -41,6 +85,58 @@ def _registered_domain(domain: str) -> str:
 
 def _same_registered_domain(left: str, right: str) -> bool:
     return bool(left and right and _registered_domain(left) == _registered_domain(right))
+
+
+def _local_part(address: str | None) -> str:
+    if not address or "@" not in address:
+        return ""
+    return address.rsplit("@", 1)[0].lower().strip()
+
+
+def _has_bulk_or_crm_headers(msg) -> bool:
+    if any(msg.get(name) for name in BULK_OR_CRM_HEADERS):
+        return True
+    auto_submitted = str(msg.get("Auto-Submitted") or "").lower()
+    precedence = str(msg.get("Precedence") or "").lower()
+    return auto_submitted in {"auto-generated", "auto-replied"} or precedence in {"bulk", "list"}
+
+
+def _reply_to_mismatch_looks_legitimate(msg, from_addr: str | None, reply_addr: str | None) -> bool:
+    if not from_addr or not reply_addr:
+        return False
+
+    from_domain = _extract_domain(from_addr)
+    reply_domain = _extract_domain(reply_addr)
+    if _same_registered_domain(from_domain, reply_domain):
+        return True
+
+    from_local = _local_part(from_addr)
+    reply_local = _local_part(reply_addr)
+    if not _has_bulk_or_crm_headers(msg):
+        return False
+
+    return (
+        from_local in NO_REPLY_LOCAL_PARTS
+        and reply_local in GENERIC_REPLY_LOCAL_PARTS
+    )
+
+
+def _pdf_indicator_flag_level(severity: str) -> str:
+    severity = (severity or "").lower()
+    if severity in {"critical", "high"}:
+        return "HIGH"
+    if severity == "medium":
+        return "MEDIUM"
+    return "INFO"
+
+
+def _non_pdf_attachment_anomaly(att: dict) -> str | None:
+    anomaly = str(att.get("anomaly") or "").strip()
+    if not anomaly:
+        return None
+    if anomaly.startswith("PDF risk "):
+        return None
+    return anomaly
 
 
 def _decode_text_part(part) -> str:
@@ -116,8 +212,15 @@ class EmlSOCAnalyzer:
 
         from_addr  = self._extract_address(report["from_"])
         reply_addr = self._extract_address(reply_to)
-        report["reply_to_mismatch"] = bool(
+        reply_to_mismatch_raw = bool(
             reply_addr and from_addr and reply_addr.lower() != from_addr.lower()
+        )
+        report["reply_to_mismatch_legitimate"] = (
+            reply_to_mismatch_raw
+            and _reply_to_mismatch_looks_legitimate(msg, from_addr, reply_addr)
+        )
+        report["reply_to_mismatch"] = bool(
+            reply_to_mismatch_raw and not report["reply_to_mismatch_legitimate"]
         )
 
         return_path_addr   = self._extract_address(report["return_path"])
@@ -333,6 +436,13 @@ class EmlSOCAnalyzer:
         if report["reply_to_mismatch"]:
             flag("HIGH", "Reply-To",
                  f"Reply-To ({report['reply_to']}) differs da From ({report['from_']}) - possible harvesting")
+        elif report.get("reply_to_mismatch_legitimate"):
+            flag(
+                "INFO",
+                "Reply-To",
+                f"Reply-To ({report['reply_to']}) differs from From ({report['from_']}), "
+                "but matches a common legitimate routing pattern.",
+            )
 
         # Return-Path domain mismatch
         if report.get("return_path_domain_mismatch"):
@@ -373,10 +483,20 @@ class EmlSOCAnalyzer:
 
         # Anomalie allegati
         for att in report.get("attachments", []):
-            if att.get("anomaly"):
+            attachment_anomaly = _non_pdf_attachment_anomaly(att)
+            if attachment_anomaly:
                 flag("HIGH", "Attachment",
-                     f"'{att['filename']}': {att['anomaly']}")
+                     f"'{att['filename']}': {attachment_anomaly}")
             pdf_security = att.get("pdf_security") or {}
+            for indicator in (pdf_security.get("indicators") or [])[:8]:
+                flag(
+                    _pdf_indicator_flag_level(indicator.get("severity")),
+                    "PDF Content",
+                    f"'{att['filename']}': internal PDF indicator - "
+                    f"{indicator.get('label') or indicator.get('key') or 'indicator'} "
+                    f"x{indicator.get('count') or 1} "
+                    f"(pdf_risk={pdf_security.get('risk_level') or 'unknown'})",
+                )
             if pdf_security.get("suspicious"):
                 flag(
                     "HIGH",

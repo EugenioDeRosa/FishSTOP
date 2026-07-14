@@ -224,6 +224,43 @@ def _semantic_analysis_label(soc: dict) -> str:
     return "not available"
 
 
+def _pdf_indicator_summary(pdf_security: dict) -> str:
+    indicators = pdf_security.get("indicators") or []
+    if not indicators:
+        return "none"
+    parts = []
+    for item in indicators[:8]:
+        parts.append(
+            f"{item.get('label') or item.get('key') or 'indicator'} "
+            f"severity={item.get('severity') or 'unknown'} "
+            f"count={item.get('count') or 1}"
+        )
+    return "; ".join(parts)
+
+
+def _pdf_context_lines(att: dict) -> list[str]:
+    pdf_security = att.get("pdf_security") or {}
+    if not pdf_security or not pdf_security.get("is_pdf"):
+        return []
+
+    risk_level = pdf_security.get("risk_level") or "unknown"
+    indicators = _pdf_indicator_summary(pdf_security)
+    summary = pdf_security.get("summary") or "-"
+    suspicious = bool(pdf_security.get("suspicious"))
+
+    if suspicious:
+        importance = "IMPORTANT phishing indicator: PDF contains risky active/internal features"
+    elif risk_level in {"medium", "low"}:
+        importance = "PDF static finding: review as supporting context, not proof by itself"
+    else:
+        importance = "PDF static finding: no active internal PDF features detected"
+
+    return [
+        f"{importance}; risk={risk_level}; suspicious={suspicious}; score={pdf_security.get('score', 0)}; summary={summary}",
+        f"PDF internal indicators: {indicators}",
+    ]
+
+
 def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation: dict | None = None) -> list[str]:
     spf_status = _auth_status(soc, "SPF")
     dkim_status = _auth_status(soc, "DKIM")
@@ -286,6 +323,7 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
                 f"pdf_risk={(att.get('pdf_security') or {}).get('risk_level') or '-'} "
                 f"pdf_findings={(att.get('pdf_security') or {}).get('summary') or '-'}"
             )
+            lines.extend(_pdf_context_lines(att))
 
     body_text_for_flags = cleaned_body or str(
         soc.get("body_ai") or soc.get("body_extracted") or soc.get("body_clean") or soc.get("body") or ""
@@ -410,7 +448,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "(pay, login, share credentials, open a form, reply, accept a promo, activate an offer/free trial/subscription, register for a prize/giveaway, handle an invoice, or normal admin task). "
                 "Ignore [EMAIL]/[URL]/[IP]/[PHONE]/[IBAN]/[POSSIBLE_CARD_OR_ACCOUNT] placeholders as identity clues.\n"
                 "Step 2: use only the structured FishSTOP facts below (semantic analysis from BERT, SPF/DKIM/DMARC, Return-Path/Reply-To mismatch, "
-                "display-name spoofing, VirusTotal detections and crowdsourced context, attachment anomalies, SOC flags) as corroboration only - never invent new risks. "
+                "display-name spoofing, VirusTotal detections and crowdsourced context, attachment anomalies, internal PDF indicators, SOC flags) as corroboration only - never invent new risks. "
                 "Never treat mail clients, mobile apps, user-agent strings, automatic signatures, or sent-from/get-app footers as suspicious, unusual, or sender identity evidence.\n\n"
                 "Start the paragraph with exactly one of:\n"
                 "- The email provided is suspicious because\n"
@@ -426,7 +464,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "A lone VirusTotal 'suspicious' is not enough on its own (note it as manual-check only); "
                 "a malicious VirusTotal result on any link is always a strong signal. "
                 "Only a malicious VirusTotal result, or 'suspicious' plus a concrete identity, link, or attachment anomaly, may override "
-                "a normal body.\n"
+                "a normal body. Treat high/critical internal PDF active-content indicators such as JavaScript, OpenAction, Launch, embedded files, XFA, SubmitForm, RichMedia, or remote go-to actions as important concrete attachment evidence for phishing; medium/low PDF findings are supporting context only.\n"
                 "Never claim money/payment/bank-detail, credential, urgency, or click evidence unless it is explicitly present in "
                 "the visible anonymized body. Do not treat password/security wording alone as credential theft; require a link, form, click/open instruction, "
                 "or an explicit request to enter/share credentials. Never cite IP, geolocation, routing, full URLs, emails, phone numbers, "
@@ -446,7 +484,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "or signing weekly attendance, personal scheduling notes, absence notices, exam/course logistics, and academic publication invitations are not suspicious "
                 "unless paired with money, credential submission, bank details, malicious links, external sensitive forms, impersonation, or unusual coercive urgency. "
                 "If the body reads as ordinary administrative/personal content with no risky ask, classify the email as not suspicious "
-                "unless VirusTotal is malicious on any link or there is a concrete identity, link, or attachment anomaly; missing, failed, or absent SPF/DKIM/DMARC alone is not enough.\n"
+                "unless VirusTotal is malicious on any link or there is a concrete identity, link, attachment anomaly, or high/critical internal PDF active-content indicator; missing, failed, or absent SPF/DKIM/DMARC alone is not enough.\n"
                 "If useful link details are provided, explain whether the body asks the recipient to use them. Do not classify based on a generic extracted link alone. "
                 "Mention the content-based reason first, then one short clause on whether the technical checks support, "
                 "weaken, or don't change that assessment. Do not repeat internal labels such as technical context, internal handling notes or verdict-evidence labels in the final answer. "

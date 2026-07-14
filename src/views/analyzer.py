@@ -89,6 +89,19 @@ def _render_flag(flag: dict):
         st.caption(label)
 
 
+def _main_alert_flags(flags: list[dict], limit: int = 5) -> list[dict]:
+    severity_rank = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "INFO": 3}
+    pdf_priority_fields = {"PDF Content", "PDF Attachment"}
+    return sorted(
+        flags,
+        key=lambda flag: (
+            severity_rank.get(flag.get("level", "INFO"), 9),
+            0 if flag.get("field") in pdf_priority_fields else 1,
+            flag.get("field", ""),
+        ),
+    )[:limit]
+
+
 def _field_value(label: str, value: str | None):
     value = str(value or "-")
     st.write(f"**{label}:** `{value}`")
@@ -740,10 +753,11 @@ def render():
             if flags:
                 with st.container(border=True):
                     st.markdown("#### Main alerts")
-                    for flag in flags[:5]:
+                    main_flags = _main_alert_flags(flags)
+                    for flag in main_flags:
                         _render_flag(flag)
-                    if len(flags) > 5:
-                        st.caption(f"Altri {len(flags) - 5} indicators are available in the SOC Details tab.")
+                    if len(flags) > len(main_flags):
+                        st.caption(f"Altri {len(flags) - len(main_flags)} indicators are available in the SOC Details tab.")
 
             overview, identity, auth, links_tab, attach_tab, ioc_tab, content_tab, raw_tab = st.tabs(
                 [

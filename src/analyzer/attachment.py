@@ -411,7 +411,15 @@ def analyze_pdf_security(raw: bytes) -> dict:
 
     encrypted = bool(static_stats["encrypted"] or structural_stats.get("is_encrypted"))
     parser_error = structural_stats.get("parser_error")
-    parser_error_for_risk = parser_error if structural_stats.get("parser_available") else None
+    parser_error_for_risk = None
+    if structural_stats.get("parser_available") and parser_error:
+        has_static_risk_context = bool(
+            indicators
+            or encrypted
+            or static_stats["suspicious_name_escapes"]
+            or static_stats["eof_count"] > 1
+        )
+        parser_error_for_risk = parser_error if has_static_risk_context else None
     score = sum(item["weight"] * min(item["count"], 3) for item in indicators)
     if encrypted:
         score += 15
@@ -438,6 +446,11 @@ def analyze_pdf_security(raw: bytes) -> dict:
         summary_parts.append(f"URL-like strings x{static_stats['uri_count']}")
     if parser_error_for_risk:
         summary_parts.append(f"structured parser error: {parser_error_for_risk}")
+    elif parser_error:
+        structural_stats["parser_warnings"] = (
+            structural_stats.get("parser_warnings", [])
+            + [f"Structured parser could not fully parse PDF: {parser_error}"]
+        )
 
     return {
         "is_pdf": True,

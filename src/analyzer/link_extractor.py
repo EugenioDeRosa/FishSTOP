@@ -87,6 +87,22 @@ def _same_registered_domain(left: str, right: str) -> bool:
     return bool(left and right and _registered_domain(left) == _registered_domain(right))
 
 
+def _possible_shortener(host: str, path: str) -> tuple[bool, str]:
+    labels = (host or "").split(".")
+    sld = labels[-2] if len(labels) >= 2 else host
+    token = (path or "").strip("/").split("/", 1)[0]
+    compact_host = len(sld) <= 5 and len(host or "") <= 12
+    compact_token = 4 <= len(token) <= 12 and bool(re.fullmatch(r"[A-Za-z0-9_-]+", token))
+    mixed_token = any(ch.isalpha() for ch in token) and any(ch.isdigit() for ch in token)
+
+    if compact_host and compact_token:
+        reason = "compact host with short opaque path"
+        if mixed_token:
+            reason += " containing letters and digits"
+        return True, reason
+    return False, ""
+
+
 def extract_links(body_plain: str, body_html: str) -> list[dict]:
     """
     Extracts all links from the email body.
@@ -116,6 +132,7 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
 
         display_text = (display or "").strip()
         display_url, display_host = _extract_display_destination(display_text)
+        is_shortener, shortener_reason = _possible_shortener(host, parsed.path)
 
         links.append({
             "url": url,
@@ -127,6 +144,8 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
             "scheme": scheme,
             "source": source,
             "is_ip": is_ip_url(host),
+            "is_possible_shortener": is_shortener,
+            "shortener_reason": shortener_reason,
         })
 
     def _add_unicode_bare_domains(text: str, source: str) -> None:

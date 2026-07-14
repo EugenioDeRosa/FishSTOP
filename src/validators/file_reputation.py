@@ -1,5 +1,7 @@
 import datetime
 import base64
+from urllib.parse import urlparse
+
 import requests
 
 VIRUSTOTAL_ENDPOINT = "https://www.virustotal.com/api/v3/files"
@@ -104,6 +106,74 @@ def check_file_hash(api_key: str, sha256: str) -> dict:
 def _url_id(url: str) -> str:
     encoded = base64.urlsafe_b64encode(url.encode("utf-8")).decode("ascii")
     return encoded.rstrip("=")
+
+
+def _host(value: str) -> str:
+    try:
+        return (urlparse(value or "").hostname or "").lower()
+    except Exception:
+        return ""
+
+
+def _registered_domain(host: str) -> str:
+    parts = (host or "").lower().rstrip(".").split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return host or ""
+
+
+def _destination_base(url: str) -> dict:
+    return {
+        "final_url": url or "",
+        "final_host": _host(url),
+        "destination_status": "not_checked",
+        "destination_match": False,
+        "destination_message": "",
+        "redirect_count": 0,
+    }
+
+
+def _check_destination(url: str) -> dict:
+    info = _destination_base(url)
+    if not url:
+        info.update({"destination_status": "skipped", "destination_message": "No URL provided"})
+        return info
+
+    try:
+        resp = _session.get(url, allow_redirects=True, timeout=5, stream=True)
+        final_url = getattr(resp, "url", url) or url
+        final_host = _host(final_url)
+        original_host = _host(url)
+        redirect_count = len(getattr(resp, "history", []) or [])
+        destination_match = bool(
+            original_host
+            and final_host
+            and _registered_domain(original_host) == _registered_domain(final_host)
+        )
+        info.update({
+            "final_url": final_url,
+            "final_host": final_host,
+            "destination_status": "match" if destination_match else "mismatch",
+            "destination_match": destination_match,
+            "destination_message": "Destination matches original domain" if destination_match else "Destination differs from original domain",
+            "redirect_count": redirect_count,
+        })
+        close = getattr(resp, "close", None)
+        if callable(close):
+            close()
+        return info
+    except requests.exceptions.Timeout as exc:
+        info.update({
+            "destination_status": "unavailable",
+            "destination_message": f"Timeout while checking destination: {exc}",
+        })
+        return info
+    except Exception as exc:
+        info.update({
+            "destination_status": "unavailable",
+            "destination_message": f"Destination check unavailable: {exc}",
+        })
+        return info
 
 
 def _as_list(value) -> list:
@@ -241,6 +311,7 @@ def _format_vt_url(data: dict, base: dict) -> dict:
 
 
 def check_url(api_key: str, url: str) -> dict:
+    destination = _check_destination(url)
     base = {
         "url": url or "",
         "status": "skipped",
@@ -258,6 +329,7 @@ def check_url(api_key: str, url: str) -> dict:
         "crowdsourced_context_summary": "",
         "permalink": f"https://www.virustotal.com/gui/url/{_url_id(url) if url else ''}",
         "message": "",
+        **destination,
     }
 
     if not url:
