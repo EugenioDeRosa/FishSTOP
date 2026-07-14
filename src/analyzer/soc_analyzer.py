@@ -412,7 +412,7 @@ class EmlSOCAnalyzer:
             if spf_status != "pass":
                 flag("MEDIUM", "SPF", f"SPF {spf_status.upper()} - sender authorization should be reviewed")
         else:
-            flag("LOW", "SPF", "No SPF result found in headers")
+            flag("MEDIUM", "SPF", "No SPF result found in headers")
 
         # DKIM: missing/none is an absence of evidence, not a strong malicious signal.
         dkim = report["auth_results"].get("DKIM") or report["arc_auth_results"].get("DKIM")
@@ -420,7 +420,7 @@ class EmlSOCAnalyzer:
         if dkim_status and dkim_status != "pass":
             flag("MEDIUM", "DKIM", f"DKIM {dkim_status.upper()} - signature validation should be reviewed")
         elif not report["dkim_signature_present"]:
-            flag("LOW", "DKIM", "DKIM signature missing from headers")
+            flag("MEDIUM", "DKIM", "DKIM signature missing from headers")
 
         # DMARC
         dmarc = report["auth_results"].get("DMARC") or report["arc_auth_results"].get("DMARC")
@@ -485,13 +485,13 @@ class EmlSOCAnalyzer:
                 flag("HIGH", "Attachment",
                      f"'{att['filename']}': {attachment_anomaly}")
             pdf_security = att.get("pdf_security") or {}
-            for indicator in (pdf_security.get("indicators") or [])[:8]:
+            for behavior in (pdf_security.get("behaviors") or [])[:8]:
                 flag(
-                    _pdf_indicator_flag_level(indicator.get("severity")),
+                    _pdf_indicator_flag_level(behavior.get("severity")),
                     "PDF Content",
-                    f"'{att['filename']}': internal PDF indicator - "
-                    f"{indicator.get('label') or indicator.get('key') or 'indicator'} "
-                    f"x{indicator.get('count') or 1} "
+                    f"'{att['filename']}': internal PDF behavior - "
+                    f"{behavior.get('label') or behavior.get('key') or 'behavior'} "
+                    f"x{behavior.get('count') or 1} "
                     f"(pdf_risk={pdf_security.get('risk_level') or 'unknown'})",
                 )
             if pdf_security.get("suspicious"):

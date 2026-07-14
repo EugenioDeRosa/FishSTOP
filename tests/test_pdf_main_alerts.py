@@ -23,6 +23,10 @@ def test_pdf_internal_indicators_are_soc_flags():
                     "risk_level": "high",
                     "suspicious": True,
                     "summary": "embedded JavaScript x1; automatic action on document open x1",
+                    "behaviors": [
+                        {"label": "contains executable JavaScript", "severity": "high", "count": 1},
+                        {"label": "runs an action when the document opens", "severity": "high", "count": 1},
+                    ],
                     "indicators": [
                         {"label": "embedded JavaScript", "severity": "high", "count": 1},
                         {"label": "automatic action on document open", "severity": "high", "count": 1},
@@ -39,8 +43,8 @@ def test_pdf_internal_indicators_are_soc_flags():
 
     assert len(pdf_content_flags) == 2
     assert all(flag["level"] == "HIGH" for flag in pdf_content_flags)
-    assert any("embedded JavaScript" in flag["message"] for flag in pdf_content_flags)
-    assert any("automatic action on document open" in flag["message"] for flag in pdf_content_flags)
+    assert any("contains executable JavaScript" in flag["message"] for flag in pdf_content_flags)
+    assert any("runs an action when the document opens" in flag["message"] for flag in pdf_content_flags)
 
 
 def test_main_alerts_prioritize_pdf_content_flags():
@@ -77,6 +81,7 @@ def test_pdf_risk_anomaly_does_not_create_duplicate_attachment_flag():
                     "risk_level": "critical",
                     "suspicious": True,
                     "summary": "external URI action x9",
+                    "behaviors": [],
                     "indicators": [
                         {"label": "external URI action", "severity": "medium", "count": 9},
                     ],
@@ -91,5 +96,5 @@ def test_pdf_risk_anomaly_does_not_create_duplicate_attachment_flag():
 
     assert not [flag for flag in flags if flag["field"] == "Attachment"]
     assert [flag for flag in flags if flag["field"] == "PDF Attachment"]
-    assert [flag for flag in flags if flag["field"] == "PDF Content"]
+    assert not [flag for flag in flags if flag["field"] == "PDF Content"]
 

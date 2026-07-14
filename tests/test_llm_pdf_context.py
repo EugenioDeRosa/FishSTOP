@@ -28,8 +28,11 @@ def test_phi4_prompt_includes_internal_pdf_indicators():
                     "is_pdf": True,
                     "risk_level": "high",
                     "suspicious": True,
-                    "score": 80,
                     "summary": "embedded JavaScript x1; automatic action on document open x1",
+                    "behaviors": [
+                        {"key": "javascript", "label": "contains executable JavaScript", "severity": "high", "count": 1},
+                        {"key": "open_action", "label": "runs an action when the document opens", "severity": "high", "count": 1},
+                    ],
                     "indicators": [
                         {"label": "embedded JavaScript", "severity": "high", "count": 1},
                         {"label": "automatic action on document open", "severity": "high", "count": 1},
@@ -42,6 +45,7 @@ def test_phi4_prompt_includes_internal_pdf_indicators():
     prompt = build_fast_email_prompt(soc)
 
     assert "IMPORTANT phishing indicator: PDF contains risky active/internal features" in prompt
+    assert "PDF malicious behaviors" in prompt
     assert "PDF internal indicators" in prompt
     assert "embedded JavaScript severity=high count=1" in prompt
     assert "automatic action on document open severity=high count=1" in prompt
@@ -77,8 +81,8 @@ def test_phi4_prompt_does_not_duplicate_pdf_flags_in_soc_flags():
                     "is_pdf": True,
                     "risk_level": "critical",
                     "suspicious": True,
-                    "score": 80,
                     "summary": "external URI action x9",
+                    "behaviors": [],
                     "indicators": [
                         {"label": "external URI action", "severity": "medium", "count": 9},
                     ],
@@ -89,6 +93,7 @@ def test_phi4_prompt_does_not_duplicate_pdf_flags_in_soc_flags():
 
     prompt = build_fast_email_prompt(soc)
 
+    assert "PDF malicious behaviors: none" in prompt
     assert "PDF internal indicators: external URI action severity=medium count=9" in prompt
     assert "anomaly=none pdf_risk=critical" in prompt
     assert "- HIGH PDF Attachment" not in prompt

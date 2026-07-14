@@ -34,11 +34,11 @@ def test_any_non_pass_dkim_result_is_medium():
         assert not any(flag["field"] == "DKIM" and flag["level"] == "HIGH" for flag in flags)
 
 
-def test_missing_dkim_signature_stays_low():
+def test_missing_dkim_signature_is_medium():
     flags = EmlSOCAnalyzer._build_flags(_base_report(None, signature_present=False))
 
     assert {
-        "level": "LOW",
+        "level": "MEDIUM",
         "field": "DKIM",
         "message": "DKIM signature missing from headers",
     } in flags

@@ -5,6 +5,7 @@ import io
 import re
 from collections import Counter
 from typing import Optional
+from urllib.parse import parse_qsl, unquote, urlparse
 
 from .constants import CONTENT_TYPE_TO_EXT, MAGIC_BYTES
 
@@ -18,85 +19,86 @@ PDF_RISK_DEFINITIONS: dict[str, dict] = {
         "names": {"/JavaScript", "/JS"},
         "label": "embedded JavaScript",
         "severity": "high",
-        "weight": 45,
     },
     "open_action": {
         "names": {"/OpenAction"},
         "label": "automatic action on document open",
-        "severity": "high",
-        "weight": 35,
+        "severity": "medium",
     },
     "additional_action": {
         "names": {"/AA"},
         "label": "additional automatic action",
         "severity": "high",
-        "weight": 30,
     },
     "launch_action": {
         "names": {"/Launch"},
         "label": "launch action",
         "severity": "critical",
-        "weight": 60,
     },
     "embedded_file": {
         "names": {"/EmbeddedFile", "/Filespec", "/EmbeddedFiles"},
         "label": "embedded file or attachment reference",
         "severity": "high",
-        "weight": 35,
     },
     "acroform": {
         "names": {"/AcroForm"},
         "label": "interactive form",
         "severity": "low",
-        "weight": 8,
     },
     "xfa": {
         "names": {"/XFA"},
         "label": "XFA form content",
         "severity": "high",
-        "weight": 35,
     },
     "uri": {
         "names": {"/URI"},
         "label": "external URI action",
-        "severity": "medium",
-        "weight": 15,
+        "severity": "low",
     },
     "submit_form": {
         "names": {"/SubmitForm"},
         "label": "form submission action",
         "severity": "high",
-        "weight": 35,
     },
     "rich_media": {
         "names": {"/RichMedia", "/Movie", "/Sound", "/3D"},
         "label": "active media content",
         "severity": "high",
-        "weight": 30,
     },
     "remote_goto": {
         "names": {"/GoToR", "/GoToE"},
         "label": "remote or embedded go-to action",
-        "severity": "medium",
-        "weight": 20,
+        "severity": "low",
     },
     "import_data": {
         "names": {"/ImportData"},
         "label": "external data import action",
         "severity": "high",
-        "weight": 35,
     },
     "jbig2": {
         "names": {"/JBIG2Decode"},
         "label": "JBIG2 compressed stream",
-        "severity": "medium",
-        "weight": 12,
+        "severity": "low",
     },
     "object_stream": {
         "names": {"/ObjStm", "/XRefStm"},
         "label": "compressed object/xref stream",
-        "severity": "low",
-        "weight": 6,
+        "severity": "info",
+    },
+    "uri_nested_redirect": {
+        "names": set(),
+        "label": "URI action with nested redirect URL",
+        "severity": "high",
+    },
+    "uri_tracked_redirect": {
+        "names": set(),
+        "label": "tracked redirect URI action",
+        "severity": "high",
+    },
+    "public_site_landing": {
+        "names": set(),
+        "label": "URI action to public site-builder landing page",
+        "severity": "high",
     },
 }
 
@@ -106,22 +108,98 @@ PDF_NAME_TO_KEY = {
     for name in definition["names"]
 }
 
-PDF_ACTIVE_CONTENT_KEYS = {
+
+PDF_MALICIOUS_ACTION_KEYS = {
     "javascript",
-    "open_action",
     "additional_action",
     "launch_action",
     "embedded_file",
     "xfa",
     "submit_form",
     "rich_media",
-    "remote_goto",
     "import_data",
+    "uri_nested_redirect",
+    "uri_tracked_redirect",
+    "public_site_landing",
 }
+
+PDF_CONTEXT_ONLY_KEYS = {
+    "uri",
+    "remote_goto",
+    "jbig2",
+    "object_stream",
+    "acroform",
+}
+
+
+def _indicator_keys(indicators: list[dict]) -> set[str]:
+    return {str(item.get("key") or "") for item in indicators}
+
+
+def _indicator_count(indicators: list[dict], key: str) -> int:
+    for item in indicators:
+        if item.get("key") == key:
+            return int(item.get("count") or 0)
+    return 0
+
+
+def _pdf_behavior_findings(indicators: list[dict]) -> list[dict]:
+    keys = _indicator_keys(indicators)
+    findings: list[dict] = []
+
+    def add(key: str, label: str, severity: str) -> None:
+        count = _indicator_count(indicators, key) or 1
+        findings.append({"key": key, "label": label, "severity": severity, "count": count})
+
+    if "launch_action" in keys:
+        add("launch_action", "launches an external command or file", "critical")
+    if "javascript" in keys:
+        add("javascript", "contains executable JavaScript", "high")
+    if "submit_form" in keys:
+        add("submit_form", "submits form data externally", "high")
+    if "import_data" in keys:
+        add("import_data", "imports external data", "high")
+    if "xfa" in keys:
+        add("xfa", "contains XFA active form content", "high")
+    if "embedded_file" in keys:
+        add("embedded_file", "contains embedded file attachment references", "high")
+    if "rich_media" in keys:
+        add("rich_media", "contains active rich media", "high")
+    if "additional_action" in keys:
+        add("additional_action", "contains additional automatic actions", "high")
+    if "uri_nested_redirect" in keys:
+        add("uri_nested_redirect", "contains a URI action with a hidden redirect URL", "high")
+    if "uri_tracked_redirect" in keys:
+        add("uri_tracked_redirect", "uses tracking or analytics parameters before redirecting", "high")
+    if "public_site_landing" in keys:
+        add("public_site_landing", "points to a public site-builder landing page", "high")
+    if "open_action" in keys and keys & {"javascript", "launch_action", "submit_form", "rich_media", "import_data"}:
+        add("open_action", "runs an action when the document opens", "high")
+
+    severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    return sorted(findings, key=lambda item: (severity_order.get(item["severity"], 9), item["label"]))
+
+
+def _risk_level(indicators: list[dict], encrypted: bool, parser_error: str | None, behaviors: list[dict]) -> str:
+    if any(item.get("severity") == "critical" for item in behaviors):
+        return "critical"
+    if behaviors:
+        return "high"
+    if encrypted or parser_error:
+        return "medium"
+    if any(item.get("key") in PDF_CONTEXT_ONLY_KEYS for item in indicators):
+        return "low"
+    return "clean"
+
 
 PDF_NAME_RE = re.compile(r"/[A-Za-z0-9_.:+#-]+")
 PDF_HEX_ESCAPE_RE = re.compile(r"#([0-9A-Fa-f]{2})")
 URL_RE = re.compile(rb"https?://|mailto:", re.IGNORECASE)
+PDF_URL_TEXT_RE = re.compile(r"https?://[^\s<>()\[\]{}\"']+", re.IGNORECASE)
+PDF_OBJECT_RE = re.compile(r"(?P<object>\d+\s+\d+\s+obj)(?P<body>.*?)(?:endobj|$)", re.IGNORECASE | re.DOTALL)
+PDF_REDIRECT_PARAM_NAMES = {"url", "u", "uri", "target", "to", "dest", "destination", "redirect", "redirect_uri", "return", "returnurl", "next", "continue", "__url"}
+PDF_TRACKING_PARAM_MARKERS = ("uid", "analytics", "track", "click", "pixel", "count", "campaign", "visitor", "session")
+PDF_PUBLIC_SITE_LANDING_HOSTS = {"sites.google.com", "forms.gle", "docs.google.com", "forms.office.com"}
 
 
 def identify_magic_bytes(raw: bytes) -> Optional[str]:
@@ -178,13 +256,163 @@ def _indicator_list(counter: Counter) -> list[dict]:
             "label": definition.get("label", key),
             "severity": definition.get("severity", "info"),
             "count": count,
-            "weight": definition.get("weight", 0),
         })
     severity_order = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4}
     return sorted(
         indicators,
         key=lambda item: (severity_order.get(item["severity"], 9), -item["count"], item["label"]),
     )
+
+
+def _decode_url_repeated(value: str) -> str:
+    decoded = value
+    for _ in range(3):
+        next_decoded = unquote(decoded)
+        if next_decoded == decoded:
+            break
+        decoded = next_decoded
+    return decoded
+
+
+def _normalized_host(url: str) -> str:
+    try:
+        return (urlparse(url).hostname or "").lower().strip(".")
+    except Exception:
+        return ""
+
+
+def _is_public_site_landing(url: str) -> bool:
+    parsed = urlparse(url)
+    host = (parsed.hostname or "").lower().strip(".")
+    path = (parsed.path or "").lower()
+    if host == "sites.google.com" and path.startswith("/view/"):
+        return True
+    if host in PDF_PUBLIC_SITE_LANDING_HOSTS - {"sites.google.com", "docs.google.com"}:
+        return True
+    if host == "docs.google.com" and path.startswith("/forms/"):
+        return True
+    return False
+
+
+def _find_nested_redirect_urls(url: str) -> list[str]:
+    nested: list[str] = []
+    parsed = urlparse(url)
+    for name, value in parse_qsl(parsed.query, keep_blank_values=True):
+        decoded_value = _decode_url_repeated(value)
+        if name.lower() in PDF_REDIRECT_PARAM_NAMES and decoded_value.lower().startswith(("http://", "https://")):
+            nested.append(decoded_value)
+        else:
+            nested.extend(PDF_URL_TEXT_RE.findall(decoded_value))
+    decoded_url = _decode_url_repeated(url)
+    if decoded_url != url:
+        for nested_url in PDF_URL_TEXT_RE.findall(decoded_url):
+            if nested_url != url and nested_url not in nested:
+                nested.append(nested_url)
+    return nested[:10]
+
+
+def _has_tracking_params(url: str) -> bool:
+    parsed = urlparse(url)
+    host_path = f"{parsed.hostname or ''} {parsed.path or ''}".lower()
+    query_names = [name.lower() for name, _ in parse_qsl(parsed.query, keep_blank_values=True)]
+    if any(marker in host_path for marker in ("analytics", "tracking", "track", "pixel", "count")):
+        return True
+    return any(any(marker in name for marker in PDF_TRACKING_PARAM_MARKERS) for name in query_names)
+
+
+def _empty_uri_evidence() -> dict:
+    return {
+        "url_count": 0,
+        "uri_action_url_count": 0,
+        "nested_redirect_count": 0,
+        "tracked_redirect_count": 0,
+        "public_site_landing_count": 0,
+        "samples": [],
+        "signatures": [],
+    }
+
+
+def _uri_evidence_from_action_urls(action_urls: list[dict], url_count: int | None = None) -> dict:
+    evidence = _empty_uri_evidence()
+    evidence["url_count"] = len(action_urls) if url_count is None else int(url_count)
+    evidence["uri_action_url_count"] = len(action_urls)
+    seen_details: set[str] = set()
+    seen_signatures: set[str] = set()
+
+    for item in action_urls:
+        url = str(item.get("url") or "")
+        if not url:
+            continue
+        nested_urls = _find_nested_redirect_urls(url)
+        has_redirect = bool(nested_urls)
+        has_tracking = _has_tracking_params(url)
+        targets = nested_urls or [url]
+        has_public_landing = any(_is_public_site_landing(target) for target in targets)
+        signature = "|".join([url] + nested_urls)
+        if signature in seen_signatures:
+            continue
+        seen_signatures.add(signature)
+
+        if has_redirect:
+            evidence["nested_redirect_count"] += 1
+            if has_tracking:
+                evidence["tracked_redirect_count"] += 1
+        if has_public_landing:
+            evidence["public_site_landing_count"] += 1
+        if has_redirect or has_public_landing:
+            object_label = f"object {item['object']}" if item.get("object") else "PDF URI"
+            hosts = [_normalized_host(url)] + [_normalized_host(target) for target in nested_urls]
+            hosts = [host for host in hosts if host]
+            detail = f"{object_label}: " + " -> ".join(dict.fromkeys(hosts))
+            if detail not in seen_details:
+                evidence["samples"].append(detail)
+                seen_details.add(detail)
+
+    evidence["samples"] = evidence["samples"][:5]
+    evidence["signatures"] = sorted(seen_signatures)[:50]
+    return evidence
+
+
+def _merge_uri_evidence(*items: dict) -> dict:
+    merged = _empty_uri_evidence()
+    seen_signatures: set[str] = set()
+    seen_samples: set[str] = set()
+    for item in items:
+        if not item:
+            continue
+        merged["url_count"] += int(item.get("url_count") or 0)
+        merged["uri_action_url_count"] += int(item.get("uri_action_url_count") or 0)
+        signatures = set(item.get("signatures") or [])
+        duplicate = bool(signatures and signatures <= seen_signatures)
+        if not duplicate:
+            merged["nested_redirect_count"] += int(item.get("nested_redirect_count") or 0)
+            merged["tracked_redirect_count"] += int(item.get("tracked_redirect_count") or 0)
+            merged["public_site_landing_count"] += int(item.get("public_site_landing_count") or 0)
+        seen_signatures.update(signatures)
+        for sample in item.get("samples") or []:
+            if sample not in seen_samples:
+                merged["samples"].append(sample)
+                seen_samples.add(sample)
+    merged["samples"] = merged["samples"][:5]
+    merged["signatures"] = sorted(seen_signatures)[:50]
+    return merged
+
+
+def _extract_pdf_uri_evidence(text: str) -> dict:
+    all_urls = PDF_URL_TEXT_RE.findall(text)
+    action_urls: list[dict] = []
+    for match in PDF_OBJECT_RE.finditer(text):
+        obj_name = " ".join(match.group("object").split()[:2])
+        body = match.group("body")
+        if "/URI" not in body:
+            continue
+        for url in PDF_URL_TEXT_RE.findall(body):
+            action_urls.append({"object": obj_name, "url": url})
+
+    if not action_urls:
+        action_urls = [{"object": None, "url": url} for url in all_urls]
+
+    return _uri_evidence_from_action_urls(action_urls, url_count=len(all_urls))
 
 
 def _static_pdf_indicators(raw: bytes) -> tuple[Counter, dict]:
@@ -201,6 +429,13 @@ def _static_pdf_indicators(raw: bytes) -> tuple[Counter, dict]:
             _add_indicator(counter, key, count)
 
     uri_count = len(URL_RE.findall(raw))
+    uri_evidence = _extract_pdf_uri_evidence(text)
+    if uri_evidence["nested_redirect_count"]:
+        _add_indicator(counter, "uri_nested_redirect", uri_evidence["nested_redirect_count"])
+    if uri_evidence["tracked_redirect_count"]:
+        _add_indicator(counter, "uri_tracked_redirect", uri_evidence["tracked_redirect_count"])
+    if uri_evidence["public_site_landing_count"]:
+        _add_indicator(counter, "public_site_landing", uri_evidence["public_site_landing_count"])
     object_count = len(re.findall(rb"\b\d+\s+\d+\s+obj\b", raw))
     stream_count = len(re.findall(rb"\bstream\b", raw))
     encrypted = b"/Encrypt" in raw or "/Encrypt" in text
@@ -213,6 +448,7 @@ def _static_pdf_indicators(raw: bytes) -> tuple[Counter, dict]:
         "encrypted": encrypted,
         "suspicious_name_escapes": suspicious_name_escapes,
         "eof_count": eof_count,
+        "uri_evidence": uri_evidence,
     }
 
 
@@ -223,7 +459,7 @@ def _safe_pdf_str(value) -> str:
         return ""
 
 
-def _scan_pypdf_object(obj, counter: Counter, stats: dict, seen: set[int], depth: int = 0) -> None:
+def _scan_pypdf_object(obj, counter: Counter, stats: dict, seen: set[int], depth: int = 0, object_label: str | None = None) -> None:
     if obj is None or depth > 35 or stats["walked_nodes"] >= PDF_OBJECT_WALK_LIMIT:
         return
 
@@ -235,7 +471,12 @@ def _scan_pypdf_object(obj, counter: Counter, stats: dict, seen: set[int], depth
 
     try:
         if hasattr(obj, "get_object") and obj.__class__.__name__ == "IndirectObject":
-            _scan_pypdf_object(obj.get_object(), counter, stats, seen, depth + 1)
+            ref_label = object_label
+            idnum = getattr(obj, "idnum", None)
+            generation = getattr(obj, "generation", None)
+            if idnum is not None and generation is not None:
+                ref_label = f"{idnum} {generation}"
+            _scan_pypdf_object(obj.get_object(), counter, stats, seen, depth + 1, ref_label)
             return
     except Exception as exc:
         stats["parser_warnings"].append(f"Indirect object read failed: {exc}")
@@ -251,12 +492,27 @@ def _scan_pypdf_object(obj, counter: Counter, stats: dict, seen: set[int], depth
             value_indicator_key = PDF_NAME_TO_KEY.get(value_name)
             if value_indicator_key:
                 _add_indicator(counter, value_indicator_key)
-            _scan_pypdf_object(raw_value, counter, stats, seen, depth + 1)
+            if key == "/URI":
+                urls = PDF_URL_TEXT_RE.findall(value_name)
+                if not urls and value_name.lower().startswith(("http://", "https://")):
+                    urls = [value_name]
+                if urls:
+                    uri_evidence = _uri_evidence_from_action_urls([
+                        {"object": object_label, "url": url} for url in urls
+                    ], url_count=len(urls))
+                    stats["uri_evidence"] = _merge_uri_evidence(stats.get("uri_evidence") or {}, uri_evidence)
+                    if uri_evidence["nested_redirect_count"]:
+                        _add_indicator(counter, "uri_nested_redirect", uri_evidence["nested_redirect_count"])
+                    if uri_evidence["tracked_redirect_count"]:
+                        _add_indicator(counter, "uri_tracked_redirect", uri_evidence["tracked_redirect_count"])
+                    if uri_evidence["public_site_landing_count"]:
+                        _add_indicator(counter, "public_site_landing", uri_evidence["public_site_landing_count"])
+            _scan_pypdf_object(raw_value, counter, stats, seen, depth + 1, object_label)
         return
 
     if isinstance(obj, (list, tuple)):
         for item in obj:
-            _scan_pypdf_object(item, counter, stats, seen, depth + 1)
+            _scan_pypdf_object(item, counter, stats, seen, depth + 1, object_label)
         return
 
     obj_text = _decode_pdf_name_escapes(_safe_pdf_str(obj))
@@ -281,6 +537,7 @@ def _pypdf_structural_scan(raw: bytes) -> tuple[Counter, dict]:
         "has_open_destination": False,
         "page_mode": None,
         "walked_nodes": 0,
+        "uri_evidence": _empty_uri_evidence(),
     }
 
     try:
@@ -352,20 +609,6 @@ def _pypdf_structural_scan(raw: bytes) -> tuple[Counter, dict]:
     return counter, stats
 
 
-def _risk_level(score: int, indicators: list[dict], encrypted: bool, parser_error: str | None) -> str:
-    if any(item["key"] == "launch_action" for item in indicators):
-        return "critical"
-    if score >= 60 or any(item["severity"] == "critical" for item in indicators):
-        return "critical"
-    if score >= 35 or any(item["severity"] == "high" for item in indicators):
-        return "high"
-    if score >= 15 or encrypted or parser_error:
-        return "medium"
-    if score > 0:
-        return "low"
-    return "clean"
-
-
 def analyze_pdf_security(raw: bytes) -> dict:
     """Run static PDF risk checks without executing or rendering the document."""
     if not raw.startswith(b"%PDF"):
@@ -373,8 +616,8 @@ def analyze_pdf_security(raw: bytes) -> dict:
             "is_pdf": False,
             "risk_level": "not_pdf",
             "suspicious": False,
-            "score": 0,
             "indicators": [],
+            "behaviors": [],
             "summary": "Not a PDF document",
             "uri_count": 0,
             "object_count": 0,
@@ -390,9 +633,9 @@ def analyze_pdf_security(raw: bytes) -> dict:
         return {
             "is_pdf": True,
             "risk_level": "medium",
-            "suspicious": True,
-            "score": 20,
+            "suspicious": False,
             "indicators": [],
+            "behaviors": [],
             "summary": f"PDF too large for deep static scan ({len(raw)} bytes)",
             "uri_count": 0,
             "object_count": 0,
@@ -407,6 +650,17 @@ def analyze_pdf_security(raw: bytes) -> dict:
     static_counter, static_stats = _static_pdf_indicators(raw)
     structural_counter, structural_stats = _pypdf_structural_scan(raw)
     total_counter = static_counter + structural_counter
+    uri_evidence = _merge_uri_evidence(
+        static_stats.get("uri_evidence") or {},
+        structural_stats.get("uri_evidence") or {},
+    )
+    for key, evidence_key in (
+        ("uri_nested_redirect", "nested_redirect_count"),
+        ("uri_tracked_redirect", "tracked_redirect_count"),
+        ("public_site_landing", "public_site_landing_count"),
+    ):
+        if uri_evidence[evidence_key]:
+            total_counter[key] = uri_evidence[evidence_key]
     indicators = _indicator_list(total_counter)
 
     encrypted = bool(static_stats["encrypted"] or structural_stats.get("is_encrypted"))
@@ -420,20 +674,9 @@ def analyze_pdf_security(raw: bytes) -> dict:
             or static_stats["eof_count"] > 1
         )
         parser_error_for_risk = parser_error if has_static_risk_context else None
-    score = sum(item["weight"] * min(item["count"], 3) for item in indicators)
-    if encrypted:
-        score += 15
-    if static_stats["suspicious_name_escapes"]:
-        score += min(static_stats["suspicious_name_escapes"], 5) * 3
-    if static_stats["eof_count"] > 1:
-        score += 8
-    if parser_error_for_risk:
-        score += 15
-
-    risk_level = _risk_level(score, indicators, encrypted, parser_error_for_risk)
-    suspicious = risk_level in {"critical", "high"} or any(
-        item["key"] in PDF_ACTIVE_CONTENT_KEYS for item in indicators
-    )
+    behaviors = _pdf_behavior_findings(indicators)
+    risk_level = _risk_level(indicators, encrypted, parser_error_for_risk, behaviors)
+    suspicious = bool(behaviors)
 
     summary_parts = [f"{item['label']} x{item['count']}" for item in indicators[:8]]
     if encrypted:
@@ -444,6 +687,9 @@ def analyze_pdf_security(raw: bytes) -> dict:
         summary_parts.append(f"multiple EOF markers x{static_stats['eof_count']}")
     if static_stats["uri_count"] and not any(item["key"] == "uri" for item in indicators):
         summary_parts.append(f"URL-like strings x{static_stats['uri_count']}")
+    uri_samples = uri_evidence.get("samples") or []
+    if uri_samples:
+        summary_parts.append("URI evidence: " + "; ".join(uri_samples[:3]))
     if parser_error_for_risk:
         summary_parts.append(f"structured parser error: {parser_error_for_risk}")
     elif parser_error:
@@ -456,10 +702,11 @@ def analyze_pdf_security(raw: bytes) -> dict:
         "is_pdf": True,
         "risk_level": risk_level,
         "suspicious": suspicious,
-        "score": score,
         "indicators": indicators,
+        "behaviors": behaviors,
         "summary": "; ".join(summary_parts) if summary_parts else "No active PDF features detected",
         "uri_count": static_stats["uri_count"],
+        "uri_evidence": uri_evidence,
         "object_count": static_stats["object_count"],
         "stream_count": static_stats["stream_count"],
         "encrypted": encrypted,

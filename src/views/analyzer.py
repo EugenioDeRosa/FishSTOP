@@ -90,6 +90,27 @@ def _render_flag(flag: dict):
         st.caption(label)
 
 
+def _attachment_anomaly_without_pdf_risk(anomaly: str | None) -> str:
+    parts = [
+        part.strip()
+        for part in str(anomaly or "").split(";")
+        if part.strip() and not part.strip().startswith("PDF risk ")
+    ]
+    return "; ".join(parts)
+
+
+def _pdf_indicator_lines(pdf_security: dict) -> list[str]:
+    return [
+        f"{item.get('label') or item.get('key') or 'indicator'} x{item.get('count') or 1}"
+        for item in (pdf_security.get("indicators") or [])
+    ]
+
+
+def _pdf_status_text(pdf_security: dict) -> str:
+    risk_level = str(pdf_security.get("risk_level") or "unknown").upper()
+    return f"PDF risk: {risk_level}"
+
+
 def _main_alert_flags(flags: list[dict], limit: int = 5) -> list[dict]:
     severity_rank = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "INFO": 3}
     pdf_priority_fields = {"PDF Content", "PDF Attachment"}
@@ -958,8 +979,9 @@ def render():
                         c3.metric("Extension", att.get("extension_from_filename") or "-")
                         c4.metric("Magic", att.get("magic_detected_format") or "-")
 
-                        if att.get("anomaly"):
-                            st.error(att["anomaly"])
+                        non_pdf_anomaly = _attachment_anomaly_without_pdf_risk(att.get("anomaly"))
+                        if non_pdf_anomaly:
+                            st.error(non_pdf_anomaly)
                         elif att.get("extension_match") is True:
                             st.success("Extension, Content-Type e magic bytes coerenti.")
                         else:
@@ -967,16 +989,23 @@ def render():
 
                         pdf_security = att.get("pdf_security") or {}
                         if pdf_security:
-                            risk_level = pdf_security.get("risk_level") or "unknown"
                             if pdf_security.get("suspicious"):
-                                st.error(f"PDF static scan: {risk_level.upper()} - {pdf_security.get('summary')}")
+                                st.error(_pdf_status_text(pdf_security))
                             else:
-                                st.info(f"PDF static scan: {risk_level.upper()} - {pdf_security.get('summary')}")
-                            indicators = pdf_security.get("indicators") or []
-                            if indicators:
-                                with st.expander("PDF indicators"):
-                                    for item in indicators:
-                                        st.write(f"- {item.get('label')} x{item.get('count')}")
+                                st.info(_pdf_status_text(pdf_security))
+                            behavior_lines = [
+                                f"{item.get('label') or item.get('key') or 'behavior'} x{item.get('count') or 1}"
+                                for item in (pdf_security.get("behaviors") or [])
+                            ]
+                            if behavior_lines:
+                                st.caption("PDF malicious behaviors: " + "; ".join(behavior_lines[:6]))
+                            indicator_lines = _pdf_indicator_lines(pdf_security)
+                            if indicator_lines:
+                                st.caption("PDF indicators: " + "; ".join(indicator_lines[:6]))
+                                if len(indicator_lines) > 6:
+                                    with st.expander(f"Show {len(indicator_lines) - 6} more PDF indicators"):
+                                        for line in indicator_lines[6:]:
+                                            st.write(f"- {line}")
 
                         if att.get("hash_sha256"):
                             with st.expander("Hash and VirusTotal"):
