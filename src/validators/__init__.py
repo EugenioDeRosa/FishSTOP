@@ -1,6 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 
-from src.config import ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY
+from src.config import get_secret
 from .spf            import check_spf
 from .dkim           import check_dkim
 from .dmarc          import check_dmarc
@@ -29,10 +29,10 @@ class EmailSecurityValidator:
         return geolocate_ip(ip)
 
     def check_file_hash(self, sha256: str) -> dict:
-        return check_file_hash(VIRUSTOTAL_API_KEY, sha256)
+        return check_file_hash(get_secret("VIRUSTOTAL_API_KEY"), sha256)
 
     def check_url_reputation(self, url: str) -> dict:
-        return check_url(VIRUSTOTAL_API_KEY, url)
+        return check_url(get_secret("VIRUSTOTAL_API_KEY"), url)
     
     def check_ip_reputation(self, ip: str) -> dict:
         return check_ip_reputation(ip)

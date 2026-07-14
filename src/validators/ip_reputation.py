@@ -10,7 +10,7 @@ import requests
 from typing import Optional
 
 # Config centralizzata
-from src.config import ABUSEIPDB_API_KEY, VIRUSTOTAL_API_KEY
+from src.config import get_secret
 
 ABUSEIPDB_ENDPOINT  = "https://api.abuseipdb.com/api/v2/check"
 VIRUSTOTAL_ENDPOINT = "https://www.virustotal.com/api/v3/files"
@@ -73,7 +73,7 @@ def _parse_dmarc_record(record: str) -> dict:
 def _abuseipdb_call(ip: str) -> dict:
     """Esegue la chiamata ad AbuseIPDB usando la sessione Keep-Alive globale."""
     params = {"ipAddress": ip, "maxAgeInDays": "90"}
-    headers = {"Key": ABUSEIPDB_API_KEY}
+    headers = {"Key": get_secret("ABUSEIPDB_API_KEY")}
     response = _session.get(ABUSEIPDB_ENDPOINT, params=params, headers=headers, timeout=4)
     response.raise_for_status()
     return response.json().get("data", {})
@@ -125,7 +125,7 @@ def check_ip_reputation(ip: str) -> dict:
             return {**base, "status": "skipped", "message": "IP is not public/geolocatable"}
     except ValueError:
         return {**base, "status": "skipped", "message": "Invalid IP"}
-    if not ABUSEIPDB_API_KEY: return {**base, "status": "skipped", "message": "API key missing"}
+    if not get_secret("ABUSEIPDB_API_KEY"): return {**base, "status": "skipped", "message": "API key missing"}
     try:
         data = _abuseipdb_call(ip)
         return _format_abuseipdb(data, ip)
@@ -145,7 +145,7 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
     """
     base = {"domain_queried": domain, "resolved_ip": "", "lookup_method": "error", "abuseConfidenceScore": 0}
     if not domain: return {**base, "status": "skipped", "message": "No domain"}
-    if not ABUSEIPDB_API_KEY: return {**base, "status": "skipped", "message": "API key missing"}
+    if not get_secret("ABUSEIPDB_API_KEY"): return {**base, "status": "skipped", "message": "API key missing"}
 
     resolved_ip = None
 
@@ -199,10 +199,10 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
 def check_file_hash(sha256: str) -> dict:
     base = {"sha256": sha256, "malicious": 0, "suspicious": 0, "total_engines": 0}
     if not sha256: return {**base, "status": "skipped", "message": "No hash"}
-    if not VIRUSTOTAL_API_KEY: return {**base, "status": "skipped", "message": "VT key missing"}
+    if not get_secret("VIRUSTOTAL_API_KEY"): return {**base, "status": "skipped", "message": "VT key missing"}
     
     url = f"{VIRUSTOTAL_ENDPOINT}/{sha256}"
-    headers = {"x-apikey": VIRUSTOTAL_API_KEY}
+    headers = {"x-apikey": get_secret("VIRUSTOTAL_API_KEY")}
     try:
         response = _session.get(url, headers=headers, timeout=5)
         if response.status_code == 404:
@@ -235,7 +235,7 @@ def geolocate_ip(ip: str) -> dict:
 if __name__ == "__main__":
     print("=== TEST REPUTAZIONE IP STANDALONE ===")
     # Test veloce di controllo locale se viene eseguito direttamente il file
-    if ABUSEIPDB_API_KEY:
+    if get_secret("ABUSEIPDB_API_KEY"):
         print(json.dumps(check_ip_reputation("8.8.8.8"), indent=2))
     else:
         print("API key not configured. Skipping the local test.")

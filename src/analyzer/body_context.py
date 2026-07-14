@@ -46,6 +46,70 @@ _OUTLOOK_REPLY_HEADER_RE = re.compile(
 )
 
 
+_AI_TAIL_BOILERPLATE_RE = re.compile(
+    r"^\s*(?:"
+    r"please consider the impact on the environment before printing|"
+    r"this e-?mail may contain|"
+    r"this message may contain|"
+    r"this e-?mail was sent to you by|"
+    r"legal disclosure\b|"
+    r"privacy statement\b|"
+    r"if you no longer wish to receive|"
+    r"if you'd like me to stop sending you emails|"
+    r"if you would like me to stop sending you emails|"
+    r"unsubscribe\b|"
+    r"informativa privacy\b|"
+    r"riservatezza\b|"
+    r"avvertenza di riservatezza\b|"
+    r"nota di riservatezza\b"
+    r")",
+    re.IGNORECASE,
+)
+
+_AI_SIGNATURE_START_RE = re.compile(
+    r"^\s*(?:"
+    r"cordiali saluti|"
+    r"distinti saluti|"
+    r"un saluto|"
+    r"saluti|"
+    r"best regards|"
+    r"kind regards|"
+    r"regards|"
+    r"thanks|"
+    r"thank you"
+    r")\s*,?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _meaningful_line_count(lines: list[str]) -> int:
+    return sum(1 for line in lines if line.strip())
+
+
+def _trim_ai_tail(lines: list[str]) -> tuple[list[str], int]:
+    """Remove signatures, legal footers and unsubscribe blocks from the AI body."""
+    end = len(lines)
+    while end > 0 and not lines[end - 1].strip():
+        end -= 1
+    lines = lines[:end]
+
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        before = lines[:index]
+        if _AI_TAIL_BOILERPLATE_RE.match(stripped) and _meaningful_line_count(before) >= 1:
+            return before, len(lines) - index
+        if _AI_SIGNATURE_START_RE.match(stripped) and _meaningful_line_count(before) >= 2:
+            return before, len(lines) - index
+    return lines, 0
+
+
+def _finalize_body_ai(lines: list[str], removed_quotes: int = 0, removed_headers: int = 0) -> tuple[str, int, int, int]:
+    selected, removed_tail = _trim_ai_tail(lines)
+    return _join_significant(selected), removed_quotes, removed_headers, removed_tail
+
+
 def _normalize_lines(text: str) -> list[str]:
     text = (text or "").replace("\r\n", "\n").replace("\r", "\n")
     return [line.rstrip() for line in text.split("\n")]
@@ -118,50 +182,64 @@ def select_body_for_ai(body_clean: str) -> dict:
             "body_context": "empty",
             "body_ai_removed_quoted_lines": 0,
             "body_ai_removed_header_lines": 0,
+            "body_ai_removed_tail_lines": 0,
         }
 
     for index, line in enumerate(lines):
         if _FORWARD_MARKER_RE.match(line):
             selected, removed_headers = _strip_forwarded_headers(lines[index + 1:])
             selected, removed_quotes = _remove_quoted_lines(selected)
-            body_ai = _join_significant(selected)
+            body_ai, removed_quotes, removed_headers, removed_tail = _finalize_body_ai(
+                selected, removed_quotes, removed_headers
+            )
             return {
                 "body_ai": body_ai,
                 "body_context": "forwarded",
                 "body_ai_removed_quoted_lines": removed_quotes,
                 "body_ai_removed_header_lines": removed_headers,
+                "body_ai_removed_tail_lines": removed_tail,
             }
 
     for index, line in enumerate(lines):
         if _REPLY_MARKER_RE.match(line):
             selected, removed_quotes = _remove_quoted_lines(lines[:index])
-            body_ai = _join_significant(selected)
+            body_ai, removed_quotes, removed_headers, removed_tail = _finalize_body_ai(
+                selected, removed_quotes, 0
+            )
             if body_ai:
                 return {
                     "body_ai": body_ai,
                     "body_context": "reply",
                     "body_ai_removed_quoted_lines": removed_quotes,
-                    "body_ai_removed_header_lines": 0,
+                    "body_ai_removed_header_lines": removed_headers,
+                    "body_ai_removed_tail_lines": removed_tail,
                 }
             break
 
     for index, line in enumerate(lines):
         if _looks_like_outlook_reply_header(lines, index):
             selected, removed_quotes = _remove_quoted_lines(lines[:index])
-            body_ai = _join_significant(selected)
+            body_ai, removed_quotes, removed_headers, removed_tail = _finalize_body_ai(
+                selected, removed_quotes, len(lines[index:])
+            )
             if body_ai:
                 return {
                     "body_ai": body_ai,
                     "body_context": "reply",
                     "body_ai_removed_quoted_lines": removed_quotes,
-                    "body_ai_removed_header_lines": len(lines[index:]),
+                    "body_ai_removed_header_lines": removed_headers,
+                    "body_ai_removed_tail_lines": removed_tail,
                 }
             break
 
     selected, removed_quotes = _remove_quoted_lines(lines)
+    body_ai, removed_quotes, removed_headers, removed_tail = _finalize_body_ai(
+        selected, removed_quotes, 0
+    )
     return {
-        "body_ai": _join_significant(selected),
+        "body_ai": body_ai,
         "body_context": "normal",
         "body_ai_removed_quoted_lines": removed_quotes,
-        "body_ai_removed_header_lines": 0,
+        "body_ai_removed_header_lines": removed_headers,
+        "body_ai_removed_tail_lines": removed_tail,
     }

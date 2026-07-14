@@ -46,7 +46,7 @@ def test_pdf_internal_indicators_are_soc_flags():
 def test_main_alerts_prioritize_pdf_content_flags():
     flags = [
         {"level": "INFO", "field": "Attachment", "message": "magic bytes"},
-        {"level": "HIGH", "field": "DMARC", "message": "DMARC FAIL"},
+        {"level": "MEDIUM", "field": "DMARC", "message": "DMARC FAIL"},
         {"level": "HIGH", "field": "PDF Content", "message": "embedded JavaScript"},
         {"level": "MEDIUM", "field": "SPF", "message": "SPF SOFTFAIL"},
     ]

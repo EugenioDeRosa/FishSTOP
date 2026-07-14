@@ -4,7 +4,7 @@ import re
 
 import requests
 
-from src.config import GITHUB_MODELS_TOKEN
+from src.config import get_secret
 
 GITHUB_MODELS_ENDPOINT = os.getenv(
     "GITHUB_MODELS_ENDPOINT", "https://models.inference.ai.azure.com/chat/completions"
@@ -12,10 +12,43 @@ GITHUB_MODELS_ENDPOINT = os.getenv(
 # Verifica il nome esatto nel codice di esempio di GitHub Models (Marketplace ->
 # Phi-4-mini-instruct -> "Get API access"): il catalogo a volte usa un id diverso.
 GITHUB_MODELS_MODEL = os.getenv("GITHUB_MODELS_MODEL", "Phi-4-mini-instruct")
+OLLAMA_CHAT_ENDPOINT = os.getenv("OLLAMA_CHAT_ENDPOINT", "http://localhost:11434/api/chat")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi4-mini")
+LLM_PROVIDER = os.getenv("FISHSTOP_LLM_PROVIDER", "auto").strip().lower()
+
+
+def _github_models_token() -> str:
+    return get_secret("GITHUB_MODELS_TOKEN")
+
+
+def _ollama_available(timeout: float = 0.8) -> bool:
+    if LLM_PROVIDER == "github":
+        return False
+    try:
+        response = requests.get(OLLAMA_CHAT_ENDPOINT.rsplit("/", 1)[0] + "/tags", timeout=timeout)
+        return response.status_code == 200
+    except requests.RequestException:
+        return False
+
+
+def _use_ollama() -> bool:
+    if LLM_PROVIDER == "ollama":
+        return True
+    if LLM_PROVIDER == "github":
+        return False
+    return _ollama_available()
 
 
 def _llm_enabled() -> bool:
-    return bool(GITHUB_MODELS_TOKEN)
+    return _use_ollama() or bool(_github_models_token())
+
+
+def active_llm_backend() -> str:
+    if _use_ollama():
+        return f"ollama ({OLLAMA_MODEL})"
+    if _github_models_token():
+        return f"github models ({GITHUB_MODELS_MODEL})"
+    return "not configured"
 
 
 # ---------------------------------------------------------------------------
@@ -207,12 +240,10 @@ def _summarize_useful_vt_results(link_reputation: dict) -> str:
     return ""
 
 
-def _auth_status(soc: dict, protocol: str) -> str:
-    protocol = protocol.upper()
-    auth_results = soc.get("auth_results") or {}
-    arc_auth_results = soc.get("arc_auth_results") or {}
-    result = auth_results.get(protocol) or arc_auth_results.get(protocol) or {}
-    return (result.get("status") or "none").lower()
+
+def _auth_status(soc: dict, name: str) -> str:
+    result = (soc.get("auth_results") or {}).get(name) or (soc.get("arc_auth_results") or {}).get(name) or {}
+    return str(result.get("status") or "unknown").lower()
 
 
 def _semantic_analysis_label(soc: dict) -> str:
@@ -291,7 +322,7 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
         bool(soc.get("display_name_spoofing")),
         any(att.get("anomaly") for att in attachments),
         any((att.get("pdf_security") or {}).get("suspicious") for att in attachments),
-        any(link.get("is_ip") or link.get("display_mismatch") for link in links),
+        any(link.get("is_ip") for link in links),
         bool(lookalike_alerts),
         any(status in {"malicious", "suspicious"} for status in useful_vt_statuses),
     ])
@@ -437,12 +468,13 @@ def build_fast_email_prompt(soc: dict) -> str:
 
 
 def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, timeout: int = 90):
-    if not _llm_enabled():
+    use_ollama = _use_ollama()
+    if not use_ollama and not _github_models_token():
         yield {
             "status": "error",
             "message": (
-                "LLM analysis unavailable: configure GITHUB_MODELS_TOKEN in secrets "
-                "per usare Phi-4 mini hosted."
+                "LLM analysis unavailable: start Ollama locally with Phi-4 mini "
+                "or configure GITHUB_MODELS_TOKEN for hosted analysis."
             ),
             "text": "",
         }
@@ -468,7 +500,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "- The email provided is suspicious because\n"
                 "- The email provided is not suspicious because\n"
                 "Lead with the body's intent when meaningful body text exists. If the body is empty, unreadable, or contains no clear requested action, say the content intent cannot be assessed and do not infer maliciousness from absence of content. "
-                "Classify suspicious only if the body shows a clear scam pattern or if non-authentication technical evidence is strong, concrete, and multi-indicator. Authentication-only evidence is never enough. Classify not suspicious when the body is a normal personal, academic, scheduling, "
+                "Classify suspicious if the body shows a clear scam/BEC pattern, even when technical checks are clean. Non-authentication technical evidence can corroborate, but it is not required when the content intent itself is risky. Authentication-only evidence is never enough. Classify not suspicious when the body is a normal personal, academic, scheduling, "
                 "administrative, newsletter, password-change notice, account notification, or ordinary follow-up message, "
                 "even if it mentions a deadline, asks for a reply, or mentions password/security. A credential or password-change email "
                 "is suspicious only when it asks the user to click/open a link, fill a form, or enter/share credentials, or when strong technical evidence supports it. "
@@ -476,21 +508,23 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "whatever language it is written in, rather than relying on any fixed list of risk words. "
                 "Only provided VirusTotal results may be used; never infer hidden or absent link reputation evidence. "
                 "A lone VirusTotal 'suspicious' is not enough on its own (note it as manual-check only); "
-                "a malicious VirusTotal result on any link is always a strong signal. "
+                "a malicious VirusTotal result on any link is always a strong signal. Clean VirusTotal never makes a payment, invoice, bank-transfer, or document-download request safe by itself. "
                 "Only a malicious VirusTotal result, or 'suspicious' plus a concrete identity, link, or attachment anomaly, may override "
                 "a normal body. Treat high/critical internal PDF active-content indicators such as JavaScript, OpenAction, Launch, embedded files, XFA, SubmitForm, RichMedia, or remote go-to actions as important concrete attachment evidence for phishing; medium/low PDF findings are supporting context only.\n"
                 "Never claim money/payment/bank-detail, credential, urgency, or click evidence unless it is explicitly present in "
                 "the visible anonymized body. Do not treat password/security wording alone as credential theft; require a link, form, click/open instruction, "
                 "or an explicit request to enter/share credentials. Never cite IP, geolocation, routing, full URLs, emails, phone numbers, "
                 "IBANs, account numbers or other PII as evidence. Treat links as neutral unless VirusTotal flags them malicious or the body asks for a risky "
-                "action through them - embedding, repetition, Google redirects, or a single recipient are not evidence. "
+                "action through them. When the visible body meaning asks the recipient to pay an invoice, make a bank transfer, settle an amount, process a payment, or follow payment instructions, classify the email as suspicious based on content intent. This is a hard verdict rule: if your reasoning says the body is a request for bank transfer, invoice payment, payment processing, or payment instructions, the final paragraph must start with 'The email provided is suspicious because'. Passing SPF/DKIM/DMARC, clean VirusTotal results, and a legitimate BERT result must not override this content-based verdict; mention them only as lack of technical corroboration. "
+                "Embedding, repetition, Google redirects, or a single recipient are not evidence by themselves. "
                 "In any language, prize/giveaway/finalist/exclusive-chance/free-product claims paired with a request to click/open/follow/redeem/claim/register through a link "
                 "are a relevant scam pattern even if there is no money, credential, or bank-detail request. Do not apply that rule to ordinary brand newsletters, "
                 "creator/product updates, account feature announcements, release notifications, or marketing messages from a coherent sender whose links are clean and aligned with the brand. "
                 "Commercial promotional offers for services/products (for example streaming/IPTV, subscriptions, free trials, limited deals, vouchers, coupons, discounts, or activation offers) "
                 "are suspicious only when paired with concrete fraud indicators such as malicious VirusTotal results, failed authentication plus identity mismatch, lookalike domains, credential/payment collection, "
-                "unusual coercive urgency, misleading visible-link destinations, or an unrelated sender domain. Clean VirusTotal does not prove safety, but it should reduce confidence when the body looks like normal marketing. "
-                "Discount, coupon, voucher, prize, sale, or promotional wording paired with a link is a weak signal by itself; require stronger evidence before classifying as suspicious.\n"
+                "unusual coercive urgency, or an unrelated sender domain. Clean VirusTotal does not prove safety, but it should reduce confidence when the body looks like normal marketing. "
+                "Discount, coupon, voucher, prize, sale, or promotional wording paired with a link is a weak signal by itself; require stronger evidence before classifying as suspicious. "
+                "Invoice/payment/bank-transfer requests are different: infer them from the body meaning, in any language, and classify them as suspicious based on content intent even if the structured technical checks are clean. Never write that an email is not suspicious because a payment or bank-transfer request has clean VirusTotal results, passing SPF/DKIM/DMARC, or legitimate BERT; that reasoning is invalid for this task. Example: if the body asks to make a bank transfer for an invoice and provides a link or payment instructions, answer that it is suspicious because the content requests payment/invoice handling; then add that clean technical checks do not corroborate the risk, but do not reverse it.\n"
                 "Treat as explicit scam signals even without a money/credential ask yet: lottery/prize/donation/inheritance "
                 "claims, unexpected large sums, celebrity/CEO impersonation, vague business/investment lures, "
                 "international-collaboration pitches, deceptive prize/giveaway/finalist claims, or requests to reply to a personal/free address for details. "
@@ -498,7 +532,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "or signing weekly attendance, personal scheduling notes, absence notices, exam/course logistics, and academic publication invitations are not suspicious "
                 "unless paired with money, credential submission, bank details, malicious links, external sensitive forms, impersonation, or unusual coercive urgency. "
                 "If the body reads as ordinary administrative/personal content with no risky ask, classify the email as not suspicious "
-                "unless VirusTotal is malicious on any link or there is a concrete identity, link, attachment anomaly, or high/critical internal PDF active-content indicator; missing, failed, or absent SPF/DKIM/DMARC alone is not enough.\n"
+                "unless VirusTotal is malicious on any link or there is a concrete identity, link, attachment anomaly, high/critical internal PDF active-content indicator, or the body meaning asks for payment/invoice/bank-transfer handling; missing, failed, or absent SPF/DKIM/DMARC alone is not enough.\n"
                 "If useful link details are provided, explain whether the body asks the recipient to use them. Do not classify based on a generic extracted link alone. "
                 "Mention the content-based reason first, then one short clause on whether the technical checks support, "
                 "weaken, or don't change that assessment. Do not repeat internal labels such as technical context, internal handling notes or verdict-evidence labels in the final answer. "
@@ -506,7 +540,7 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
                 "SPF/DKIM/DMARC failure, even when paired with BERT, is not enough to classify as suspicious when the visible body is empty or has normal intent and there is no concrete identity, link, or attachment anomaly. "
                 "Use semantic analysis from BERT only as corroboration, never as the sole reason to classify the email as suspicious. "
                 "Treat a BERT phishing result as weak when the body is normal marketing/newsletter/account content and technical checks are clean or only mildly anomalous. "
-                "If BERT conflicts with a normal body and weak technical evidence, classify as not suspicious and say that semantic analysis flags it but the content evidence is insufficient. "
+                "If BERT conflicts with a normal body and weak technical evidence, classify as not suspicious and say that semantic analysis flags it but the content evidence is insufficient. If BERT says legitimate but the body asks for invoice payment, bank transfer, payment processing, settlement, or payment instructions, ignore BERT for the verdict and classify suspicious based on content intent. "
                 "If BERT supports an already suspicious assessment, add one short final assessment sentence before the verification sentence, for example: "
                 "Additionally, semantic analysis indicates the email as phishing. "
                 "End with: Please verify with your IT team.\n\n"
@@ -514,15 +548,65 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
             ),
         },
     ]
-    yield from _stream_github_models(messages, model, timeout)
+    if use_ollama:
+        yield from _stream_ollama(messages, OLLAMA_MODEL, timeout)
+    else:
+        yield from _stream_github_models(messages, model, timeout)
+
+
+def _stream_ollama(messages: list[dict], model: str, timeout: int):
+    payload = {
+        "model": model,
+        "messages": messages,
+        "stream": True,
+        "options": {
+            "temperature": 0.1,
+            "top_p": 0.9,
+            "num_predict": 260,
+        },
+    }
+    chunks: list[str] = []
+    try:
+        with requests.post(OLLAMA_CHAT_ENDPOINT, json=payload, stream=True, timeout=timeout) as response:
+            response.raise_for_status()
+            for raw_line in response.iter_lines(decode_unicode=True):
+                if not raw_line:
+                    continue
+                try:
+                    event = json.loads(raw_line)
+                except json.JSONDecodeError:
+                    continue
+                content = (event.get("message") or {}).get("content", "")
+                if content:
+                    chunks.append(content)
+                    yield {"status": "stream", "model": model, "backend": "ollama", "text": "".join(chunks)}
+                if event.get("done"):
+                    break
+    except requests.exceptions.Timeout:
+        yield {"status": "error", "message": f"Ollama ha superato il timeout di {timeout} secondi.", "text": "".join(chunks)}
+        return
+    except requests.exceptions.HTTPError as exc:
+        code = exc.response.status_code if exc.response is not None else "?"
+        yield {"status": "error", "message": f"Ollama HTTP {code}: verifica che il modello '{model}' sia installato. ({exc})", "text": "".join(chunks)}
+        return
+    except requests.exceptions.RequestException as exc:
+        yield {"status": "error", "message": f"Ollama non raggiungibile su {OLLAMA_CHAT_ENDPOINT}: {exc}", "text": "".join(chunks)}
+        return
+    except Exception as exc:
+        yield {"status": "error", "message": f"Error durante la generazione con Ollama: {exc}", "text": "".join(chunks)}
+        return
+
+    yield {"status": "ok", "model": model, "backend": "ollama", "text": "".join(chunks).strip()}
+
 
 def _stream_github_models(messages: list[dict], model: str, timeout: int):
     """
     Chiama GitHub Models (Azure AI Inference, API OpenAI-compatible) in streaming
     SSE. Richiede un GitHub PAT con permesso 'Models: read' in GITHUB_MODELS_TOKEN.
     """
+    token = _github_models_token()
     headers = {
-        "Authorization": f"Bearer {GITHUB_MODELS_TOKEN}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
     }

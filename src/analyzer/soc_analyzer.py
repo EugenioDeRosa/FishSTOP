@@ -418,19 +418,16 @@ class EmlSOCAnalyzer:
         dkim = report["auth_results"].get("DKIM") or report["arc_auth_results"].get("DKIM")
         dkim_status = (dkim.get("status") or "") .lower() if dkim else ""
         if dkim_status and dkim_status != "pass":
-            if dkim_status in {"fail", "permerror"}:
-                flag("MEDIUM", "DKIM", f"DKIM {dkim_status.upper()} - signature validation should be reviewed")
-            else:
-                flag("LOW", "DKIM", f"DKIM {dkim_status.upper()} - no valid DKIM pass in headers")
+            flag("MEDIUM", "DKIM", f"DKIM {dkim_status.upper()} - signature validation should be reviewed")
         elif not report["dkim_signature_present"]:
             flag("LOW", "DKIM", "DKIM signature missing from headers")
 
         # DMARC
         dmarc = report["auth_results"].get("DMARC") or report["arc_auth_results"].get("DMARC")
         if dmarc and dmarc["status"] not in ("pass", "bestguesspass"):
-            flag("HIGH", "DMARC", f"DMARC {dmarc['status'].upper()}")
+            flag("MEDIUM", "DMARC", f"DMARC {dmarc['status'].upper()}")
         elif not dmarc:
-            flag("LOW", "DMARC", "No DMARC policy detected in headers")
+            flag("MEDIUM", "DMARC", "No DMARC policy detected in headers")
 
         # Reply-To mismatch
         if report["reply_to_mismatch"]:
@@ -523,13 +520,6 @@ class EmlSOCAnalyzer:
                     "typical of phishing or C2",
                 )
 
-            if lnk.get("display_mismatch"):
-                flag(
-                    "HIGH", "Link",
-                    "The link shows `" + (lnk.get("display_host") or "?")
-                    + "` but points to `" + (lnk.get("host") or "?")
-                    + "`: possible masked link in HTML.",
-                )
         for alert in report.get("lookalike_alerts", []):
             technique_label = {
                 "edit_distance": "Edit-distance",

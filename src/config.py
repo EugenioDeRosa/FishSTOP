@@ -10,6 +10,15 @@ Priorita di risoluzione:
 import os
 
 
+USER_API_KEYS_STATE_KEY = "fishstop_user_api_keys"
+MANAGED_API_KEYS = [
+    "VIRUSTOTAL_API_KEY",
+    "ABUSEIPDB_API_KEY",
+    "GITHUB_MODELS_TOKEN",
+    "HF_TOKEN",
+]
+
+
 _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
 
 
@@ -62,7 +71,37 @@ def _read_streamlit_secret(key: str, default: str = "") -> str:
         return default
 
 
+def _read_user_secret(key: str, default: str = "") -> str:
+    try:
+        import streamlit as st
+
+        return str(st.session_state.get(USER_API_KEYS_STATE_KEY, {}).get(key) or default).strip()
+    except Exception:
+        return default
+
+
+def set_user_secret(key: str, value: str) -> None:
+    if key not in MANAGED_API_KEYS:
+        raise ValueError(f"Unsupported API key: {key}")
+    try:
+        import streamlit as st
+    except Exception as exc:
+        raise RuntimeError("User API keys can only be updated inside Streamlit") from exc
+
+    keys = dict(st.session_state.get(USER_API_KEYS_STATE_KEY, {}))
+    value = str(value or "").strip()
+    if value:
+        keys[key] = value
+    else:
+        keys.pop(key, None)
+    st.session_state[USER_API_KEYS_STATE_KEY] = keys
+
+
 def get_secret(key: str, default: str = "") -> str:
+    value = _read_user_secret(key)
+    if value:
+        return value
+
     value = os.environ.get(key)
     if value:
         return value
@@ -73,6 +112,16 @@ def get_secret(key: str, default: str = "") -> str:
             return value
 
     return default
+
+
+def get_secret_source(key: str) -> str:
+    if _read_user_secret(key):
+        return "settings"
+    if os.environ.get(key):
+        return ".env/environment"
+    if _is_streamlit_cloud() and _read_streamlit_secret(key):
+        return "streamlit secrets"
+    return "missing"
 
 
 def print_config_status():

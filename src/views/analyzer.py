@@ -9,7 +9,8 @@ import streamlit as st
 import streamlit.components.v1 as components
  
 from src.analyzer.html_utils import sanitize_html_for_js_preview, sanitize_html_for_preview
-from src.analyzer.llm_context_analyzer import stream_phi4_email_analysis
+from src.analyzer.llm_context_analyzer import active_llm_backend, stream_phi4_email_analysis
+from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
 from src.views.backend import get_content_model, get_core_backend
 
@@ -207,7 +208,7 @@ def _render_extracted_links_box(links: list[dict], key_prefix: str) -> None:
 def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
-        "Hosted Phi-4 mini analysis: evaluates plain and HTML content, urgency, money, IBANs, "
+        f"Phi-4 mini analysis via {active_llm_backend()}: evaluates plain and HTML content, urgency, money, IBANs, "
         "payments, credentials, and external forms; then uses semantic analysis, SPF/DKIM/DMARC, links, and attachments only as context."
     )
 
@@ -924,7 +925,6 @@ def render():
                     for lnk in links:
                         rep = vt_url_results.get(lnk["url"], {})
                         risky = rep.get("status") in ("malicious", "suspicious")
-                        display_mismatch = lnk.get("display_mismatch")
                         with st.container(border=True):
                             top_left, top_right = st.columns([3, 1])
                             with top_left:
@@ -935,8 +935,6 @@ def render():
                             with top_right:
                                 if lnk.get("is_ip"):
                                     st.error("Direct IP")
-                                elif display_mismatch:
-                                    st.error("different text")
                                 elif risky:
                                     st.warning(rep.get("status", "suspicious"))
                                 else:
@@ -1058,7 +1056,7 @@ def render():
                 import torch
                 st.markdown("#### AI Content Analysis")
                 clean_body = soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
-                email_text = f"Subject: {soc.get('subject') or ''}\n\n{clean_body}".strip()
+                email_text = prepare_bert_input(soc.get("subject") or "", clean_body)
 
                 _render_phi4_analysis(soc, phi4_key, auto_run=False)
 
@@ -1067,7 +1065,7 @@ def render():
 
                 st.info("BERT model loaded from Hugging Face.")
 
-                if not email_text or email_text.lower() == "subject:":
+                if not email_text:
                     soc["bert_ai_result"] = "not available"
                     st.warning("Email has no meaningful text for classification.")
                 else:
@@ -1107,6 +1105,9 @@ def render():
                     st.info("Forwarded email: the forwarded content is shown and analyzed.")
                 elif ai_context == "reply":
                     st.info("Email reply: only the current reply is shown and analyzed.")
+                removed_tail = int(soc.get("body_ai_removed_tail_lines") or 0)
+                if removed_tail:
+                    st.caption(f"AI body cleanup removed {removed_tail} signature/disclaimer/unsubscribe line(s).")
 
                 tab_labels = ["Extracted body", "Full conversation"]
                 if body_html:
@@ -1128,12 +1129,12 @@ def render():
                 if body_html:
                     with body_tabs[next_tab]:
                         enable_html_javascript = st.checkbox(
-                            "Render HTML with JavaScript",
+                            "Render HTML with safe JavaScript guard",
                             value=False,
                             key=f"{phi4_key}_body_html_javascript",
                         )
                         if enable_html_javascript:
-                            st.caption("HTML preview with JavaScript enabled. Links remain disabled and are not clickable.")
+                            st.caption("Safe HTML preview: JavaScript from the email is removed; only the internal safety guard can run.")
                         else:
                             st.caption("Isolated HTML preview: scripts, forms, active content, and clickable links are removed before display.")
                         _render_html_preview(body_html, f"{phi4_key}_body_html", enable_javascript=enable_html_javascript)

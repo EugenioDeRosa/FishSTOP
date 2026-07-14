@@ -1,6 +1,6 @@
 import streamlit as st
 
-from src.config import HF_TOKEN
+from src.config import get_secret
 
 HF_MODEL_ID = "eugenioderodev/fishstop-bert"
 
@@ -18,10 +18,10 @@ def init_core_backend():
 
 
 @st.cache_resource
-def init_content_model():
+def init_content_model(hf_token: str = ""):
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-    hf_auth = {"token": HF_TOKEN} if HF_TOKEN else {}
+    hf_auth = {"token": hf_token} if hf_token else {}
     tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_ID, **hf_auth)
     model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_ID, **hf_auth)
 
@@ -39,7 +39,7 @@ def get_backend():
 
 
 def get_content_model():
-    return init_content_model()
+    return init_content_model(get_secret("HF_TOKEN"))
 
 
 def get_model_source() -> str:

@@ -35,6 +35,8 @@ from typing import Optional
 
 import pandas as pd
 
+from src.bert_input import prepare_bert_input
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -84,35 +86,8 @@ def _strip_html(html: str) -> str:
 # ---------------------------------------------------------------------------
 
 def _preprocess(subject: str, body: str) -> str:
-    """
-    Preprocessing MINIMO, allineato a quello applicato in train.py a Kaggle e
-    alle cartelle personal_emails/custom_*: lowercase + collasso spazi soltanto.
-
-    Does NOT remove punctuation/URLs/symbols anymore: they were an important signal for
-    il phishing detection (link sospetti, ripetizioni di simboli, ecc.) e la
-    removal was applied ONLY to this source, creating preprocessing
-    incoerente tra le diverse fonti del training (il modello rischiava di
-    learn to distinguish "source" instead of "phishing vs legitimate").
-
-      1. Concatena subject + " " + body
-      2. Strip HTML if present
-      3. Lowercase
-      4. Collassa spazi multipli
-      5. Strip finale
-
-    Note: if you already have a data/custom_dataset.csv built with the version
-    previous to this function, the hashes/text inside it were
-    calculated with "aggressive" cleaning and are no longer consistent with the rest
-    della pipeline - vedi le istruzioni di migrazione per rigenerarlo.
-    """
-    raw = f"{subject} {body}"
-
-    if re.search(r"<[a-zA-Z]", raw):
-        raw = _strip_html(raw)
-
-    raw = raw.lower()
-    raw = re.sub(r"\s+", " ", raw)
-    return raw.strip()
+    """Preprocessing shared with runtime BERT inference."""
+    return prepare_bert_input(subject, body)
 
 
 def _text_hash(text: str) -> str:
