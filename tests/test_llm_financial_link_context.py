@@ -85,3 +85,50 @@ def test_phi4_prompt_forbids_not_suspicious_payment_clean_vt_reasoning():
     assert "pay/settle/transfer money" in prompt_source
     assert "If there is no risky requested action and no strong support" in prompt_source
     assert "use technical facts only as support" in prompt_source
+
+
+def test_phi4_gets_extracted_link_for_invoice_payment_request_without_vt():
+    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+
+    assert "In any language, an invoice/payment/bank-transfer request combined with an extracted link or attachment is suspicious" in prompt_source
+    assert "DMARC is unknown" in prompt_source
+    assert "VirusTotal is clean/unavailable" in prompt_source
+
+    soc = {
+        "from_": "billing@example.com",
+        "to": "accounting@example.net",
+        "subject": "Faktura 26839907",
+        "body_clean": (
+            "Szanowny Panie, Oczekujemy na przelew bankowy pozosta?ej kwoty z faktury numer 26839907 "
+            "w wysoko?ci 8027,69 USD. W za??czeniu przesy?amy faktur? oczekuj?c? na p?atno??. "
+            "https://cdn.discordapp.com/attachments/1496187481362792538/1514522506084745246/Invoice63784.jse"
+        ),
+        "body_source": "text/plain",
+        "auth_results": {"SPF": {"status": "pass"}, "DKIM": {"status": "pass"}, "DMARC": {"status": "unknown"}},
+        "arc_auth_results": {},
+        "dkim_signature_present": True,
+        "reply_to_mismatch": False,
+        "return_path_domain_mismatch": False,
+        "display_name_spoofing": None,
+        "bert_ai_result": "legitimate",
+        "links": [{
+            "url": "https://cdn.discordapp.com/attachments/1496187481362792538/1514522506084745246/Invoice63784.jse",
+            "host": "cdn.discordapp.com",
+            "source": "plain_text",
+            "is_ip": False,
+            "display_mismatch": False,
+        }],
+        "link_reputation": {},
+        "lookalike_alerts": [],
+        "flags": [],
+        "attachments": [],
+    }
+
+    prompt = build_fast_email_prompt(soc)
+
+    assert "przelew bankowy" in prompt
+    assert "faktury numer 26839907" in prompt
+    assert "[URL]" in prompt
+    assert "Link action signals" in prompt
+    assert "generic extracted link" in prompt
+    assert "source=plain_text" in prompt
