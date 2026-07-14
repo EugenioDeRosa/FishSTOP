@@ -261,6 +261,18 @@ def _pdf_context_lines(att: dict) -> list[str]:
     ]
 
 
+def _attachment_anomaly_for_llm(att: dict) -> str:
+    anomaly = str(att.get("anomaly") or "").strip()
+    if not anomaly:
+        return "none"
+    parts = [
+        part.strip()
+        for part in anomaly.split(";")
+        if part.strip() and not part.strip().startswith("PDF risk ")
+    ]
+    return "; ".join(parts) if parts else "none"
+
+
 def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation: dict | None = None) -> list[str]:
     spf_status = _auth_status(soc, "SPF")
     dkim_status = _auth_status(soc, "DKIM")
@@ -319,7 +331,7 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
                 f"ext={att.get('extension_from_filename') or '-'} "
                 f"mime={att.get('content_type') or '-'} "
                 f"magic={att.get('magic_detected_format') or '-'} "
-                f"anomaly={att.get('anomaly') or 'none'} "
+                f"anomaly={_attachment_anomaly_for_llm(att)} "
                 f"pdf_risk={(att.get('pdf_security') or {}).get('risk_level') or '-'} "
                 f"pdf_findings={(att.get('pdf_security') or {}).get('summary') or '-'}"
             )
@@ -329,10 +341,12 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
         soc.get("body_ai") or soc.get("body_extracted") or soc.get("body_clean") or soc.get("body") or ""
     ).strip()
     auth_only_fields = {"SPF", "DKIM", "DMARC"}
+    pdf_fields_already_summarized = {"PDF Content", "PDF Attachment"}
     flags = soc.get("flags") or []
     high_medium = [
         flag for flag in flags
         if flag.get("level") in {"HIGH", "MEDIUM"}
+        and flag.get("field") not in pdf_fields_already_summarized
         and not (not body_text_for_flags and flag.get("field") in auth_only_fields)
     ]
     if auth_overall.startswith("acceptable"):
