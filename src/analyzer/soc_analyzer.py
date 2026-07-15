@@ -205,7 +205,10 @@ class EmlSOCAnalyzer:
         report["content_type"] = self._header(msg, "Content-Type")
 
         # ── 2. Return-Path / Errors-To / Reply-To ─────────────────────────
-        report["return_path"] = self._header(msg, "Return-Path")
+        return_path = self._header(msg, "Return-Path")
+        if return_path == "<>":
+            return_path = None
+        report["return_path"] = return_path
         report["errors_to"]   = self._header(msg, "Errors-To")
         reply_to              = self._header(msg, "Reply-To")
         report["reply_to"]    = reply_to
@@ -312,22 +315,27 @@ class EmlSOCAnalyzer:
 
         combined_html = "\n".join(html_parts)
         html_clean = strip_html(combined_html) if combined_html else ""
-        raw_body = "\n".join(body_parts) if body_parts else combined_html
-        report["body"]      = raw_body.strip()
+        plain_clean = re.sub(r"\n{3,}", "\n\n", "\n".join(body_parts)).strip() if body_parts else ""
+        body_clean = plain_clean or html_clean
+
+        report["body"] = body_clean
         report["body_html"] = combined_html.strip() if html_parts else None
         report["body_html_clean"] = html_clean
+        report["body_clean"] = body_clean
 
-        if body_parts:
-            report["body_clean"] = re.sub(r"\n{3,}", "\n\n", report["body"]).strip()
-        else:
-            report["body_clean"] = html_clean
-
-        report["body_source"]        = "text/plain" if body_parts else ("text/html" if html_parts else "empty")
-        report["html_strip_applied"] = (not bool(body_parts)) and bool(html_parts)
-        report["attachments"]        = attachments_info
+        report["body_source"] = "text/plain" if body_parts else ("text/html" if html_parts else "empty")
+        report["html_strip_applied"] = bool(html_parts)
+        report["attachments"] = attachments_info
         report.update(select_body_for_ai(report["body_clean"]))
         report["body_clean_full"] = report["body_clean"]
         report["body_extracted"] = report.get("body_ai") or report["body_clean"]
+
+        ai_body_parts = [report["body_extracted"]]
+        body_norm = re.sub(r"\s+", " ", report["body_extracted"].strip()).lower()
+        html_norm = re.sub(r"\s+", " ", html_clean.strip()).lower()
+        if html_clean and html_norm and html_norm != body_norm and html_norm not in body_norm:
+            ai_body_parts.append("HTML-derived visible text:\n" + html_clean)
+        report["body_for_ai"] = "\n\n".join(part for part in ai_body_parts if part).strip()
 
         # ── 10. Link e lookalike ──────────────────────────────────────────
         report["links"] = extract_links(

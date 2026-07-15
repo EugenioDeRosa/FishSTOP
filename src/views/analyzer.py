@@ -1085,7 +1085,7 @@ def render():
             with content_tab:
                 import torch
                 st.markdown("#### AI Content Analysis")
-                clean_body = soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
+                clean_body = soc.get("body_for_ai") or soc.get("body_ai") or soc.get("body_clean") or ""
                 email_text = prepare_bert_input(soc.get("subject") or "", clean_body)
 
                 _render_phi4_analysis(soc, phi4_key, auto_run=False)
@@ -1149,8 +1149,8 @@ def render():
                 source = soc.get("body_source", "unknown")
                 st.caption(f"Source: `{source}`")
                 ai_context = soc.get("body_context", "normal")
-                body_display = soc.get("body_extracted") or soc.get("body_ai") or soc.get("body_clean") or soc.get("body") or ""
-                full_body = soc.get("body_clean_full") or soc.get("body_clean") or soc.get("body") or ""
+                body_display = soc.get("body_extracted") or soc.get("body_ai") or soc.get("body_clean") or ""
+                full_body = soc.get("body_for_ai") or soc.get("body_clean_full") or soc.get("body_clean") or ""
                 body_html = soc.get("body_html") or ""
                 if ai_context == "forwarded":
                     st.info("Forwarded email: the forwarded content is shown and analyzed.")

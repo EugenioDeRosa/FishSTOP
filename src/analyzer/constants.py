@@ -23,11 +23,11 @@ KNOWN_BRANDS: list[str] = [
 # Caratteri Unicode omoglifi -> ASCII equivalente
 # (sottoinsieme rilevante per phishing; non serve un mapping completo)
 HOMOGLYPH_MAP: dict[str, str] = {
-    "а": "a", "е": "e", "о": "o", "р": "p", "с": "c", "х": "x",
-    "ı": "i", "ĺ": "l", "ḷ": "l", "ó": "o", "ô": "o", "ö": "o",
-    "ú": "u", "ü": "u", "ñ": "n", "ç": "c",
-    # Caratteri cirillici frequenti negli IDN attack
-    "ԁ": "d", "ɡ": "g", "ʏ": "y", "ʋ": "v",
+    # Cyrillic characters frequently abused in IDN homograph attacks.
+    "\u0430": "a", "\u0435": "e", "\u043e": "o", "\u0440": "p", "\u0441": "c", "\u0445": "x",
+    "\u0501": "d",
+    # Latin lookalikes that are not ordinary accented letters in common languages.
+    "\u0131": "i", "\u013a": "l", "\u1e37": "l", "\u0261": "g", "\u028f": "y", "\u028b": "v",
 }
 
 # Magic Bytes database (Gary Kessler / File Signatures)

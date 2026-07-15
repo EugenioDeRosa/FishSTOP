@@ -74,6 +74,11 @@ def _has_non_ascii(value: str) -> bool:
     return any(ord(ch) > 127 for ch in value or "")
 
 
+def _has_homoglyph_chars(value: str) -> bool:
+    normalized = unicodedata.normalize("NFKC", (value or "").lower())
+    return any(ch in HOMOGLYPH_MAP for ch in normalized)
+
+
 def strip_public_suffix(domain: str) -> str:
     """
     Ritorna il 'registered domain' (etichette - TLD) in forma semplificata.
@@ -162,29 +167,18 @@ def check_lookalike_domains(
             _alert(url, host, "-", "punycode_idna", detail)
             continue
 
-        if _has_non_ascii(host):
-            if host_norm != host.lower():
-                detail = (
-                    f"Dominio `{host}` contiene caratteri Unicode omoglifi; "
-                    f"normalizzato diventa `{host_norm}`."
-                )
-                _alert(url, host, "-", "unicode_homoglyph", detail)
-            else:
-                _alert(
-                    url,
-                    host,
-                    "-",
-                    "unicode_domain",
-                    f"Dominio `{host}` contiene caratteri Unicode non ASCII.",
-                )
-            continue
+        # Unicode is common and legitimate in IDNs. Alert only when the domain
+        # contains known confusable characters and is close to a protected brand.
+        has_homoglyph_chars = _has_homoglyph_chars(host)
 
         for brand in brands:
             brand_norm = normalize_homoglyphs(brand)
             brand_sld  = strip_public_suffix(brand_norm)
 
-            # Salta i match esatti
-            if host_norm == brand_norm or host_norm.endswith("." + brand_norm):
+            # Skip exact brand matches only when the original host is already ASCII-equivalent.
+            # If it becomes exact only after homoglyph normalization, it is suspicious.
+            host_lower = host.lower()
+            if host_lower == brand_norm or host_lower.endswith("." + brand_norm):
                 break
 
             # Tecnica 1: Levenshtein sull'SLD
@@ -201,11 +195,18 @@ def check_lookalike_domains(
                     continue
 
             # Tecnica 2: Omografia Unicode
-            if host_norm != host.lower() and levenshtein(host_norm, brand_norm) <= edit_distance_threshold:
-                _alert(url, host, brand, "homoglyph",
-                       f"The domain `{host}` contains Unicode homoglyph characters "
-                       f"che lo rendono visivamente simile a `{brand}`")
-                continue
+            if has_homoglyph_chars and host_norm != host_lower:
+                normalized_matches_brand = (
+                    host_norm == brand_norm
+                    or host_norm.endswith("." + brand_norm)
+                    or host_sld == brand_sld
+                    or levenshtein(host_sld, brand_sld) <= edit_distance_threshold
+                )
+                if normalized_matches_brand:
+                    _alert(url, host, brand, "homoglyph",
+                           f"The domain `{host}` contains Unicode homoglyph characters "
+                           f"che lo rendono visivamente simile a `{brand}`")
+                    continue
 
             # Tecnica 3: Punycode / IDNA homograph
             if _has_punycode_label(host) and decoded_host != host.lower():
