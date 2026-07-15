@@ -10,9 +10,10 @@ import streamlit.components.v1 as components
  
 from src.analyzer.html_utils import sanitize_html_for_js_preview, sanitize_html_for_preview
 from src.analyzer.llm_context_analyzer import active_llm_backend, stream_phi4_email_analysis
+from src.bert_calibration import calibrated_probabilities, classify as classify_bert_result
 from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
-from src.views.backend import get_content_model, get_core_backend
+from src.views.backend import get_calibration, get_content_model, get_core_backend
 
 
 def _strip_encoded_content(raw: str) -> str:
@@ -1091,8 +1092,15 @@ def render():
 
                 with st.spinner("Loading BERT model..."):
                     tokenizer, model, model_source = get_content_model()
+                calibration = get_calibration()
 
                 st.info("BERT model loaded from Hugging Face.")
+                if calibration["source"] != "huggingface":
+                    st.caption(
+                        "⚠️ Nessun `calibration.json` trovato per questo modello: uso i "
+                        "default legacy (soglia 50%, banda 35-65%, nessun temperature "
+                        "scaling). Rilancia il notebook di training per generarlo."
+                    )
 
                 if not email_text:
                     soc["bert_ai_result"] = "not available"
@@ -1104,7 +1112,9 @@ def render():
                         with torch.inference_mode():
                             outputs = model(**inputs)
                             logits = outputs.logits
-                            probabilities = torch.softmax(logits, dim=1).flatten().tolist()
+                            probabilities = calibrated_probabilities(
+                                logits, temperature=calibration["temperature"]
+                            ).flatten().tolist()
                     prob_safe = probabilities[0] * 100
                     prob_phishing = probabilities[1] * 100
                     c1, c2 = st.columns(2)
@@ -1112,17 +1122,28 @@ def render():
                     c2.metric("Phishing", f"{prob_phishing:.2f}%")
                     soc["bert_phishing_probability"] = prob_phishing
                     soc["bert_legitimate_probability"] = prob_safe
-                    if prob_phishing >= 65:
-                        soc["bert_ai_result"] = "phishing"
+
+                    result = classify_bert_result(
+                        probabilities[1],  # probabilita' phishing calibrata, 0-1
+                        threshold=calibration["threshold"],
+                        band=calibration["band"],
+                    )
+                    soc["bert_ai_result"] = result
+                    if result == "phishing":
                         st.error("AI result: possible phishing")
-                    elif prob_safe >= 65:
-                        soc["bert_ai_result"] = "legitimate"
+                    elif result == "legitimate":
                         st.success("AI result: email probably legitimate")
                     else:
-                        soc["bert_ai_result"] = "uncertain"
                         st.warning("AI result: inconclusive content signal")
+
                     with st.expander("Raw logits"):
-                        st.json({"logits": logits.flatten().tolist()})
+                        st.json({
+                            "logits": logits.flatten().tolist(),
+                            "calibration_temperature": calibration["temperature"],
+                            "decision_threshold": calibration["threshold"],
+                            "uncertain_band": calibration["band"],
+                            "calibration_source": calibration["source"],
+                        })
 
                 st.markdown("#### Extracted Body")
                 source = soc.get("body_source", "unknown")
@@ -1206,4 +1227,3 @@ def render():
             st.error(f"An error occurred during analysis: {exc}")
             with st.expander("Error details"):
                 st.exception(exc)
-
