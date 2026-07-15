@@ -58,16 +58,28 @@ GENERIC_REPLY_LOCAL_PARTS = {
 
 BULK_OR_CRM_HEADERS = {
     "List-Unsubscribe",
+    "List-Unsubscribe-Post",
     "List-Id",
     "List-Help",
+    "List-Owner",
+    "List-Post",
+    "List-Subscribe",
     "Precedence",
+    "Auto-Submitted",
     "X-Mailer",
     "X-Campaign",
     "X-Campaign-Id",
     "X-Mailgun-Tag",
+    "X-Mailgun-Sid",
     "X-MC-User",
+    "X-Mandrill-User",
+    "X-SES-Outgoing",
     "X-SFDC-LK",
+    "X-SG-EID",
+    "X-SMTPAPI",
 }
+
+BULK_SENDER_SIGNAL_THRESHOLD = 4
 
 
 def _extract_domain(email_or_addr: str) -> str:
@@ -93,12 +105,28 @@ def _local_part(address: str | None) -> str:
     return address.rsplit("@", 1)[0].lower().strip()
 
 
+def _bulk_sender_signals(msg) -> list[str]:
+    signals: list[str] = []
+    for name in sorted(BULK_OR_CRM_HEADERS):
+        value = str(msg.get(name) or "").strip()
+        if value:
+            signals.append(name)
+
+    auto_submitted = str(msg.get("Auto-Submitted") or "").lower().strip()
+    precedence = str(msg.get("Precedence") or "").lower().strip()
+    if auto_submitted in {"auto-generated", "auto-replied"}:
+        signal = f"Auto-Submitted={auto_submitted}"
+        if signal not in signals:
+            signals.append(signal)
+    if precedence in {"bulk", "list"}:
+        signal = f"Precedence={precedence}"
+        if signal not in signals:
+            signals.append(signal)
+    return signals
+
+
 def _has_bulk_or_crm_headers(msg) -> bool:
-    if any(msg.get(name) for name in BULK_OR_CRM_HEADERS):
-        return True
-    auto_submitted = str(msg.get("Auto-Submitted") or "").lower()
-    precedence = str(msg.get("Precedence") or "").lower()
-    return auto_submitted in {"auto-generated", "auto-replied"} or precedence in {"bulk", "list"}
+    return bool(_bulk_sender_signals(msg))
 
 
 def _reply_to_mismatch_looks_legitimate(msg, from_addr: str | None, reply_addr: str | None) -> bool:
@@ -203,6 +231,10 @@ class EmlSOCAnalyzer:
         report["importance"]   = self._header(msg, "Importance") or self._header(msg, "X-Priority")
         report["mime_version"] = self._header(msg, "MIME-Version")
         report["content_type"] = self._header(msg, "Content-Type")
+        bulk_sender_signals = _bulk_sender_signals(msg)
+        report["bulk_sender_signals"] = bulk_sender_signals
+        report["bulk_sender_signal_count"] = len(bulk_sender_signals)
+        report["is_bulk_sender"] = len(bulk_sender_signals) >= BULK_SENDER_SIGNAL_THRESHOLD
 
         # ── 2. Return-Path / Errors-To / Reply-To ─────────────────────────
         return_path = self._header(msg, "Return-Path")
@@ -454,11 +486,19 @@ class EmlSOCAnalyzer:
             _from_domain = _extract_domain(
                 EmlSOCAnalyzer._extract_address(report.get("from_") or "") or ""
             )
+            is_bulk_sender = bool(report.get("is_bulk_sender"))
+            bulk_count = int(report.get("bulk_sender_signal_count") or 0)
+            level = "LOW" if is_bulk_sender else "MEDIUM"
+            bulk_note = (
+                f"Bulk sender detected ({bulk_count} header signals), so this mismatch can be legitimate."
+                if is_bulk_sender
+                else f"Bulk sender not detected ({bulk_count} header signals), so this mismatch is more suspicious."
+            )
             flag(
-                "MEDIUM", "Return-Path",
+                level, "Return-Path",
                 f"The Return-Path domain (`{report['return_path_domain']}`) differs from "
-                f"the From domain (`{_from_domain}`). This can be legitimate for bulk senders, "
-                "but it should be reviewed with authentication and link evidence."
+                f"the From domain (`{_from_domain}`). {bulk_note} Review with authentication "
+                "and link evidence."
             )
         elif report.get("return_path") and not report.get("return_path_domain"):
             flag("LOW", "Return-Path", "Return-Path present but domain cannot be extracted")

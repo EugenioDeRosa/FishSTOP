@@ -249,10 +249,6 @@ def _bert_support_label(soc: dict) -> str:
     result = str(soc.get("bert_ai_result") or "").strip().lower()
     if result not in {"phishing", "legitimate", "uncertain"}:
         return "not available"
-
-    phishing_probability = soc.get("bert_phishing_probability")
-    if isinstance(phishing_probability, (int, float)):
-        return f"advisory content signal only, non-binding; result={result}; phishing_probability={phishing_probability:.2f}%"
     return f"advisory content signal only, non-binding; result={result}"
 
 
@@ -333,7 +329,13 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
     if soc.get("reply_to_mismatch"):
         lines.append("Reply-To mismatch detected")
     if soc.get("return_path_domain_mismatch"):
-        lines.append("Return-Path domain differs from From domain")
+        bulk_sender = bool(soc.get("is_bulk_sender"))
+        bulk_count = int(soc.get("bulk_sender_signal_count") or 0)
+        lines.append(
+            "Return-Path domain differs from From domain; "
+            f"bulk_sender={str(bulk_sender).lower()} "
+            f"bulk_sender_signal_count={bulk_count}"
+        )
     if soc.get("display_name_spoofing"):
         lines.append(f"Display name spoofing indicator: {soc.get('display_name_spoofing')}")
 
@@ -379,7 +381,7 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
             f"evidence={_vt_evidence_label(vt_status)}"
         )
 
-    auth_only_fields = {"SPF", "DKIM", "DMARC"}
+    auth_only_fields = {"SPF", "DKIM", "DMARC", "Return-Path"}
     pdf_fields_already_summarized = {"PDF Content", "PDF Attachment"}
     for flag in (soc.get("flags") or []):
         if flag.get("level") not in {"HIGH", "MEDIUM"}:
