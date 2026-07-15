@@ -654,9 +654,8 @@ def _safe_vt_url_lookup(validator, url: str) -> dict:
 
 def _summarize_link_reputation(results: dict) -> str:
     if not results:
-        return "No links found."
+        return ""
 
-    neutral_statuses = {"not_found", "skipped", "error", "unknown"}
     counts = {"malicious": 0, "suspicious": 0, "clean": 0, "not_found": 0, "skipped": 0, "error": 0, "unknown": 0}
     for rep in results.values():
         status = rep.get("status") or "unknown"
@@ -664,22 +663,17 @@ def _summarize_link_reputation(results: dict) -> str:
 
     context_count = sum(len(rep.get("crowdsourced_context") or []) for rep in results.values())
     positive_evidence = counts.get("malicious", 0) + counts.get("suspicious", 0)
-    neutral_count = sum(counts.get(status, 0) for status in neutral_statuses)
-    parts = [f"{value} {key}" for key, value in counts.items() if value]
-    if context_count:
-        parts.append(f"{context_count} crowdsourced context item(s)")
+    if positive_evidence == 0 and context_count == 0:
+        return ""
 
-    if counts.get("malicious"):
-        risk_label = "High risk"
-    elif counts.get("suspicious"):
-        risk_label = "Manual review only"
-    elif positive_evidence == 0 and neutral_count:
-        risk_label = "No positive VT evidence"
-    else:
-        risk_label = "Clean"
-
-    breakdown = ", ".join(parts) if parts else "no analyzed links"
-    return f"VirusTotal link intelligence: {risk_label} - {breakdown}. Not found, skipped, unknown, timeout, or rate-limit errors are neutral and must not increase risk."
+    parts = [
+        f"{counts['malicious']} malicious" if counts.get("malicious") else "",
+        f"{counts['suspicious']} suspicious" if counts.get("suspicious") else "",
+        f"{context_count} crowdsourced context item(s)" if context_count else "",
+    ]
+    breakdown = ", ".join(part for part in parts if part)
+    risk_label = "High risk" if counts.get("malicious") else "Manual review"
+    return f"VirusTotal link intelligence: {risk_label} - {breakdown}."
 
 
 def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_javascript: bool = False) -> None:
@@ -929,8 +923,9 @@ def render():
                 if not links:
                     st.info("No URL found in the email body.")
                 else:
-                    st.caption("Each URL is checked on VirusTotal. The result is also passed to Phi-4 mini.")
-                    st.info(soc.get("link_reputation_summary") or "VirusTotal link reputation unavailable.")
+                    st.caption("Each URL is checked on VirusTotal. Only malicious or suspicious results are passed to Phi-4 mini.")
+                    if soc.get("link_reputation_summary"):
+                        st.warning(soc["link_reputation_summary"])
 
                     if lookalike_alerts:
                         st.markdown("##### Lookalike / Typosquatting")
