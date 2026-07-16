@@ -34,7 +34,6 @@ APP_VERSION = _load_app_version()
 
 PAGES = {
     "settings": "src.views.settings",
-    "train": "src.views.train",
     "dataset_sources": "src.views.dataset_sources",
     "analyze": "src.views.analyzer",
 }
@@ -194,7 +193,7 @@ def render_home() -> None:
     st.divider()
     st.markdown("### Select a section")
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     with c1:
         st.button(
             "Settings",
@@ -205,21 +204,13 @@ def render_home() -> None:
         )
     with c2:
         st.button(
-            "Colab Training",
-            use_container_width=True,
-            type="primary",
-            on_click=set_page,
-            args=("train",),
-        )
-    with c3:
-        st.button(
             "Analyze EML",
             use_container_width=True,
             type="primary",
             on_click=set_page,
             args=("analyze",),
         )
-    with c4:
+    with c3:
         st.button(
             "Public Datasets",
             use_container_width=True,
