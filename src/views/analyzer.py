@@ -1,4 +1,5 @@
 import json
+import hashlib
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -9,7 +10,11 @@ import streamlit as st
 import streamlit.components.v1 as components
  
 from src.analyzer.html_utils import sanitize_html_for_js_preview, sanitize_html_for_preview
-from src.analyzer.llm_context_analyzer import active_llm_backend, stream_phi4_email_analysis
+from src.analyzer.llm_context_analyzer import (
+    PROMPT_VERSION,
+    active_llm_backend,
+    stream_phi4_email_analysis,
+)
 from src.bert_calibration import calibrated_probabilities, classify as classify_bert_result
 from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
@@ -238,7 +243,7 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
     error_key = f"{analysis_key}_error"
 
     if st.session_state.get(result_key):
-        st.success(st.session_state[result_key])
+        _show_phi4_result(st, st.session_state[result_key])
         return None
 
     if st.session_state.get(error_key):
@@ -252,6 +257,41 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
 
     st.info("Phi-4 mini analysis starts automatically in the Executive Triage panel.")
     return None
+
+
+def _show_phi4_result(target, result):
+    if not isinstance(result, dict):
+        target.info(str(result))
+        return
+
+    verdict = str(result.get("final_verdict") or "review").lower()
+    title = {
+        "legitimate": "LEGITIMATE",
+        "review": "REVIEW REQUIRED",
+        "phishing": "PHISHING",
+    }.get(verdict, "REVIEW REQUIRED")
+    evidence = result.get("evidence") or {}
+    evidence_lines = []
+    for axis in ("content", "identity", "technical"):
+        values = evidence.get(axis) or []
+        if values:
+            evidence_lines.append(f"- **{axis.title()}:** {'; '.join(str(value) for value in values)}")
+    evidence_text = "\n".join(evidence_lines)
+    message = (
+        f"**{title}** — {result.get('explanation') or ''}\n\n"
+        f"Content `{result.get('content_risk', 'unknown')}` · "
+        f"Identity `{result.get('identity_risk', 'unknown')}` · "
+        f"Technical `{result.get('technical_risk', 'unknown')}`\n\n"
+        f"Requested action: `{result.get('requested_action', 'unknown')}` via "
+        f"`{result.get('action_channel', 'unknown')}`.\n\n"
+        f"{evidence_text}"
+    )
+    if verdict == "phishing":
+        target.error(message)
+    elif verdict == "review":
+        target.warning(message)
+    else:
+        target.success(message)
 
 
 def _phi4_loading_html() -> str:
@@ -320,12 +360,15 @@ def _stream_phi4_analysis(soc: dict, analysis_key: str, placeholder):
         placeholder.markdown(_phi4_loading_html(), unsafe_allow_html=True)
         for event in stream_phi4_email_analysis(soc):
             if event.get("status") == "stream":
+                # The streamed model output is JSON and is intentionally hidden
+                # until it has been parsed and validated by the application.
                 last_text = event.get("text") or last_text
-                placeholder.info(last_text)
             elif event.get("status") == "ok":
-                last_text = event.get("text") or last_text
-                st.session_state[result_key] = last_text or "Analysis completed without text."
-                placeholder.success(st.session_state[result_key])
+                analysis = event.get("analysis")
+                if not isinstance(analysis, dict):
+                    raise ValueError("Structured Phi-4 analysis is missing")
+                st.session_state[result_key] = analysis
+                _show_phi4_result(placeholder, analysis)
                 return
             elif event.get("status") == "error":
                 last_text = event.get("text") or last_text
@@ -700,10 +743,13 @@ def render():
         st.caption("Il file viene analizzato localmente e convertito in un report SOC.")
 
         if uploaded_file is not None:
-            raw_text = uploaded_file.getvalue().decode("utf-8", errors="replace")
-            if st.session_state.get("current_eml_name") != uploaded_file.name:
+            raw_bytes = uploaded_file.getvalue()
+            raw_text = raw_bytes.decode("utf-8", errors="replace")
+            current_eml_hash = hashlib.sha256(raw_bytes).hexdigest()
+            if st.session_state.get("current_eml_hash") != current_eml_hash:
                 st.session_state["raw_eml_text"] = raw_text
                 st.session_state["current_eml_name"] = uploaded_file.name
+                st.session_state["current_eml_hash"] = current_eml_hash
                 st.rerun()
 
             temp_path = os.path.join("data", "raw", "temp_triage.eml")
@@ -763,7 +809,8 @@ def render():
             c5.metric("Attachments", len(attachments))
             st.caption(severity_caption)
 
-            phi4_key = f"phi4_analysis_v12_{uploaded_file.name}_{len(uploaded_file.getbuffer())}"
+            eml_digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
+            phi4_key = f"phi4_analysis_{PROMPT_VERSION}_{eml_digest}"
             with st.container(border=True):
                 phi4_placeholder = _render_phi4_analysis(soc, phi4_key, auto_run=True)
 

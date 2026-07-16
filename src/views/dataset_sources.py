@@ -18,8 +18,8 @@ SOURCE_OPTIONS = {
     "kaggle": {
         "label": "Kaggle Phishing Email Dataset",
         "caption": (
-            "Dataset finale combinato: Enron, Ling, CEAS, Nazario, Nigerian Fraud e SpamAssassin. "
-            "82.486 rows originali, circa 81.820 dopo pulizia e deduplica."
+            "Dataset combinato da Enron, Ling, CEAS, Nazario, Nigerian Fraud e SpamAssassin. "
+            "La classe positiva mescola spam e phishing: non e consigliata come fonte predefinita."
         ),
         "url": "https://www.kaggle.com/datasets/naserabdullahalam/phishing-email-dataset",
         "citation_url": "https://arxiv.org/abs/2405.11619",
@@ -27,16 +27,16 @@ SOURCE_OPTIONS = {
     "kaggle_phishing_legitimate": {
         "label": "Kaggle Phishing and Legitimate Emails",
         "caption": (
-            "10.000 email con text, label, phishing_type, severity e confidence "
-            "(6,000 phishing, 4,000 legitimate in the local copy). Use it as an optional additional source."
+            "10.000 email generate sinteticamente con un LLM (6.000 phishing, 4.000 legitimate). "
+            "Usare solo come augmentation del train; escluse da validation e test se ci sono fonti reali."
         ),
         "url": "https://www.kaggle.com/datasets/kuladeep19/phishing-and-legitimate-emails-dataset",
     },
     "kaggle_subhajournal_phishingemails": {
         "label": "Kaggle Phishing Email Detection",
         "caption": (
-            "18.650 email con Email Text e Email Type: 11.322 Safe Email, 7.328 Phishing Email. "
-            "Source opzionale: contiene duplicati/quasi-duplicati, quindi viene filtrata dalla deduplica template."
+            "18.650 email: 11.322 Safe e 7.328 Phishing. La copia originale contiene oltre 1.100 duplicati, "
+            "533 placeholder empty con label contraddittorie e una riga corrotta enorme: ora vengono eliminati."
         ),
         "url": "https://www.kaggle.com/datasets/subhajournal/phishingemails",
     },
@@ -65,6 +65,7 @@ SOURCE_OPTIONS = {
     },
 }
 
+RECOMMENDED_DEFAULT_SOURCES = {"github_phishing_pot", "nazario", "spamassassin"}
 
 def _render_stats(csv_path: Path) -> None:
     stats = dataset_stats(csv_path)
@@ -79,6 +80,23 @@ def _render_stats(csv_path: Path) -> None:
     if stats.get("missing_label"):
         st.warning("The existing CSV does not contain the `label` column: regenerate it with the button below.")
 
+    quality = {
+        "Invalid text": stats.get("invalid_text", 0),
+        "Invalid label": stats.get("invalid_label", 0),
+        "Too short": stats.get("too_short", 0),
+        "Too long/corrupt": stats.get("too_long", 0),
+        "Exact label conflicts": stats.get("exact_label_conflicts", 0),
+    }
+    if any(quality.values()):
+        with st.expander("Rows rejected by quality checks", expanded=False):
+            st.dataframe(
+                pd.DataFrame([{"check": key, "rows": value} for key, value in quality.items()]),
+                hide_index=True,
+                width="stretch",
+            )
+
+    if stats.get("splits"):
+        st.caption("Split: " + ", ".join(f"{key}={value}" for key, value in stats["splits"].items()))
     if stats["sources"]:
         with st.expander("Distribution by source", expanded=False):
             source_df = pd.DataFrame(
@@ -126,7 +144,7 @@ def render() -> None:
     )
 
     output_csv = Path(st.text_input("Final balanced CSV", value=str(BALANCED_OUTPUT_CSV)))
-    st.caption("Format: `text,label,source,source_file,text_hash` with `0=legitimate`, `1=phishing`.")
+    st.caption("Format: `text,label,source,source_file,text_hash,split` con `0=legitimate`, `1=phishing` e split gia anti-leakage.")
 
     st.divider()
     st.subheader("Balanced CSV status")
@@ -139,7 +157,7 @@ def render() -> None:
     selected_sources: list[str] = []
     kaggle_selected = False
     for key, option in SOURCE_OPTIONS.items():
-        default = key == "kaggle"
+        default = key in RECOMMENDED_DEFAULT_SOURCES
         disabled_by_combined = kaggle_selected and key in KAGGLE_COMBINED_OVERLAP_SOURCES
         checked = st.checkbox(
             option["label"],

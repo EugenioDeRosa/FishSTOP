@@ -42,6 +42,6 @@ def test_sales_followup_with_bert_and_auth_medium_flags_is_not_bec_by_itself():
 
     assert "torno a contattarla un'ultima volta" in prompt
     assert "BERT result: available to FishSTOP UI only; not provided as verdict evidence to Phi-4" in prompt
-    assert "ordinary marketing, sales follow-up, scheduling" in prompt_source
-    assert "business-process discussion" in prompt_source
+    assert "ordinary marketing, sales follow-up" in llm_context_analyzer.SYSTEM_MESSAGE
+    assert "business-process discussion" in llm_context_analyzer.SYSTEM_MESSAGE
     assert "unless it includes a risky action above" in prompt_source

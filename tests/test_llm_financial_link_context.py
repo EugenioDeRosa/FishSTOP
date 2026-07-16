@@ -81,16 +81,16 @@ def test_phi4_prompt_forbids_clean_technical_checks_overriding_payment_request()
 def test_phi4_prompt_forbids_not_suspicious_payment_clean_vt_reasoning():
     prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
 
-    assert "Start exactly with 'The email provided is suspicious because'" in prompt_source
+    assert "Return this JSON schema exactly" in prompt_source
     assert "pay/settle/transfer money" in prompt_source
-    assert "If there is no risky requested action and no strong support" in prompt_source
     assert "use technical facts only as support" in prompt_source
 
 
 def test_phi4_gets_extracted_link_for_invoice_payment_request_without_vt():
     prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
 
-    assert "In any language, an invoice/payment/bank-transfer request combined with an extracted link or attachment is suspicious" in prompt_source
+    assert "invoice/payment/bank-transfer request" in prompt_source
+    assert "combined with an extracted link or attachment" in prompt_source
     assert "DMARC is unknown" in prompt_source
     assert "VirusTotal is clean/unavailable" in prompt_source
 
