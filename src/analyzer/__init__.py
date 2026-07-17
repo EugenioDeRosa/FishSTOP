@@ -12,7 +12,7 @@ from .link_extractor import extract_links
 from .lookalike      import check_lookalike_domains, levenshtein, normalize_homoglyphs, is_ip_url
 from .attachment     import analyze_attachment, identify_magic_bytes, ext_from_filename
 from .received_parser import parse_received_hop, parse_auth_results
-from .html_utils     import strip_html
+from .html_utils     import recover_mislabelled_utf7_html, strip_html
 from .constants      import KNOWN_BRANDS, HOMOGLYPH_MAP, MAGIC_BYTES, CONTENT_TYPE_TO_EXT
 
 __all__ = [
@@ -28,6 +28,7 @@ __all__ = [
     "parse_received_hop",
     "parse_auth_results",
     "strip_html",
+    "recover_mislabelled_utf7_html",
     "KNOWN_BRANDS",
     "HOMOGLYPH_MAP",
     "MAGIC_BYTES",

@@ -52,6 +52,42 @@ _DANGEROUS_STYLE_RE = re.compile(
     r"(?is)(?:expression\s*\(|url\s*\(|@import|behavior\s*:|-moz-binding\s*:|javascript\s*:|vbscript\s*:|data\s:)"
 )
 
+_UTF7_SHIFT_SEQUENCE_RE = re.compile(r"\+[A-Za-z0-9/]{3,}-")
+_HTML_TAG_RE = re.compile(
+    r"(?is)<\s*/?\s*(?:html|head|body|table|tbody|tr|td|div|span|p|br|a|img|style|strong|ul|li)\b"
+)
+
+
+def recover_mislabelled_utf7_html(value: str) -> str:
+    """Recover an HTML body encoded as UTF-7 but declared as another charset.
+
+    UTF-7 is entirely ASCII, so a normal UTF-8 decode succeeds without errors
+    and leaves strings such as ``+ADw-html+AD4-`` untouched. Recovery is only
+    accepted when several UTF-7 shift sequences are present and strict UTF-7
+    decoding turns them into multiple real HTML tags. Ordinary text containing
+    an isolated ``+...-`` sequence is therefore left unchanged.
+    """
+    value = str(value or "")
+    if not value or _HTML_TAG_RE.search(value):
+        return value
+
+    sequences = _UTF7_SHIFT_SEQUENCE_RE.findall(value)
+    if len(sequences) < 4 or "+ADw" not in value or not any(
+        marker in value for marker in ("+AD4", "+AD0", "+ACI")
+    ):
+        return value
+
+    try:
+        decoded = value.encode("ascii", errors="strict").decode("utf-7", errors="strict")
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return value
+
+    if len(_HTML_TAG_RE.findall(decoded)) < 2:
+        return value
+    if len(_UTF7_SHIFT_SEQUENCE_RE.findall(decoded)) >= len(sequences):
+        return value
+    return decoded
+
 
 def _parse_html_for_preview(html: str):
     try:

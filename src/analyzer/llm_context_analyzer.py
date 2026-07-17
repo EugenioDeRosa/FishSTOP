@@ -1,4 +1,4 @@
-import json
+﻿import json
 import os
 import re
 
@@ -15,7 +15,7 @@ GITHUB_MODELS_MODEL = os.getenv("GITHUB_MODELS_MODEL", "Phi-4-mini-instruct")
 OLLAMA_CHAT_ENDPOINT = os.getenv("OLLAMA_CHAT_ENDPOINT", "http://localhost:11434/api/chat")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "phi4-mini")
 LLM_PROVIDER = os.getenv("FISHSTOP_LLM_PROVIDER", "auto").strip().lower()
-PROMPT_VERSION = "semantic-policy-v3"
+PROMPT_VERSION = "semantic-policy-v5"
 
 
 def _github_models_token() -> str:
@@ -483,7 +483,7 @@ def build_fast_email_prompt(soc: dict) -> str:
 _REQUESTED_ACTIONS = {
     "none", "informational", "visit_link", "open_attachment", "reply",
     "provide_information", "provide_credentials", "pay_or_transfer",
-    "change_account_settings", "bypass_procedure", "other",
+    "change_account_settings", "claim_reward", "bypass_procedure", "other",
 }
 _ACTION_CHANNELS = {
     "none", "normal_known_procedure", "supplied_link", "external_form",
@@ -542,6 +542,8 @@ def normalize_semantic_extraction(raw: dict) -> dict:
         "asks_for_credentials": asks_for_credentials,
         "asks_for_sensitive_information": _as_bool(raw.get("asks_for_sensitive_information")),
         "asks_for_payment": _as_bool(raw.get("asks_for_payment")),
+        "asks_to_claim_reward": _as_bool(raw.get("asks_to_claim_reward")),
+        "financial_incentive_present": _as_bool(raw.get("financial_incentive_present")),
         "asks_to_change_account_settings": _as_bool(raw.get("asks_to_change_account_settings")),
         "asks_to_bypass_procedure": _as_bool(raw.get("asks_to_bypass_procedure")),
         "urgency_present": _as_bool(raw.get("urgency_present")),
@@ -561,6 +563,13 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
         semantic["asks_to_change_account_settings"]
         or semantic["requested_action"] == "change_account_settings"
     )
+    link_directed_action = semantic["asks_to_click_link"] or semantic["requested_action"] in {
+        "visit_link", "claim_reward",
+    }
+
+    if links and link_directed_action:
+        semantic["asks_to_click_link"] = True
+        semantic["action_channel"] = "supplied_link"
 
     # A model may call an account-change reminder a normal procedure while
     # overlooking that the email itself supplies the destination. Correlating
@@ -587,6 +596,9 @@ def _content_risk(semantic: dict) -> tuple[str, list[str]]:
     ) and semantic["action_channel"] != "normal_known_procedure"
     sensitive_request = semantic["asks_for_sensitive_information"] or semantic["asks_for_payment"]
     settings_via_supplied_channel = semantic["asks_to_change_account_settings"] and risky_channel
+    reward_via_supplied_channel = (
+        semantic["requested_action"] == "claim_reward" or semantic["asks_to_claim_reward"]
+    ) and risky_channel
 
     if credential_submission:
         return "malicious", ["the message asks the recipient to provide credentials"]
@@ -601,6 +613,8 @@ def _content_risk(semantic: dict) -> tuple[str, list[str]]:
         reasons.append("the message requests sensitive information")
     if settings_via_supplied_channel:
         reasons.append("account changes are requested through a channel supplied by the message")
+    if reward_via_supplied_channel:
+        reasons.append("a reward or financial benefit must be claimed through a channel supplied by the message")
     if semantic["urgency_targets_risky_action"] and (risky_channel or sensitive_request):
         reasons.append("urgency is directed at a risky requested action")
 
@@ -737,6 +751,10 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
         "asks_to_change_account_settings=true. A password-expiration reminder with no supplied link, form, attachment, reply "
         "request or unusual channel is also benign; use action_channel=unclear if no channel is stated. Keep requested_action "
         "and all boolean fields mutually consistent. "
+        "Use requested_action=claim_reward and asks_to_claim_reward=true when the recipient is invited to claim, redeem, collect, "
+        "convert or receive money, cryptocurrency, tokens, prizes, refunds, points or another financial benefit. Set "
+        "financial_incentive_present=true when such a promised benefit is used to motivate the action. A claim/redeem action "
+        "through a link, form or attachment is sensitive even when no credentials or payment are explicitly requested. "
         "Risky actions include providing credentials or confidential data, pay/settle/transfer money, changing account settings "
         "through a supplied channel, or bypassing procedure. Ordinary marketing, sales follow-up, scheduling and business-process discussion "
         "are benign unless it includes a risky action above. Weak only evidence includes urgency or failed authentication; "
@@ -747,10 +765,11 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
         "request even when DMARC is unknown or VirusTotal is clean/unavailable.\n\n"
         "Return this JSON schema exactly:\n"
         "{\"requested_action\":\"none|informational|visit_link|open_attachment|reply|provide_information|provide_credentials|"
-        "pay_or_transfer|change_account_settings|bypass_procedure|other\","
+        "pay_or_transfer|change_account_settings|claim_reward|bypass_procedure|other\","
         "\"action_channel\":\"none|normal_known_procedure|supplied_link|external_form|supplied_attachment|email_reply|phone_or_other|unclear\","
         "\"asks_to_click_link\":false,\"asks_to_open_attachment\":false,\"asks_for_credentials\":false,"
         "\"asks_for_sensitive_information\":false,\"asks_for_payment\":false,"
+        "\"asks_to_claim_reward\":false,\"financial_incentive_present\":false,"
         "\"asks_to_change_account_settings\":false,\"asks_to_bypass_procedure\":false,"
         "\"urgency_present\":false,\"urgency_targets_risky_action\":false,"
         "\"impersonation_or_deception\":false,\"content_risk\":\"benign|suspicious|malicious\","

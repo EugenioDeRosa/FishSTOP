@@ -8,6 +8,7 @@ from src.public_dataset_builder import (
     _clean_dataset_frame,
     _dedupe_templates,
     _parse_binary_label,
+    combine_public_and_synthetic_datasets,
     template_hash,
     text_hash,
 )
@@ -69,15 +70,111 @@ def test_template_dedup_removes_variants_and_preserves_unicode():
 
 def test_synthetic_rows_are_train_only_when_real_test_data_exists():
     rows = []
+    topics = [
+        "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet",
+        "kilo", "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango",
+    ]
     for label in (0, 1):
         for index in range(20):
-            text = _text(f"real-{label}-{index}")
+            topic = topics[index]
+            unit = f"{topic}{'safe' if label == 0 else 'danger'}"
+            text = f"Subject {unit} " + " ".join([unit] * 50)
             rows.append({"text": text, "label": label, "source": "real", "source_file": str(index), "text_hash": text_hash(text)})
         for index in range(5):
             text = _text(f"synthetic-{label}-{index}")
-            rows.append({"text": text, "label": label, "source": "kaggle_phishing_and_legitimate_emails", "source_file": str(index), "text_hash": text_hash(text)})
+            source = "synthetic_modern_v2" if index == 0 else "kaggle_phishing_and_legitimate_emails"
+            rows.append({"text": text, "label": label, "source": source, "source_file": str(index), "text_hash": text_hash(text)})
 
     split = _assign_splits(pd.DataFrame(rows))
-    synthetic = split[split["source"] == "kaggle_phishing_and_legitimate_emails"]
+    synthetic = split[split["source"] != "real"]
     assert set(synthetic["split"]) == {"train"}
     assert set(split[split["source"] == "real"]["split"]) == {"train", "validation", "test"}
+
+
+def test_near_duplicate_campaign_variants_stay_in_the_same_split():
+    rows = []
+    for label in (0, 1):
+        for index in range(20):
+            text = _text(f"independent alphabetic campaign {chr(97 + index)} labelword {label}")
+            rows.append(
+                {
+                    "text": text,
+                    "label": label,
+                    "source": "real",
+                    "source_file": str(index),
+                    "text_hash": text_hash(text),
+                }
+            )
+    base = (
+        "Security notification: your mailbox storage requires review. "
+        "Open the account portal and confirm the information shown in the dashboard. "
+    )
+    for suffix in ("Reference alpha one", "Reference alpha two"):
+        text = base + suffix
+        rows.append(
+            {
+                "text": text,
+                "label": 1,
+                "source": "real",
+                "source_file": suffix,
+                "text_hash": text_hash(text),
+            }
+        )
+
+    split = _assign_splits(pd.DataFrame(rows))
+    campaign = split[split["text"].str.startswith("Security notification")]
+    assert campaign["campaign_id"].nunique() == 1
+    assert campaign["split"].nunique() == 1
+
+
+def test_complete_dataset_keeps_synthetic_train_only_and_balanced(tmp_path: Path):
+    public_rows = []
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    for label in (0, 1):
+        for index in range(20):
+            split = "train" if index < 12 else "validation" if index < 16 else "test"
+            token = alphabet[index] + alphabet[label + 20]
+            text = _text(f"public {token} classword {'safe' if label == 0 else 'danger'}")
+            public_rows.append(
+                {
+                    "text": text,
+                    "label": label,
+                    "source": "public_real",
+                    "source_file": token,
+                    "text_hash": text_hash(text),
+                    "split": split,
+                }
+            )
+
+    synthetic_rows = []
+    for label in (0, 1):
+        for token in ("omega", "sigma"):
+            text = _text(f"synthetic {token} {'benign' if label == 0 else 'attack'}")
+            synthetic_rows.append(
+                {
+                    "text": text,
+                    "label": label,
+                    "source": "synthetic_modern_v2",
+                    "source_file": token,
+                }
+            )
+
+    public_csv = tmp_path / "public.csv"
+    synthetic_csv = tmp_path / "synthetic.csv"
+    output_csv = tmp_path / "complete.csv"
+    pd.DataFrame(public_rows).to_csv(public_csv, index=False)
+    pd.DataFrame(synthetic_rows).to_csv(synthetic_csv, index=False)
+
+    result = combine_public_and_synthetic_datasets(
+        public_csv=public_csv,
+        synthetic_csv=synthetic_csv,
+        output_csv=output_csv,
+        max_synthetic_train_fraction=0.50,
+    )
+
+    assert result["status"] == "ok"
+    complete = pd.read_csv(output_csv)
+    assert "campaign_id" in complete.columns
+    assert complete["label"].value_counts().to_dict() == {0: 22, 1: 22}
+    assert set(complete.loc[complete["source"] == "synthetic_modern_v2", "split"]) == {"train"}
+    assert not complete.loc[complete["split"].isin(["validation", "test"]), "source"].str.startswith("synthetic_").any()

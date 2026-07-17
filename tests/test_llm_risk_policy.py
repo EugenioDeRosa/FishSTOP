@@ -126,6 +126,33 @@ def test_extracted_link_overrides_model_calling_account_change_normal():
     assert analysis["technical_risk"] == "clean"
 
 
+def test_reward_claim_through_supplied_link_requires_review():
+    url = "https://storage.example/claim"
+    analysis = apply_email_risk_policy(
+        {
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "pass"},
+                "DMARC": {"status": "pass"},
+            },
+            "links": [{"url": url, "host": "storage.example", "source": "html_href"}],
+            "link_reputation": {url: {"status": "not_found"}},
+        },
+        _semantic(
+            requested_action="claim_reward",
+            action_channel="unclear",
+            asks_to_click_link=True,
+            asks_to_claim_reward=True,
+            financial_incentive_present=True,
+        ),
+    )
+
+    assert analysis["final_verdict"] == "review"
+    assert analysis["content_risk"] == "suspicious"
+    assert analysis["action_channel"] == "supplied_link"
+    assert "reward or financial benefit" in analysis["evidence"]["content"][0]
+
+
 def test_credential_request_or_malicious_url_produces_phishing():
     credential_analysis = apply_email_risk_policy(
         {"auth_results": {}},

@@ -4,75 +4,47 @@ import pandas as pd
 import streamlit as st
 
 from src.public_dataset_builder import (
+    DEFAULT_BALANCED_OUTPUT_CSV,
+    DEFAULT_COMPLETE_OUTPUT_CSV,
     DEFAULT_OUTPUT_CSV,
-    KAGGLE_COMBINED_OVERLAP_SOURCES,
-    PROCESSED_DIR,
+    DEFAULT_SYNTHETIC_CSV,
     build_balanced_public_dataset,
+    build_complete_training_dataset,
     dataset_stats,
 )
 
-
-BALANCED_OUTPUT_CSV = PROCESSED_DIR / "fishstop_train_balanced.csv"
-
 SOURCE_OPTIONS = {
-    "kaggle": {
-        "label": "Kaggle Phishing Email Dataset",
-        "caption": (
-            "Dataset combinato da Enron, Ling, CEAS, Nazario, Nigerian Fraud e SpamAssassin. "
-            "La classe positiva mescola spam e phishing: non e consigliata come fonte predefinita."
-        ),
-        "url": "https://www.kaggle.com/datasets/naserabdullahalam/phishing-email-dataset",
-        "citation_url": "https://arxiv.org/abs/2405.11619",
-    },
-    "kaggle_phishing_legitimate": {
-        "label": "Kaggle Phishing and Legitimate Emails",
-        "caption": (
-            "10.000 email generate sinteticamente con un LLM (6.000 phishing, 4.000 legitimate). "
-            "Usare solo come augmentation del train; escluse da validation e test se ci sono fonti reali."
-        ),
-        "url": "https://www.kaggle.com/datasets/kuladeep19/phishing-and-legitimate-emails-dataset",
-    },
-    "kaggle_subhajournal_phishingemails": {
-        "label": "Kaggle Phishing Email Detection",
-        "caption": (
-            "18.650 email: 11.322 Safe e 7.328 Phishing. La copia originale contiene oltre 1.100 duplicati, "
-            "533 placeholder empty con label contraddittorie e una riga corrotta enorme: ora vengono eliminati."
-        ),
-        "url": "https://www.kaggle.com/datasets/subhajournal/phishingemails",
-    },
     "github_phishing_pot": {
         "label": "GitHub Phishing Pot",
         "caption": (
-            "Raccolta di campioni reali di phishing in formato .eml da honeypot. "
-            "Contiene solo email malevole: viene importata sempre con label 1."
+            "Campioni reali recenti da honeypot: phishing, scam e spam vengono tutti importati "
+            "come email malevole (label 1). La versione GitHub e fissata a un commit riproducibile."
         ),
         "url": "https://github.com/rf-peixoto/phishing_pot",
     },
     "nazario": {
         "label": "Nazario Phishing Corpus",
-        "caption": "Email phishing reali in formato mbox/raw. Non selezionare insieme al Kaggle combinato.",
+        "caption": "Email phishing reali 2022-2025 in formato mbox/raw; gli anni precedenti sono esclusi.",
         "url": "https://monkey.org/~jose/phishing/",
     },
-    "spamassassin": {
-        "label": "Apache SpamAssassin Ham",
-        "caption": "Email legitimate easy_ham e hard_ham. Non selezionare insieme al Kaggle combinato.",
-        "url": "https://spamassassin.apache.org/old/publiccorpus/",
-    },
-    "enron": {
-        "label": "Enron Email Corpus",
-        "caption": "Email legitimate, campionate per contenere tempi e dimensioni. Non selezionare insieme al Kaggle combinato.",
-        "url": "https://www.cs.cmu.edu/~enron/",
+    "ubuntu_modern_ham": {
+        "label": "Ubuntu public mailing lists 2022-2025",
+        "caption": (
+            "Email legitimate recenti dagli archivi pubblici ubuntu-users e ubuntu-security-announce. "
+            "Sostituiscono i vecchi corpus SpamAssassin ed Enron."
+        ),
+        "url": "https://lists.ubuntu.com/archives/ubuntu-users/",
     },
 }
 
-RECOMMENDED_DEFAULT_SOURCES = {"github_phishing_pot", "nazario", "spamassassin"}
+RECOMMENDED_DEFAULT_SOURCES = {"github_phishing_pot", "nazario", "ubuntu_modern_ham"}
 
 def _render_stats(csv_path: Path) -> None:
     stats = dataset_stats(csv_path)
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("Total rows", stats["rows"])
     c2.metric("Legitimate", stats["legitimate"])
-    c3.metric("Phishing", stats["phishing"])
+    c3.metric("Malicious (phishing/spam)", stats["phishing"])
     c4.metric("Duplicates", stats.get("duplicates", 0))
     c5.metric("Near duplicates", stats.get("template_duplicates", 0))
     c6.metric("Label conflicts", stats.get("label_conflicts", 0))
@@ -105,7 +77,7 @@ def _render_stats(csv_path: Path) -> None:
             st.dataframe(source_df, hide_index=True, width="stretch")
 
 
-def _run_builder(label: str, *args, **kwargs) -> dict:
+def _run_builder(label: str, builder=build_balanced_public_dataset, *args, **kwargs) -> dict:
     log_box = st.empty()
     messages: list[str] = []
 
@@ -114,7 +86,7 @@ def _run_builder(label: str, *args, **kwargs) -> dict:
         log_box.code("\n".join(messages[-12:]), language="text")
 
     with st.spinner(label):
-        result = build_balanced_public_dataset(*args, progress=_progress, **kwargs)
+        result = builder(*args, progress=_progress, **kwargs)
 
     for step in result.get("results", []):
         if "saltata" in step.message.lower():
@@ -139,74 +111,88 @@ def _run_builder(label: str, *args, **kwargs) -> dict:
 def render() -> None:
     st.header("Public Dataset Builder")
     st.markdown(
-        "Select the public sources to include and generate a balanced CSV in one click "
-        "50/50 tra email legitimate e phishing, con deduplica esatta e rimozione dei quasi-duplicati/template."
+        "Seleziona le fonti pubbliche e genera un CSV pronto per DistilBERT: bilanciato 50/50, "
+        "deduplicato e con phishing e spam entrambi nella classe malevola. Il dataset sintetico "
+        "moderno viene aggiunto esclusivamente al train."
     )
 
-    output_csv = Path(st.text_input("Final balanced CSV", value=str(BALANCED_OUTPUT_CSV)))
-    st.caption("Format: `text,label,source,source_file,text_hash,split` con `0=legitimate`, `1=phishing` e split gia anti-leakage.")
+    output_csv = Path(st.text_input("Complete training CSV", value=str(DEFAULT_COMPLETE_OUTPUT_CSV)))
+    public_output_csv = Path(
+        st.text_input("Intermediate public-only CSV", value=str(DEFAULT_BALANCED_OUTPUT_CSV))
+    )
+    synthetic_csv = Path(st.text_input("Synthetic augmentation CSV", value=str(DEFAULT_SYNTHETIC_CSV)))
+    st.caption(
+        "Format: `text,label,source,source_file,text_hash,campaign_id,split` con "
+        "`0=legitimate`, `1=malicious (phishing/spam)` e split per campagna anti-leakage."
+    )
 
     st.divider()
-    st.subheader("Balanced CSV status")
+    st.subheader("Complete dataset status")
     _render_stats(output_csv)
+    if synthetic_csv.exists():
+        synthetic_stats = dataset_stats(synthetic_csv)
+        st.caption(
+            f"Synthetic augmentation available: {synthetic_stats['rows']} rows "
+            f"({synthetic_stats['legitimate']} legitimate, {synthetic_stats['phishing']} malicious)."
+        )
+    else:
+        st.error(f"Synthetic dataset not found: `{synthetic_csv}`")
 
     st.divider()
     st.subheader("Sources to include")
-    st.caption("Kaggle sources require `kagglehub` and configured Kaggle credentials.")
+    st.caption("La policy moderna esclude Enron, SpamAssassin e i Kaggle derivati da corpus storici.")
 
     selected_sources: list[str] = []
-    kaggle_selected = False
     for key, option in SOURCE_OPTIONS.items():
         default = key in RECOMMENDED_DEFAULT_SOURCES
-        disabled_by_combined = kaggle_selected and key in KAGGLE_COMBINED_OVERLAP_SOURCES
         checked = st.checkbox(
             option["label"],
-            value=default and not disabled_by_combined,
+            value=default,
             key=f"public_source_{key}",
-            disabled=disabled_by_combined,
         )
         st.caption(option["caption"])
         st.markdown(f"[Open source]({option['url']})")
         if option.get("citation_url"):
             st.markdown(f"[Citation paper]({option['citation_url']})")
-        if disabled_by_combined:
-            st.info("Already included in the combined Kaggle Phishing Email Dataset.")
-            checked = False
         if checked:
             selected_sources.append(key)
-        if key == "kaggle":
-            kaggle_selected = checked
-
-    include_hard_ham = st.checkbox(
-        "Include SpamAssassin hard_ham",
-        value=True,
-        disabled="spamassassin" not in selected_sources,
-    )
-    max_enron = st.number_input(
-        "Maximum Enron emails",
-        min_value=1000,
-        max_value=50000,
-        value=10000,
-        step=1000,
-        disabled="enron" not in selected_sources,
-    )
 
     st.divider()
     if st.button(
-        "Generate balanced 50/50 public dataset",
+        "Generate complete DistilBERT training dataset",
         type="primary",
-        disabled=not selected_sources,
+        disabled=not selected_sources or not synthetic_csv.exists(),
         use_container_width=True,
     ):
         _run_builder(
-            "Generating balanced dataset...",
+            "Generating and validating complete training dataset...",
+            builder=build_complete_training_dataset,
             selected_sources=selected_sources,
             output_csv=output_csv,
+            public_output_csv=public_output_csv,
+            synthetic_csv=synthetic_csv,
             staging_csv=DEFAULT_OUTPUT_CSV,
-            include_hard_ham=include_hard_ham,
-            max_enron=int(max_enron),
         )
         st.rerun()
+
+    st.caption(
+        "Quality rule: synthetic emails remain train-only and may represent at most 10% of the training split. "
+        "Validation and test contain only public/real emails."
+    )
+
+    with st.expander("Advanced: generate only the balanced public dataset", expanded=False):
+        if st.button(
+            "Generate public-only 50/50 dataset",
+            disabled=not selected_sources,
+            use_container_width=True,
+        ):
+            _run_builder(
+                "Generating public-only dataset...",
+                selected_sources=selected_sources,
+                output_csv=public_output_csv,
+                staging_csv=DEFAULT_OUTPUT_CSV,
+            )
+            st.rerun()
 
     if output_csv.exists():
         with st.expander("CSV preview", expanded=False):
@@ -214,7 +200,7 @@ def render() -> None:
             st.dataframe(df, hide_index=True, width="stretch")
 
         st.download_button(
-            "Download balanced CSV",
+            "Download complete training CSV",
             data=output_csv.read_bytes(),
             file_name=output_csv.name,
             mime="text/csv",

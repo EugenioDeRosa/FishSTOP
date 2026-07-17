@@ -1,678 +1,364 @@
-import os
-import sys
+"""Reproducible DistilBERT training pipeline for FishSTOP."""
 
-# Force Python to recognize the root folder to find 'src.parser'
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from __future__ import annotations
 
-# Load environment variables from .env (Kaggle, API keys, etc.)
-try:
-    from dotenv import load_dotenv
-    load_dotenv(override=False)
-except ImportError:
-    pass  # optional python-dotenv - variables must already be in env
-
-
+import argparse
 import hashlib
-import re
-import pandas as pd
+import json
+import os
+from datetime import datetime, timezone
+from pathlib import Path
+
 import numpy as np
+import pandas as pd
 import torch
-#import kagglehub
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import (
-    accuracy_score, precision_recall_fscore_support,
-    classification_report, confusion_matrix,
-    precision_score, recall_score, f1_score
-)
-from transformers import BertTokenizer, BertForSequenceClassification
-from transformers import Trainer, TrainingArguments
-from transformers import DataCollatorWithPadding
 from datasets import Dataset
+from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
+from transformers import (
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    DataCollatorWithPadding,
+    Trainer,
+    TrainingArguments,
+)
 
-# Importazione del parser ottimizzato per gli EML locali
-from src.parser import EmailParserPipeline
-from src.eml_dataset_builder import EmlDatasetBuilder
+from src.bert_calibration import calibrated_probabilities, fit_calibration, save_calibration
+from src.bert_inference import (
+    DEFAULT_CHUNK_STRIDE,
+    MAX_BERT_TOKENS,
+    MAX_EMAIL_CHUNKS,
+    predict_email_logits,
+)
+from src.bert_input import normalize_bert_text
 
-kagglehub=""
-class BERTPhishingTrainer:
-    def __init__(self, model_name="bert-base-uncased", num_labels=2):
-        print("[*] Initializing BERT tokenizer and model...")
-        self.tokenizer = BertTokenizer.from_pretrained(model_name)
-        self.model = BertForSequenceClassification.from_pretrained(model_name, num_labels=num_labels)
 
-        # RILEVAMENTO AUTOMATICO DELL'AMBIENTE E CONFIGURAZIONE HARDWARE
+DEFAULT_BASE_MODEL = "distilbert-base-uncased"
+DEFAULT_DATASET = Path("data/processed/fishstop_train_complete.csv")
+DEFAULT_OUTPUT_DIR = Path("models/fishstop-distilbert")
+ID2LABEL = {0: "LEGITIMATE", 1: "MALICIOUS"}
+LABEL2ID = {label: index for index, label in ID2LABEL.items()}
+REQUIRED_SPLITS = {"train", "validation", "test"}
+
+
+def _text_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def load_training_dataframe(path: str | Path) -> pd.DataFrame:
+    """Load and validate the immutable train/validation/test CSV."""
+    dataset_path = Path(path)
+    if not dataset_path.exists():
+        raise FileNotFoundError(f"Training dataset not found: {dataset_path}")
+
+    df = pd.read_csv(dataset_path)
+    missing = {"text", "label", "split"} - set(df.columns)
+    if missing:
+        raise ValueError(f"Dataset is missing required columns: {sorted(missing)}")
+
+    df = df.dropna(subset=["text", "label", "split"]).copy()
+    df["text"] = df["text"].map(normalize_bert_text)
+    df = df[df["text"].str.len() > 0].copy()
+    df["label"] = pd.to_numeric(df["label"], errors="raise").astype(int)
+    if not set(df["label"]).issubset({0, 1}):
+        raise ValueError("Only labels 0=LEGITIMATE and 1=PHISHING are supported")
+
+    df["split"] = df["split"].astype(str).str.lower().replace({"val": "validation"})
+    unknown_splits = set(df["split"]) - REQUIRED_SPLITS
+    if unknown_splits:
+        raise ValueError(f"Unknown dataset splits: {sorted(unknown_splits)}")
+    missing_splits = REQUIRED_SPLITS - set(df["split"])
+    if missing_splits:
+        raise ValueError(f"Dataset is missing splits: {sorted(missing_splits)}")
+
+    if "source" in df.columns:
+        sources = df["source"].fillna("").astype(str).str.lower()
+        synthetic = sources.eq("kaggle_phishing_and_legitimate_emails") | sources.str.startswith("synthetic_")
+        if (synthetic & df["split"].ne("train")).any():
+            raise ValueError("Synthetic emails are allowed only in the train split")
+
+    df["_normalized_hash"] = df["text"].map(_text_hash)
+    split_counts = df.groupby("_normalized_hash")["split"].nunique()
+    leaked_hashes = set(split_counts[split_counts > 1].index)
+    if leaked_hashes:
+        raise ValueError(
+            f"Data leakage detected: {len(leaked_hashes)} normalized emails occur in multiple splits"
+        )
+    df = df.drop_duplicates(subset=["_normalized_hash"], keep="first")
+
+    for split in REQUIRED_SPLITS:
+        labels = set(df.loc[df["split"] == split, "label"])
+        if labels != {0, 1}:
+            raise ValueError(f"Split '{split}' must contain both classes; found {sorted(labels)}")
+    return df.drop(columns=["_normalized_hash"]).reset_index(drop=True)
+
+
+class DistilBERTPhishingTrainer:
+    def __init__(self, base_model: str = DEFAULT_BASE_MODEL):
+        self.base_model = base_model
+        self.tokenizer = AutoTokenizer.from_pretrained(base_model)
+        self.model = AutoModelForSequenceClassification.from_pretrained(
+            base_model,
+            num_labels=2,
+            id2label=ID2LABEL,
+            label2id=LABEL2ID,
+        )
         if torch.backends.mps.is_available():
-            self.device = "mps"
-            self.is_mac = True
-            os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.0"
-            print("[🍏 AMBIENTE: MACBOOK DETECTED] Rilevato chip Apple Silicon. Attivazione ottimizzazioni GPU (MPS).")
+            self.device = torch.device("mps")
         elif torch.cuda.is_available():
-            self.device = "cuda"
-            self.is_mac = False
-            print("[⚡ AMBIENTE: CUDA DETECTED] Rilevata GPU Nvidia.")
+            self.device = torch.device("cuda")
         else:
-            self.device = "cpu"
-            self.is_mac = False
-            print("[☁️ AMBIENTE: CLOUD/CPU DETECTED] Esecuzione su CPU standard (perfetto per Codespaces).")
-
+            self.device = torch.device("cpu")
         self.model.to(self.device)
-        print(f"[+] Model configured on compute device: {self.device}")
 
-    # ------------------------------------------------------------------
-    # DATA
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _normalize_text(text: str) -> str:
-        """
-        Normalizzazione UNICA applicata a TUTTE le fonti (Kaggle, personal_emails,
-        custom_legitimate/custom_phishing, custom_dataset.csv) come ultimo step,
-        dopo aver unito tutto in df_combined.
-
-        Previously this normalization was done differently for each source
-        (solo .lower() per Kaggle/personal/custom_*, pulizia aggressiva con
-        rimozione di punteggiatura/URL per il CSV custom): il modello rischiava
-        learning to recognize the data "source" instead of the real phenomenon.
-        Now it is identical everywhere: lowercase + space collapse, punctuation and URLs
-        preserved because they are useful signals for phishing detection.
-        """
-        return re.sub(r"\s+", " ", str(text).lower()).strip()
-
-    def download_and_combine_data(self, personal_eml_folder="data/raw/personal_emails", sample_size=15000):
-        """
-        Scarica il dataset da Kaggle, normalizza le colonne, esegue il
-        parsing delle email locali (personal_emails + custom_legitimate +
-        custom_phishing + custom_dataset.csv) e applica una normalizzazione
-        testuale UNICA a tutte le fonti, seguita da un dedup globale per hash
-        prima dello split train/val/test (evita sia duplicati naturali tra
-        fonti diverse sia il doppio conteggio delle email added dal tab
-        "Dataset Builder", che vengono salvate sia come .eml su disco sia come
-        riga nel CSV custom).
-        """
-        print("[*] Querying and retrieving the main dataset from KaggleHub...")
-        kaggle_dir = kagglehub.dataset_download("naserabdullahalam/phishing-email-dataset")
-
-        csv_path = os.path.join(kaggle_dir, "phishing_email.csv")
-        if not os.path.exists(csv_path):
-            files = [f for f in os.listdir(kaggle_dir) if f.endswith('.csv')]
-            if files:
-                csv_path = os.path.join(kaggle_dir, files[0])
-            else:
-                raise FileNotFoundError(f"Impossibile trovare file CSV in: {kaggle_dir}")
-
-        print(f"[+] Dataset Kaggle caricato da: {csv_path}")
-        df_kaggle = pd.read_csv(csv_path)
-
-        # Normalizzazione nomi colonne
-        df_kaggle.columns = [col.lower().strip() for col in df_kaggle.columns]
-        rename_dict = {}
-        for col in df_kaggle.columns:
-            if 'text' in col or 'body' in col or 'email' in col:
-                rename_dict[col] = 'text'
-            elif 'label' in col or 'class' in col or 'target' in col:
-                rename_dict[col] = 'label'
-        if rename_dict:
-            df_kaggle.rename(columns=rename_dict, inplace=True)
-
-        # Campionamento - 15.000 rows come da notebook
-        print(f"[*] Campionamento di {sample_size} rows...")
-        if len(df_kaggle) > sample_size:
-            df_kaggle = df_kaggle.sample(n=sample_size, random_state=42).reset_index(drop=True)
-
-        df_kaggle.dropna(subset=['text', 'label'], inplace=True)
-        df_kaggle['label'] = df_kaggle['label'].astype(int)
-
-        # Integrazione email personali
-        parser = EmailParserPipeline()
-
-        base_raw_folder = "data/raw"
-        personal_legit_folder = os.path.join(base_raw_folder, "custom_legitimate")
-        personal_phish_folder = os.path.join(base_raw_folder, "custom_phishing")
-
-        df_list = []
-
-        # 1. Email personali dell'utente (FIX: il parametro personal_eml_folder
-        #    veniva accettato ma non usato - qualunque cosa ci fosse dentro
-        #    veniva ignorata in silenzio). Assunte LEGITTIME (archivio reale
-        #    user): if this is not your case, pass a different label below.
-        if os.path.exists(personal_eml_folder):
-            df_personal = parser.load_batch_emls(personal_eml_folder)
-            if not df_personal.empty:
-                df_list.append(pd.DataFrame({
-                    'text': df_personal['subject'].fillna('') + ' ' + df_personal['body'].fillna(''),
-                    'label': 0
-                }))
-                print(f"[*] Caricate {len(df_personal)} email personali da '{personal_eml_folder}' (assunte LEGITTIME, Label 0).")
-
-        # 2. Email legitimate custom (Label 0) - popolata anche dal Dataset Builder UI
-        if os.path.exists(personal_legit_folder):
-            df_legit = parser.load_batch_emls(personal_legit_folder)
-            if not df_legit.empty:
-                df_list.append(pd.DataFrame({
-                    'text': df_legit['subject'].fillna('') + ' ' + df_legit['body'].fillna(''),
-                    'label': 0
-                }))
-                print(f"[*] Caricate {len(df_legit)} email custom LEGITTIME (Label 0).")
-
-        # 3. Email di phishing custom (Label 1)
-        if os.path.exists(personal_phish_folder):
-            df_phish = parser.load_batch_emls(personal_phish_folder)
-            if not df_phish.empty:
-                df_list.append(pd.DataFrame({
-                    'text': df_phish['subject'].fillna('') + ' ' + df_phish['body'].fillna(''),
-                    'label': 1
-                }))
-                print(f"[*] Caricate {len(df_phish)} email custom di PHISHING (Label 1).")
-
-        # Unione dei dati custom locali al pool di Kaggle, se presenti
-        if df_list:
-            df_personal_aligned = pd.concat(df_list, ignore_index=True)
-            df_personal_aligned.dropna(subset=['text'], inplace=True)
-            df_combined = pd.concat([df_kaggle, df_personal_aligned], ignore_index=True)
-            print(f"[*] Integrazione attiva: unione di {len(df_personal_aligned)} email locali totali.")
-        else:
-            print("[!] Nessuna email trovata in personal_emails/custom_legitimate/custom_phishing. Si procede solo con Kaggle.")
-            df_combined = df_kaggle
-
-        # ── Integrazione dataset custom (EmlDatasetBuilder) ───────────────
-        # Legge data/custom_dataset.csv se esiste - prodotto dal tab
-        # "Dataset Builder" dell'app. NB: le stesse email sono anche salvate
-        # come .eml in custom_legitimate/custom_phishing sopra: l'eventuale
-        # duplicate is removed by global dedup a few lines below.
-        try:
-            custom_builder = EmlDatasetBuilder()
-            df_custom = custom_builder.load_for_training()
-            if not df_custom.empty:
-                df_custom.dropna(subset=['text'], inplace=True)
-                df_combined = pd.concat([df_combined, df_custom], ignore_index=True)
-                s = custom_builder.stats()
-                print(
-                    f"[*] Dataset custom caricato: {len(df_custom)} rows "
-                    f"({s['legitimate']} legitimate, {s['phishing']} phishing)"
-                )
-            else:
-                print("[!] Nessun dato custom trovato in data/custom_dataset.csv - ignorato.")
-        except Exception as e:
-            print(f"[!] Impossibile caricare il dataset custom: {e} - ignorato.")
-
-        # ── Normalizzazione testuale UNICA per tutte le fonti ──────────────
-        df_combined['text'] = df_combined['text'].apply(self._normalize_text)
-
-        # ── Global dedup by normalized text hash ──────────────────
-        before = len(df_combined)
-        text_hash = df_combined['text'].apply(lambda t: hashlib.sha256(t.encode('utf-8')).hexdigest())
-        df_combined = df_combined.loc[~text_hash.duplicated(keep='first')].reset_index(drop=True)
-        removed = before - len(df_combined)
-        if removed:
-            print(f"[*] Dedup globale: rimossi {removed} duplicati su {before} rows totali "
-                  f"(include i doppioni Dataset Builder/CSV descritti sopra).")
-
-        print(f"[+] Pool dei dati pronto. Dimensione totale campioni: {len(df_combined)}")
-        return df_combined
-
-    # ------------------------------------------------------------------
-    # SPLIT  -  70 / 10 / 20  identico al notebook
-    # ------------------------------------------------------------------
-
-    def prepare_datasets(self, df):
-        """
-        Split 70% train / 10% val / 20% test con stratify su label,
-        esattamente come nel notebook (due chiamate a train_test_split).
-        """
-        # 1. Isola il 20% di test
-        train_val_df, test_df = train_test_split(
-            df, test_size=0.20, random_state=42, stratify=df['label']
+    def _tokenize(self, examples):
+        encoded = self.tokenizer(
+            examples["text"],
+            truncation=True,
+            max_length=MAX_BERT_TOKENS,
+            stride=DEFAULT_CHUNK_STRIDE,
+            return_overflowing_tokens=True,
         )
-        # 2. Dal rimanente 80% prendi 12.5% come val -> 10% del totale
-        train_df, val_df = train_test_split(
-            train_val_df, test_size=0.125, random_state=42, stratify=train_val_df['label']
-        )
-
-        print(f"[*] Suddivisione -> Train: {len(train_df)} | Val: {len(val_df)} | Test: {len(test_df)}")
-        return (
-            Dataset.from_pandas(train_df.reset_index(drop=True)),
-            Dataset.from_pandas(val_df.reset_index(drop=True)),
-            Dataset.from_pandas(test_df.reset_index(drop=True)),
-        )
-
-    # ------------------------------------------------------------------
-    # TOKENIZZAZIONE  -  DataCollatorWithPadding (lazy padding) come notebook
-    # ------------------------------------------------------------------
-
-    def _tokenize_function(self, examples):
-        """
-        Tokenizzazione per-sample con truncation a 512 token.
-        Il padding viene gestito in modo lazy dal DataCollatorWithPadding
-        al momento del batching, esattamente come nel notebook.
-        """
-        return self.tokenizer(examples['text'], truncation=True, max_length=512)
-
-    # ------------------------------------------------------------------
-    # METRICHE  -  accuracy, f1, precision, recall come da notebook
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def compute_metrics(eval_pred):
-        logits, labels = eval_pred
-        preds = np.argmax(logits, axis=1)
-        precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
-        acc = accuracy_score(labels, preds)
-        return {'accuracy': acc, 'f1': f1, 'precision': precision, 'recall': recall}
-
-    # ------------------------------------------------------------------
-    # TRAINING
-    # ------------------------------------------------------------------
-
-    def train(self, train_dataset, val_dataset, output_dir="./models/saved_models"):
-        """
-        Tokenizza i dataset e avvia il fine-tuning di BERT con i parametri
-        allineati al notebook:
-          - 5 epoche
-          - metric_for_best_model = "f1"  (more robust than accuracy on imbalanced classes)
-          - optimizer adamw_torch esplicito
-          - batch size adattivo all'hardware con gradient accumulation
-        """
-        print("[*] Tokenizzazione dei dataset (batched=True per efficienza)...")
-        train_tokenized = train_dataset.map(self._tokenize_function, batched=True)
-        val_tokenized   = val_dataset.map(self._tokenize_function, batched=True)
-
-        data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
-
-        # Configurazione hardware-aware del batch size
-        if self.is_mac:
-            # Apple Silicon Mac (MPS): larger batch, native bf16
-            train_batch = 16
-            grad_accum  = 1
-            use_bf16    = True
-            log_strategy = "epoch"
-        elif self.device == "cuda":
-            # GPU Nvidia: batch pieno come il notebook
-            train_batch = 16
-            grad_accum  = 1
-            use_bf16    = False
-            log_strategy = "epoch"
-        else:
-            # CPU (Codespaces / macchine senza GPU): batch ridotto + accumulation
-            # per simulare batch_size=16 effettivo (4 × 4 = 16)
-            train_batch = 4
-            grad_accum  = 4
-            use_bf16    = False
-            log_strategy = "epoch"
-
-        print(f"[*] Configurazione Trainer -> Batch: {train_batch} | GradAccum: {grad_accum} | BF16: {use_bf16}")
-
-        training_args = TrainingArguments(
-            output_dir=output_dir,
-
-            # ── iperparametri identici al notebook ──────────────────────
-            learning_rate=2e-5,
-            num_train_epochs=5,                  # era 3, notebook usa 5
-            weight_decay=0.01,
-            optim="adamw_torch",                 # esplicito come nel notebook
-
-            # ── batch / hardware ────────────────────────────────────────
-            per_device_train_batch_size=train_batch,
-            per_device_eval_batch_size=train_batch,
-            gradient_accumulation_steps=grad_accum,
-            bf16=use_bf16,
-            dataloader_pin_memory=False,
-            dataloader_num_workers=0,
-
-            # ── checkpointing ────────────────────────────────────────────
-            eval_strategy="epoch",
-            save_strategy="epoch",
-            save_total_limit=2,                  # mantieni solo i 2 migliori checkpoint
-            load_best_model_at_end=True,
-            metric_for_best_model="f1",          # era "accuracy", notebook usa "f1"
-            greater_is_better=True,
-
-            # ── logging ──────────────────────────────────────────────────
-            logging_dir='./logs',
-            logging_strategy=log_strategy,
-            report_to="none",
-        )
-
-        trainer = Trainer(
-            model=self.model,
-            args=training_args,
-            train_dataset=train_tokenized,
-            eval_dataset=val_tokenized,
-            processing_class=self.tokenizer,
-            data_collator=data_collator,
-            compute_metrics=self.compute_metrics,
-        )
-
-        print("[*] Inizio fine-tuning BERT (5 epoche)...")
-        trainer.train()
-
-        os.makedirs(output_dir, exist_ok=True)
-        self.model.save_pretrained(output_dir)
-        self.tokenizer.save_pretrained(output_dir)
-        print(f"[+] Model and tokenizer saved in: {output_dir}")
-        return trainer
-
-    # ------------------------------------------------------------------
-    # FINE-TUNING SU DATASET AZIENDALE
-    # ------------------------------------------------------------------
-
-    # Soglie minime per garantire un training significativo
-    MIN_SAMPLES_PER_CLASS = 20   # below this threshold training is unreliable
-    IMBALANCE_RATIO_WARN  = 5    # warn if the majority class is >5x the minority class
-
-    def finetune_on_custom(
-        self,
-        base_model_path: str = "./models/saved_models",
-        output_dir:       str = "./models/company_model",
-        num_epochs:       int = 5,
-        progress_callback=None,   # callable(step: str, pct: int) per aggiornare la UI
-    ) -> dict:
-        """
-        Fine-tuning del modello base su SOLO il dataset aziendale custom
-        (data/custom_dataset.csv). Nessuna dipendenza da Kaggle o API esterne.
-
-        Flusso:
-          1. Load the custom dataset from EmlDatasetBuilder
-          2. Valida soglie minime (campioni per classe, bilanciamento)
-          3. Load the base model (saved_models o bert-base-uncased come fallback)
-          4. Split 70/10/20 con stratify
-          5. Fine-tuning con iperparametri conservativi (lr bassa per preservare
-             la conoscenza generale di BERT sul phishing)
-          6. Salva in models/company_model/
-          7. Restituisce un dict con metriche e path
-
-        Returns
-        -------
-        {
-          "status"   : "ok" | "error" | "insufficient_data",
-          "message"  : str,
-          "metrics"  : dict | None,   # accuracy, f1, precision, recall sul test set
-          "model_path": str,
+        mapping = list(encoded.pop("overflow_to_sample_mapping"))
+        selected_positions: list[int] = []
+        for sample_index in range(len(examples["text"])):
+            positions = [position for position, owner in enumerate(mapping) if owner == sample_index]
+            if len(positions) > MAX_EMAIL_CHUNKS:
+                offsets = np.linspace(0, len(positions) - 1, MAX_EMAIL_CHUNKS, dtype=int)
+                positions = [positions[offset] for offset in offsets]
+            selected_positions.extend(positions)
+        tokenized = {
+            key: [values[position] for position in selected_positions]
+            for key, values in encoded.items()
         }
-        """
-        def _progress(step: str, pct: int):
-            print(f"[{pct:3d}%] {step}")
-            if progress_callback:
-                progress_callback(step, pct)
+        tokenized["label"] = [examples["label"][mapping[position]] for position in selected_positions]
+        return tokenized
 
-        _progress("Caricamento dataset custom...", 0)
+    @staticmethod
+    def compute_metrics(eval_prediction):
+        logits, labels = eval_prediction
+        predictions = np.argmax(logits, axis=1)
+        return {
+            "accuracy": float(accuracy_score(labels, predictions)),
+            "precision": float(precision_score(labels, predictions, zero_division=0)),
+            "recall": float(recall_score(labels, predictions, zero_division=0)),
+            "f1": float(f1_score(labels, predictions, zero_division=0)),
+        }
 
-        # ── 1. Load and validate the dataset ──────────────────────────────────
-        try:
-            custom_builder = EmlDatasetBuilder()
-            df = custom_builder.load_for_training()
-        except Exception as exc:
-            return {"status": "error", "message": f"Error lettura dataset: {exc}",
-                    "metrics": None, "model_path": ""}
+    @staticmethod
+    def prepare_datasets(df: pd.DataFrame) -> tuple[Dataset, Dataset]:
+        train_df = df[df["split"] == "train"][["text", "label"]].reset_index(drop=True)
+        validation_df = df[df["split"] == "validation"][["text", "label"]].reset_index(drop=True)
+        return Dataset.from_pandas(train_df), Dataset.from_pandas(validation_df)
 
-        if df.empty:
-            return {
-                "status":  "insufficient_data",
-                "message": "The custom dataset is empty. Add emails before training.",
-                "metrics": None, "model_path": "",
-            }
+    def train(
+        self,
+        df: pd.DataFrame,
+        output_dir: str | Path = DEFAULT_OUTPUT_DIR,
+        epochs: int = 5,
+    ) -> Trainer:
+        output_dir = Path(output_dir)
+        train_dataset, validation_dataset = self.prepare_datasets(df)
+        train_tokenized = train_dataset.map(
+            self._tokenize,
+            batched=True,
+            remove_columns=train_dataset.column_names,
+        )
+        validation_tokenized = validation_dataset.map(
+            self._tokenize,
+            batched=True,
+            remove_columns=validation_dataset.column_names,
+        )
 
-        # Conta per classe
-        counts = df["label"].value_counts().to_dict()
-        n_legit    = counts.get(0, 0)
-        n_phishing = counts.get(1, 0)
-        n_total    = len(df)
-
-        # Blocco: soglia minima per classe
-        if n_legit < self.MIN_SAMPLES_PER_CLASS or n_phishing < self.MIN_SAMPLES_PER_CLASS:
-            return {
-                "status":  "insufficient_data",
-                "message": (
-                    f"Dataset troppo piccolo: {n_legit} email legitimate, {n_phishing} phishing. "
-                    f"Servono almeno {self.MIN_SAMPLES_PER_CLASS} campioni per classe. "
-                    "Aggiungi altre email e riprova."
-                ),
-                "metrics": None, "model_path": "",
-            }
-
-        # Avviso sbilanciamento (non blocca, ma viene riportato)
-        imbalance_warning = None
-        if n_legit > 0 and n_phishing > 0:
-            ratio = max(n_legit, n_phishing) / min(n_legit, n_phishing)
-            if ratio > self.IMBALANCE_RATIO_WARN:
-                minority = "legitimate" if n_legit < n_phishing else "phishing"
-                imbalance_warning = (
-                    f"⚠️ Dataset sbilanciato ({ratio:.1f}x): poche email {minority}. "
-                    "Il modello potrebbe essere meno preciso su quella classe."
-                )
-                print(f"[!] {imbalance_warning}")
-
-        _progress(f"Dataset: {n_total} campioni ({n_legit} legitimate, {n_phishing} phishing)", 5)
-
-        # ── 2. Load base model ─────────────────────────────────────────
-        _progress("Caricamento modello base...", 10)
-        try:
-            from transformers import AutoTokenizer, AutoModelForSequenceClassification
-            if os.path.isdir(base_model_path):
-                self.tokenizer = AutoTokenizer.from_pretrained(base_model_path)
-                self.model     = AutoModelForSequenceClassification.from_pretrained(
-                    base_model_path, num_labels=2
-                )
-                print(f"[+] Base model loaded from: {base_model_path}")
-            else:
-                # Fallback a bert-base-uncased se il modello base non esiste
-                self.tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-                self.model     = AutoModelForSequenceClassification.from_pretrained(
-                    "bert-base-uncased", num_labels=2
-                )
-                print("[!] Base model not found - using bert-base-uncased as fallback")
-            self.model.to(self.device)
-        except Exception as exc:
-            return {"status": "error", "message": f"Error loading modello: {exc}",
-                    "metrics": None, "model_path": ""}
-
-        # ── 3. Split 70/10/20 con stratify ────────────────────────────────
-        _progress("Preparazione split train/val/test...", 15)
-        try:
-            train_val_df, test_df = train_test_split(
-                df, test_size=0.20, random_state=42, stratify=df["label"]
-            )
-            # If the dataset is small, adapt validation (min 1 sample per class)
-            val_size = max(0.125, 2 / len(train_val_df)) if len(train_val_df) >= 4 else 0.25
-            train_df, val_df = train_test_split(
-                train_val_df, test_size=val_size, random_state=42,
-                stratify=train_val_df["label"]
-            )
-        except ValueError as exc:
-            return {"status": "error",
-                    "message": f"Error nello split - probabilmente dataset ancora troppo piccolo: {exc}",
-                    "metrics": None, "model_path": ""}
-
-        print(f"[*] Split -> Train: {len(train_df)} | Val: {len(val_df)} | Test: {len(test_df)}")
-
-        train_ds = Dataset.from_pandas(train_df.reset_index(drop=True))
-        val_ds   = Dataset.from_pandas(val_df.reset_index(drop=True))
-        test_ds  = Dataset.from_pandas(test_df.reset_index(drop=True))
-
-        # ── 4. Tokenizzazione ─────────────────────────────────────────────
-        _progress("Tokenizzazione...", 20)
-        train_tok = train_ds.map(self._tokenize_function, batched=True)
-        val_tok   = val_ds.map(self._tokenize_function,   batched=True)
-        test_tok  = test_ds.map(self._tokenize_function,  batched=True)
-
-        data_collator = DataCollatorWithPadding(tokenizer=self.tokenizer)
-
-        # ── 5. Iperparametri ──────────────────────────────────────────────
-        # Lower learning rate (1e-5) rispetto al training Kaggle (2e-5):
-        # preserva la conoscenza generale e riduce l'overfitting su dataset piccoli.
-        # Fewer epochs on the small dataset for the same reason.
-        if self.is_mac:
-            train_batch, grad_accum, use_bf16 = 8, 1, True
-        elif self.device == "cuda":
-            train_batch, grad_accum, use_bf16 = 8, 1, False
+        if self.device.type == "cuda":
+            batch_size, gradient_accumulation = 16, 1
+        elif self.device.type == "mps":
+            batch_size, gradient_accumulation = 8, 2
         else:
-            train_batch, grad_accum, use_bf16 = 2, 4, False
+            batch_size, gradient_accumulation = 4, 4
 
-        os.makedirs(output_dir, exist_ok=True)
-
-        _progress("Avvio training...", 25)
-
-        training_args = TrainingArguments(
-            output_dir=output_dir,
-            learning_rate=1e-5,
-            num_train_epochs=num_epochs,
+        args = TrainingArguments(
+            output_dir=str(output_dir),
+            learning_rate=2e-5,
+            num_train_epochs=epochs,
             weight_decay=0.01,
             optim="adamw_torch",
-            per_device_train_batch_size=train_batch,
-            per_device_eval_batch_size=train_batch,
-            gradient_accumulation_steps=grad_accum,
-            bf16=use_bf16,
-            dataloader_pin_memory=False,
+            per_device_train_batch_size=batch_size,
+            per_device_eval_batch_size=batch_size,
+            gradient_accumulation_steps=gradient_accumulation,
+            dataloader_pin_memory=self.device.type == "cuda",
             dataloader_num_workers=0,
             eval_strategy="epoch",
             save_strategy="epoch",
-            save_total_limit=1,
+            save_total_limit=2,
             load_best_model_at_end=True,
             metric_for_best_model="f1",
             greater_is_better=True,
-            logging_dir=os.path.join(output_dir, "logs"),
+            logging_dir=str(output_dir / "logs"),
             logging_strategy="epoch",
             report_to="none",
+            seed=42,
+            data_seed=42,
         )
-
         trainer = Trainer(
             model=self.model,
-            args=training_args,
-            train_dataset=train_tok,
-            eval_dataset=val_tok,
+            args=args,
+            train_dataset=train_tokenized,
+            eval_dataset=validation_tokenized,
             processing_class=self.tokenizer,
-            data_collator=data_collator,
+            data_collator=DataCollatorWithPadding(tokenizer=self.tokenizer),
             compute_metrics=self.compute_metrics,
         )
+        trainer.train()
 
-        try:
-            trainer.train()
-        except Exception as exc:
-            return {"status": "error", "message": f"Error durante il training: {exc}",
-                    "metrics": None, "model_path": ""}
-
-        # ── 6. Salva il modello aziendale ─────────────────────────────────
-        _progress("Salvataggio modello...", 85)
+        self.model.config.id2label = ID2LABEL
+        self.model.config.label2id = LABEL2ID
+        self.model.config.fishstop_positive_label_id = 1
+        self.model.config.fishstop_preprocessing = "src.bert_input.normalize_bert_text"
+        self.model.config.fishstop_chunk_aggregation = "maximum_positive_logit_margin"
         self.model.save_pretrained(output_dir)
         self.tokenizer.save_pretrained(output_dir)
+        return trainer
 
-        # Salva metadati del training (data, campioni usati, metriche)
-        import json
-        from datetime import datetime, timezone
-        meta = {
-            "trained_at":   datetime.now(timezone.utc).isoformat(),
-            "base_model":   base_model_path,
-            "n_train":      len(train_df),
-            "n_val":        len(val_df),
-            "n_test":       len(test_df),
-            "n_legitimate": n_legit,
-            "n_phishing":   n_phishing,
-            "epochs":       num_epochs,
-            "imbalance_warning": imbalance_warning,
+    def collect_email_logits(self, frame: pd.DataFrame) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
+        logits = []
+        chunk_counts = []
+        total = len(frame)
+        for position, text in enumerate(frame["text"].tolist(), start=1):
+            email_logits, chunks = predict_email_logits(
+                self.model,
+                self.tokenizer,
+                text,
+                positive_label_id=1,
+            )
+            logits.append(email_logits.squeeze(0))
+            chunk_counts.append(chunks)
+            if position % 100 == 0 or position == total:
+                print(f"Email-level inference: {position}/{total}")
+        return torch.stack(logits), torch.tensor(frame["label"].to_numpy()), chunk_counts
+
+
+def evaluate_calibrated(
+    logits: torch.Tensor,
+    labels: torch.Tensor,
+    calibration: dict,
+) -> dict:
+    probabilities = calibrated_probabilities(logits, calibration["temperature"])[:, 1].numpy()
+    labels_np = labels.numpy()
+    threshold = float(calibration["threshold"])
+    predictions = (probabilities >= threshold).astype(int)
+    half_band = float(calibration["band"]) / 2
+    decided = np.abs(probabilities - threshold) >= half_band
+    return {
+        "accuracy": float(accuracy_score(labels_np, predictions)),
+        "precision": float(precision_score(labels_np, predictions, zero_division=0)),
+        "recall": float(recall_score(labels_np, predictions, zero_division=0)),
+        "f1": float(f1_score(labels_np, predictions, zero_division=0)),
+        "confusion_matrix": confusion_matrix(labels_np, predictions).tolist(),
+        "selective_coverage": float(decided.mean()),
+        "selective_accuracy": float((predictions[decided] == labels_np[decided]).mean()) if decided.any() else None,
+    }
+
+
+def write_model_card(output_dir: Path, metadata: dict) -> None:
+    metrics = metadata["test_metrics"]
+    output_dir.joinpath("README.md").write_text(
+        f"""---
+language: en
+library_name: transformers
+pipeline_tag: text-classification
+tags:
+- phishing
+- email-security
+---
+
+# FishSTOP DistilBERT
+
+Binary content classifier for legitimate vs malicious (phishing or spam) email, used as one
+signal in FishSTOP. It does not inspect SPF, DKIM,
+DMARC, sender reputation, links or attachments and must not be used as a standalone verdict.
+
+- Base model: `{metadata['base_model']}`
+- Labels: `0=LEGITIMATE`, `1=MALICIOUS` (phishing, scam or spam)
+- Input: normalized email subject plus body
+- Long emails: up to {MAX_EMAIL_CHUNKS} evenly spaced overlapping {MAX_BERT_TOKENS}-token windows,
+  stride {DEFAULT_CHUNK_STRIDE}, maximum malicious-margin aggregation
+- Calibration: temperature scaling on the validation split
+- Test F1: {metrics['f1']:.4f}
+- Test precision: {metrics['precision']:.4f}
+- Test recall: {metrics['recall']:.4f}
+- Test selective coverage: {metrics['selective_coverage']:.4f}
+
+The reported probability is meaningful only for data sufficiently similar to the validation
+distribution. Performance must be rechecked on recent, external and multilingual email sets.
+""",
+        encoding="utf-8",
+    )
+
+
+def run_training(
+    dataset_path: str | Path = DEFAULT_DATASET,
+    output_dir: str | Path = DEFAULT_OUTPUT_DIR,
+    base_model: str = DEFAULT_BASE_MODEL,
+    epochs: int = 5,
+) -> dict:
+    dataset_path = Path(dataset_path)
+    output_dir = Path(output_dir)
+    df = load_training_dataframe(dataset_path)
+    trainer = DistilBERTPhishingTrainer(base_model)
+    trainer.train(df, output_dir=output_dir, epochs=epochs)
+
+    validation_df = df[df["split"] == "validation"]
+    validation_logits, validation_labels, validation_chunks = trainer.collect_email_logits(validation_df)
+    calibration = fit_calibration(validation_logits, validation_labels, positive_label_id=1)
+    calibration.update(
+        {
+            "model_type": "distilbert",
+            "aggregation": "maximum_positive_logit_margin",
+            "max_length": MAX_BERT_TOKENS,
+            "stride": DEFAULT_CHUNK_STRIDE,
+            "max_chunks": MAX_EMAIL_CHUNKS,
         }
+    )
+    save_calibration(calibration, output_dir / "calibration.json")
 
-        # ── 7. Valutazione test set ────────────────────────────────────────
-        _progress("Valutazione sul test set...", 90)
-        try:
-            preds_out = trainer.predict(test_tok)
-            y_true = test_tok["label"]
-            y_pred = np.argmax(preds_out.predictions, axis=1)
-            metrics = {
-                "accuracy":  round(float(accuracy_score(y_true, y_pred)),  4),
-                "precision": round(float(precision_score(y_true, y_pred, zero_division=0)), 4),
-                "recall":    round(float(recall_score(y_true, y_pred, zero_division=0)),    4),
-                "f1":        round(float(f1_score(y_true, y_pred, zero_division=0)),        4),
-            }
-            meta["metrics"] = metrics
-            print(f"\n[+] Test set - Accuracy: {metrics['accuracy']} | F1: {metrics['f1']} | "
-                  f"Precision: {metrics['precision']} | Recall: {metrics['recall']}")
-        except Exception as exc:
-            metrics = None
-            meta["metrics"] = {}
-            print(f"[!] Valutazione test set fallita: {exc}")
-
-        with open(os.path.join(output_dir, "training_meta.json"), "w") as f:
-            json.dump(meta, f, indent=2)
-
-        _progress("Completed ✅", 100)
-
-        msg = f"Company model trained on {n_total} emails and saved in `{output_dir}`."
-        if imbalance_warning:
-            msg += f"\n{imbalance_warning}"
-
-        return {
-            "status":     "ok",
-            "message":    msg,
-            "metrics":    metrics,
-            "model_path": output_dir,
-            "meta":       meta,
-        }
-
-    # ------------------------------------------------------------------
-    # VALUTAZIONE TEST SET  -  allineata al notebook (+ confusion matrix)
-    # ------------------------------------------------------------------
-
-    def evaluate_test_set(self, trainer, test_dataset):
-        """
-        Valuta il modello sul test set isolato con le stesse metriche del notebook:
-        accuracy, precision, recall, f1, classification report e confusion matrix.
-        """
-        print("[*] Tokenizzazione del test set...")
-        test_tokenized = test_dataset.map(self._tokenize_function, batched=True)
-
-        print("[*] Generazione predizioni sul Test Set...")
-        predictions = trainer.predict(test_tokenized)
-
-        y_true = test_tokenized['label']
-        y_pred = np.argmax(predictions.predictions, axis=1)
-
-        sep = "=" * 50
-        print(f"\n{sep}")
-        print("  RISULTATI FINALI SUL TEST SET")
-        print(sep)
-        print(f"Accuracy  : {accuracy_score(y_true, y_pred):.4f}")
-        print(f"Precision : {precision_score(y_true, y_pred):.4f}")
-        print(f"Recall    : {recall_score(y_true, y_pred):.4f}")
-        print(f"F1 Score  : {f1_score(y_true, y_pred):.4f}")
-        print(f"\n{sep}")
-        print("  CLASSIFICATION REPORT")
-        print(sep)
-        print(classification_report(y_true, y_pred, target_names=["Legitimate", "Phishing"]))
-        print(f"\n{sep}")
-        print("  CONFUSION MATRIX")
-        print(sep)
-        cm = confusion_matrix(y_true, y_pred)
-        print(f"                  Pred Legitimate  Pred Phishing")
-        print(f"  Reale Legitimate       {cm[0][0]:>6}         {cm[0][1]:>6}")
-        print(f"  Reale Phishing        {cm[1][0]:>6}         {cm[1][1]:>6}")
-        print(sep)
+    test_df = df[df["split"] == "test"]
+    test_logits, test_labels, test_chunks = trainer.collect_email_logits(test_df)
+    test_metrics = evaluate_calibrated(test_logits, test_labels, calibration)
+    metadata = {
+        "trained_at": datetime.now(timezone.utc).isoformat(),
+        "base_model": base_model,
+        "dataset": str(dataset_path),
+        "dataset_sha256": hashlib.sha256(dataset_path.read_bytes()).hexdigest(),
+        "rows": {split: int((df["split"] == split).sum()) for split in sorted(REQUIRED_SPLITS)},
+        "labels": ID2LABEL,
+        "epochs": int(epochs),
+        "validation_multi_chunk_emails": int(sum(count > 1 for count in validation_chunks)),
+        "test_multi_chunk_emails": int(sum(count > 1 for count in test_chunks)),
+        "calibration": calibration,
+        "test_metrics": test_metrics,
+    }
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_dir.joinpath("training_meta.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
+    write_model_card(output_dir, metadata)
+    print(json.dumps(metadata, indent=2))
+    return metadata
 
 
-# ----------------------------------------------------------------------
-# ENTRY POINT
-# ----------------------------------------------------------------------
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train and calibrate FishSTOP DistilBERT")
+    parser.add_argument("--dataset", default=str(DEFAULT_DATASET))
+    parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
+    parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL)
+    parser.add_argument("--epochs", type=int, default=5)
+    return parser.parse_args()
+
 
 if __name__ == "__main__":
-    trainer_pipeline = BERTPhishingTrainer()
-
-    # Sample size allineato al notebook (15.000).
-    # Su CPU si usa un subset ridotto per rendere il training praticabile.
-    if trainer_pipeline.is_mac or trainer_pipeline.device == "cuda":
-        target_samples = 15000
-    else:
-        target_samples = 6000   # CPU: reduced subset, but larger than the previous one
-
-    try:
-        # Manteniamo il parametro personal_eml_folder intatto come a monte per evitare disallineamenti
-        df = trainer_pipeline.download_and_combine_data(
-            personal_eml_folder="data/raw/personal_emails",
-            sample_size=target_samples
-        )
-
-        train_data, val_data, test_data = trainer_pipeline.prepare_datasets(df)
-        trainer_obj = trainer_pipeline.train(train_data, val_data)
-        trainer_pipeline.evaluate_test_set(trainer_obj, test_data)
-
-    except Exception as e:
-        import traceback
-        print(f"\n[!] Error bloccante nell'esecuzione: {e}")
-        traceback.print_exc()
+    os.chdir(Path(__file__).resolve().parent.parent)
+    arguments = parse_args()
+    run_training(
+        dataset_path=arguments.dataset,
+        output_dir=arguments.output_dir,
+        base_model=arguments.base_model,
+        epochs=arguments.epochs,
+    )

@@ -12,9 +12,11 @@ Label:
 from __future__ import annotations
 
 import bz2
+import calendar
 import csv
 import gzip
 import hashlib
+import json
 import mailbox
 import os
 import re
@@ -23,13 +25,19 @@ import tempfile
 import unicodedata
 import urllib.request
 import zipfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from email import policy
 from email.parser import BytesParser
 from pathlib import Path
 from typing import Callable, Iterable
 
+import numpy as np
 import pandas as pd
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.neighbors import NearestNeighbors
+
+from src.bert_input import normalize_bert_text
 
 try:
     from bs4 import BeautifulSoup
@@ -41,7 +49,17 @@ ROOT = Path("data")
 SOURCES_DIR = ROOT / "training_sources"
 PROCESSED_DIR = ROOT / "processed"
 DEFAULT_OUTPUT_CSV = PROCESSED_DIR / "fishstop_train.csv"
+DEFAULT_BALANCED_OUTPUT_CSV = PROCESSED_DIR / "fishstop_train_balanced.csv"
+DEFAULT_SYNTHETIC_CSV = PROCESSED_DIR / "fishstop_synthetic_modern_v2.csv"
+DEFAULT_COMPLETE_OUTPUT_CSV = PROCESSED_DIR / "fishstop_train_complete.csv"
 FINAL_COLUMNS = ["text", "label", "source", "source_file", "text_hash"]
+OUTPUT_COLUMNS = FINAL_COLUMNS + ["campaign_id", "split"]
+SYNTHETIC_SOURCE_PREFIXES = ("synthetic_",)
+SYNTHETIC_SOURCE_NAMES = {"kaggle_phishing_and_legitimate_emails"}
+MAX_SYNTHETIC_TRAIN_FRACTION = 0.10
+CAMPAIGN_SIMILARITY_THRESHOLD = 0.83
+MODERN_START_YEAR = 2022
+MODERN_END_YEAR = 2025
 MIN_TEXT_CHARS = 40
 MAX_TEXT_CHARS = 200_000
 INVALID_TEXT_VALUES = {
@@ -60,12 +78,8 @@ SPAMASSASSIN_URLS = {
 }
 
 NAZARIO_URLS = [
-    "https://monkey.org/~jose/phishing/phishing-2025",
-    "https://monkey.org/~jose/phishing/phishing-2024",
-    "https://monkey.org/~jose/phishing/phishing-2023",
-    "https://monkey.org/~jose/phishing/phishing-2022",
-    "https://monkey.org/~jose/phishing/phishing-2021",
-    "https://monkey.org/~jose/phishing/phishing-2020",
+    f"https://monkey.org/~jose/phishing/phishing-{year}"
+    for year in range(MODERN_END_YEAR, MODERN_START_YEAR - 1, -1)
 ]
 
 ENRON_URL = "https://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz"
@@ -73,7 +87,10 @@ KAGGLE_DATASET = "naserabdullahalam/phishing-email-dataset"
 KAGGLE_PHISHING_LEGITIMATE_DATASET = "kuladeep19/phishing-and-legitimate-emails-dataset"
 KAGGLE_SUBHAJOURNAL_PHISHING_EMAILS_DATASET = "subhajournal/phishingemails"
 KAGGLE_COMBINED_OVERLAP_SOURCES = {"enron", "nazario", "spamassassin"}
-PHISHING_POT_ZIP_URL = "https://github.com/rf-peixoto/phishing_pot/archive/refs/heads/main.zip"
+PHISHING_POT_COMMIT = "80685cbfe69a1f905707be92e144ba5b71f9ee37"
+PHISHING_POT_ZIP_URL = f"https://github.com/rf-peixoto/phishing_pot/archive/{PHISHING_POT_COMMIT}.zip"
+UBUNTU_LISTS = ("ubuntu-users", "ubuntu-security-announce")
+LEGACY_SOURCE_NAMES = {"spamassassin", "enron", "kaggle", "kaggle_subhajournal_phishingemails"}
 
 KAGGLE_SCHEMAS = {
     KAGGLE_DATASET: {
@@ -134,16 +151,12 @@ def normalize_text(text: str) -> str:
     if text is None or pd.isna(text):
         return ""
     text = str(text)
-    if re.search(r"<[a-zA-Z][\s>/]", text):
-        text = _strip_html(text)
     text = unicodedata.normalize("NFKC", text)
     text = "".join(
         char if char in "\n\t" or unicodedata.category(char) != "Cc" else " "
         for char in text
     )
-    text = text.lower()
-    text = re.sub(r"\s+", " ", text)
-    return text.strip()
+    return normalize_bert_text(text)
 
 def text_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -258,6 +271,15 @@ def _rows_from_mbox(path: Path, label: int, source: str) -> Iterable[dict]:
                 continue
             text = _extract_email_text(chunk)
             yield _row(text, label, source, f"{path.name}#{idx}")
+
+
+def _rows_from_gzip_mbox(path: Path, label: int, source: str) -> Iterable[dict]:
+    raw = gzip.open(path, "rb").read()
+    for idx, chunk in enumerate(re.split(rb"(?m)^From .*(?:\r?\n)", raw)):
+        if not chunk.strip():
+            continue
+        text = _extract_email_text(chunk)
+        yield _row(text, label, source, f"{path.name}#{idx}")
 
 
 def _parse_binary_label(value) -> int | None:
@@ -514,6 +536,56 @@ def add_nazario(
     return BuildResult("nazario", len(all_rows), added_total, skipped_total, errors_total, "Nazario phishing importato")
 
 
+def add_ubuntu_modern_ham(
+    output_csv: Path = DEFAULT_OUTPUT_CSV,
+    mailing_lists: tuple[str, ...] = UBUNTU_LISTS,
+    start_year: int = MODERN_START_YEAR,
+    end_year: int = MODERN_END_YEAR,
+    progress: Callable[[str], None] | None = None,
+    min_chars: int = MIN_TEXT_CHARS,
+) -> BuildResult:
+    """Importa messaggi recenti da mailing list pubbliche Ubuntu come ham reale."""
+    _ensure_dirs()
+    all_rows, hashes = _load_existing(output_csv)
+    added_total = skipped_total = errors_total = 0
+
+    for list_name in mailing_lists:
+        for year in range(start_year, end_year + 1):
+            for month in range(1, 13):
+                period = f"{year}-{calendar.month_name[month]}"
+                url = f"https://lists.ubuntu.com/archives/{list_name}/{period}.txt.gz"
+                dest = SOURCES_DIR / "legitimate" / "ubuntu" / list_name / f"{period}.txt.gz"
+                try:
+                    archive = _download(url, dest, progress)
+                    rows, skipped, errors = _append_rows(
+                        _rows_from_gzip_mbox(
+                            archive,
+                            label=0,
+                            source=f"ubuntu_{list_name}_{year}",
+                        ),
+                        hashes,
+                        min_chars,
+                    )
+                    all_rows.extend(rows)
+                    added_total += len(rows)
+                    skipped_total += skipped
+                    errors_total += errors
+                except Exception as exc:
+                    errors_total += 1
+                    if progress:
+                        progress(f"Errore archivio Ubuntu {list_name} {period}: {exc}")
+
+    _save_rows(all_rows, output_csv)
+    return BuildResult(
+        "ubuntu_modern_ham",
+        len(all_rows),
+        added_total,
+        skipped_total,
+        errors_total,
+        f"Ubuntu ham pubblico {start_year}-{end_year} importato",
+    )
+
+
 def add_kaggle(
     output_csv: Path = DEFAULT_OUTPUT_CSV,
     progress: Callable[[str], None] | None = None,
@@ -634,7 +706,7 @@ def add_github_phishing_pot(
     all_rows, hashes = _load_existing(output_csv)
     archive = _download(
         PHISHING_POT_ZIP_URL,
-        SOURCES_DIR / "phishing" / "phishing_pot" / "phishing_pot_main.zip",
+        SOURCES_DIR / "phishing" / "phishing_pot" / f"phishing_pot_{PHISHING_POT_COMMIT}.zip",
         progress,
     )
     rows, skipped, errors = _append_rows(
@@ -691,26 +763,116 @@ def add_enron_sample(
     return BuildResult("enron", len(all_rows), added, skipped, errors, f"Enron importato, limite {max_messages} email")
 
 
+def _synthetic_source_mask(df: pd.DataFrame) -> pd.Series:
+    """Identifica tutte le fonti sintetiche che non devono entrare in val/test."""
+    sources = df["source"].fillna("").astype(str).str.lower()
+    return sources.isin(SYNTHETIC_SOURCE_NAMES) | sources.str.startswith(SYNTHETIC_SOURCE_PREFIXES)
+
+
+def _campaign_groups(
+    df: pd.DataFrame,
+    similarity_threshold: float = CAMPAIGN_SIMILARITY_THRESHOLD,
+) -> pd.Series:
+    """Raggruppa varianti quasi identiche affinche restino nello stesso split."""
+    if df.empty:
+        return pd.Series(dtype=str, index=df.index)
+    if len(df) == 1:
+        return pd.Series([f"campaign:{df.iloc[0]['text_hash']}"], index=df.index, dtype=str)
+
+    vectorizer = TfidfVectorizer(
+        analyzer="char_wb",
+        ngram_range=(4, 5),
+        min_df=1 if len(df) < 20 else 2,
+        max_features=100_000,
+        sublinear_tf=True,
+        dtype=np.float32,
+    )
+    matrix = vectorizer.fit_transform(df["text"])
+    neighbor_count = min(64, len(df))
+    distances, neighbors = NearestNeighbors(
+        n_neighbors=neighbor_count,
+        metric="cosine",
+        algorithm="brute",
+    ).fit(matrix).kneighbors(matrix)
+
+    parents = list(range(len(df)))
+
+    def find(item: int) -> int:
+        while parents[item] != item:
+            parents[item] = parents[parents[item]]
+            item = parents[item]
+        return item
+
+    def union(left: int, right: int) -> None:
+        left_root, right_root = find(left), find(right)
+        if left_root != right_root:
+            parents[right_root] = left_root
+
+    for row_position in range(len(df)):
+        for distance, neighbor_position in zip(distances[row_position], neighbors[row_position]):
+            if row_position != int(neighbor_position) and 1.0 - float(distance) >= similarity_threshold:
+                union(row_position, int(neighbor_position))
+
+    members: dict[int, list[int]] = {}
+    for position in range(len(df)):
+        members.setdefault(find(position), []).append(position)
+    group_names = {
+        root: "campaign:" + min(str(df.iloc[position]["text_hash"]) for position in positions)
+        for root, positions in members.items()
+    }
+    return pd.Series(
+        [group_names[find(position)] for position in range(len(df))],
+        index=df.index,
+        dtype=str,
+    )
+
+
 def _assign_splits(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
-    """Crea split 70/10/20 dopo la deduplica; i dati sintetici restano nel train."""
+    """Crea split per campagna; le varianti e i dati sintetici non causano leakage."""
     result = df.copy()
     result["split"] = "train"
-    synthetic_sources = {"kaggle_phishing_and_legitimate_emails"}
-    real_mask = ~result["source"].isin(synthetic_sources)
-    real_counts = result.loc[real_mask, "label"].value_counts()
-    candidate_mask = real_mask if all(real_counts.get(label, 0) >= 10 for label in (0, 1)) else pd.Series(True, index=result.index)
+    synthetic_mask = _synthetic_source_mask(result)
+    real_mask = ~synthetic_mask
+    result["campaign_id"] = "synthetic:" + result["text_hash"].astype(str)
+    for _, label_rows in result.loc[real_mask].groupby("label"):
+        result.loc[label_rows.index, "campaign_id"] = _campaign_groups(label_rows)
+
+    campaign_labels = result.loc[real_mask].groupby("campaign_id")["label"].nunique()
+    conflicts = campaign_labels[campaign_labels > 1]
+    if not conflicts.empty:
+        raise ValueError(
+            f"Rilevate {len(conflicts)} campagne quasi duplicate con label contraddittorie"
+        )
 
     for label in (0, 1):
-        indices = result.index[candidate_mask & result["label"].eq(label)].tolist()
-        indices.sort(
-            key=lambda index: hashlib.sha256(
-                f"{random_state}:{result.at[index, 'text_hash']}".encode("utf-8")
-            ).hexdigest()
+        label_rows = result.loc[real_mask & result["label"].eq(label)]
+        groups = label_rows.groupby("campaign_id").size().to_dict()
+        ordered_groups = sorted(
+            groups,
+            key=lambda group: (
+                -groups[group],
+                hashlib.sha256(f"{random_state}:{group}".encode("utf-8")).hexdigest(),
+            ),
         )
-        n_test = max(1, round(len(indices) * 0.20)) if len(indices) >= 5 else 0
-        n_val = max(1, round(len(indices) * 0.10)) if len(indices) >= 10 else 0
-        result.loc[indices[:n_test], "split"] = "test"
-        result.loc[indices[n_test:n_test + n_val], "split"] = "validation"
+        targets = {
+            "test": round(len(label_rows) * 0.20),
+            "validation": round(len(label_rows) * 0.10),
+        }
+        targets["train"] = len(label_rows) - targets["test"] - targets["validation"]
+        assigned = {split: 0 for split in targets}
+        for group in ordered_groups:
+            size = groups[group]
+            fitting = [split for split in targets if assigned[split] + size <= targets[split]]
+            candidates = fitting or list(targets)
+            split = max(
+                candidates,
+                key=lambda candidate: (
+                    (targets[candidate] - assigned[candidate]) / max(targets[candidate], 1),
+                    hashlib.sha256(f"{group}:{candidate}".encode("utf-8")).hexdigest(),
+                ),
+            )
+            assigned[split] += size
+            result.loc[result["campaign_id"].eq(group), "split"] = split
 
     return result
 
@@ -726,7 +888,7 @@ def balance_dataset(
     counts = df["label"].value_counts() if not df.empty else pd.Series(dtype=int)
     if df.empty or any(counts.get(label, 0) == 0 for label in (0, 1)):
         output_csv.parent.mkdir(parents=True, exist_ok=True)
-        pd.DataFrame(columns=FINAL_COLUMNS + ["split"]).to_csv(output_csv, index=False)
+        pd.DataFrame(columns=OUTPUT_COLUMNS).to_csv(output_csv, index=False)
         return {"rows": 0, "per_class": 0, "output": str(output_csv), **dedupe_info}
 
     target = min(per_class or int(counts.min()), int(counts.min()))
@@ -749,7 +911,7 @@ def balance_dataset(
 
 def build_balanced_public_dataset(
     selected_sources: list[str],
-    output_csv: Path = PROCESSED_DIR / "fishstop_train_balanced.csv",
+    output_csv: Path = DEFAULT_BALANCED_OUTPUT_CSV,
     staging_csv: Path = DEFAULT_OUTPUT_CSV,
     include_hard_ham: bool = True,
     max_enron: int = 10000,
@@ -760,6 +922,16 @@ def build_balanced_public_dataset(
         return {"status": "error", "message": "Select at least one source.", "results": []}
 
     selected_sources = list(dict.fromkeys(selected_sources))
+    legacy_sources = sorted(set(selected_sources) & LEGACY_SOURCE_NAMES)
+    if legacy_sources:
+        return {
+            "status": "error",
+            "message": (
+                "Fonti escluse dalla policy moderna (2022+): "
+                + ", ".join(legacy_sources)
+            ),
+            "results": [],
+        }
     skipped_overlap: list[str] = []
     if "kaggle" in selected_sources:
         skipped_overlap = [source for source in selected_sources if source in KAGGLE_COMBINED_OVERLAP_SOURCES]
@@ -775,6 +947,7 @@ def build_balanced_public_dataset(
         "kaggle_subhajournal_phishingemails": lambda: add_kaggle_subhajournal_phishingemails(output_csv=staging_csv, progress=progress),
         "github_phishing_pot": lambda: add_github_phishing_pot(output_csv=staging_csv, progress=progress),
         "nazario": lambda: add_nazario(output_csv=staging_csv, progress=progress),
+        "ubuntu_modern_ham": lambda: add_ubuntu_modern_ham(output_csv=staging_csv, progress=progress),
         "spamassassin": lambda: add_spamassassin(output_csv=staging_csv, include_hard_ham=include_hard_ham, progress=progress),
         "enron": lambda: add_enron_sample(output_csv=staging_csv, max_messages=max_enron, progress=progress),
     }
@@ -799,7 +972,22 @@ def build_balanced_public_dataset(
             continue
         if progress:
             progress(f"Import source: {source}")
-        results.append(step())
+        try:
+            results.append(step())
+        except Exception as exc:
+            results.append(BuildResult(source, 0, 0, 0, 1, f"Import fallito: {exc}"))
+
+    failed_sources = [result for result in results if result.errors]
+    if failed_sources:
+        return {
+            "status": "error",
+            "message": (
+                "Generazione interrotta: una o piu fonti richieste non sono state importate integralmente: "
+                + ", ".join(result.source for result in failed_sources)
+            ),
+            "results": results,
+            "stats": dataset_stats(staging_csv),
+        }
 
     stats = dataset_stats(staging_csv)
     if stats["legitimate"] == 0 or stats["phishing"] == 0:
@@ -810,7 +998,15 @@ def build_balanced_public_dataset(
             "stats": stats,
         }
 
-    balanced = balance_dataset(staging_csv, output_csv=output_csv)
+    try:
+        balanced = balance_dataset(staging_csv, output_csv=output_csv)
+    except ValueError as exc:
+        return {
+            "status": "error",
+            "message": f"Controllo campagne fallito: {exc}",
+            "results": results,
+            "stats": stats,
+        }
     return {
         "status": "ok",
         "message": (
@@ -822,6 +1018,246 @@ def build_balanced_public_dataset(
         "stats": dataset_stats(output_csv),
         "output": balanced["output"],
     }
+
+
+def combine_public_and_synthetic_datasets(
+    public_csv: Path = DEFAULT_BALANCED_OUTPUT_CSV,
+    synthetic_csv: Path = DEFAULT_SYNTHETIC_CSV,
+    output_csv: Path = DEFAULT_COMPLETE_OUTPUT_CSV,
+    max_synthetic_train_fraction: float = MAX_SYNTHETIC_TRAIN_FRACTION,
+) -> dict:
+    """Unisce dati pubblici e sintetici senza contaminare validation e test."""
+    if not public_csv.exists():
+        return {"status": "error", "message": f"Dataset pubblico non trovato: {public_csv}"}
+    if not synthetic_csv.exists():
+        return {"status": "error", "message": f"Dataset sintetico non trovato: {synthetic_csv}"}
+    if not 0 < max_synthetic_train_fraction < 1:
+        return {"status": "error", "message": "La quota sintetica massima deve essere compresa tra 0 e 1."}
+
+    public_raw = pd.read_csv(public_csv)
+    if "split" not in public_raw:
+        return {"status": "error", "message": "Il dataset pubblico non contiene la colonna split."}
+
+    public, public_quality = _dedupe_templates(public_raw)
+    split_lookup = (
+        public_raw.assign(_normalized_text=public_raw["text"].fillna("").astype(str).map(normalize_text))
+        .assign(_normalized_hash=lambda frame: frame["_normalized_text"].map(text_hash))
+        .drop_duplicates("_normalized_hash", keep="first")
+        .set_index("_normalized_hash")["split"]
+        .astype(str)
+        .str.lower()
+        .replace({"val": "validation"})
+        .to_dict()
+    )
+    public["split"] = public["text_hash"].map(split_lookup)
+    if public["split"].isna().any() or not set(public["split"]).issubset({"train", "validation", "test"}):
+        return {"status": "error", "message": "Gli split del dataset pubblico non sono validi."}
+    if "campaign_id" in public_raw:
+        campaign_lookup = (
+            public_raw.drop_duplicates("text_hash", keep="first")
+            .set_index("text_hash")["campaign_id"]
+            .astype(str)
+            .to_dict()
+        )
+        public["campaign_id"] = public["text_hash"].map(campaign_lookup)
+    else:
+        public["campaign_id"] = "campaign:" + public["text_hash"].astype(str)
+
+    synthetic_raw = pd.read_csv(synthetic_csv)
+    synthetic, synthetic_quality = _dedupe_templates(synthetic_raw)
+    if synthetic.empty:
+        return {"status": "error", "message": "Il dataset sintetico non contiene righe valide."}
+    if not _synthetic_source_mask(synthetic).all():
+        return {
+            "status": "error",
+            "message": "Il CSV sintetico contiene fonti non marcate con il prefisso synthetic_.",
+        }
+    synthetic_counts = synthetic["label"].value_counts().to_dict()
+    if synthetic_counts.get(0, 0) != synthetic_counts.get(1, 0):
+        return {
+            "status": "error",
+            "message": (
+                "Il dataset sintetico deve essere bilanciato: "
+                f"legitimate={synthetic_counts.get(0, 0)}, phishing={synthetic_counts.get(1, 0)}."
+            ),
+        }
+    synthetic["split"] = "train"
+    synthetic["campaign_id"] = "synthetic:" + synthetic["text_hash"].astype(str)
+
+    combined_with_split = pd.concat(
+        [public[OUTPUT_COLUMNS], synthetic[OUTPUT_COLUMNS]],
+        ignore_index=True,
+    )
+    combined, combined_quality = _dedupe_templates(combined_with_split)
+    combined_split_lookup = (
+        combined_with_split.drop_duplicates("text_hash", keep="first")
+        .set_index("text_hash")["split"]
+        .to_dict()
+    )
+    combined["split"] = combined["text_hash"].map(combined_split_lookup)
+    combined_campaign_lookup = (
+        combined_with_split.drop_duplicates("text_hash", keep="first")
+        .set_index("text_hash")["campaign_id"]
+        .to_dict()
+    )
+    combined["campaign_id"] = combined["text_hash"].map(combined_campaign_lookup)
+
+    final_counts = combined["label"].value_counts().to_dict()
+    if final_counts.get(0, 0) != final_counts.get(1, 0):
+        return {
+            "status": "error",
+            "message": (
+                "La deduplica incrociata ha prodotto classi sbilanciate; il file non e stato salvato. "
+                f"legitimate={final_counts.get(0, 0)}, phishing={final_counts.get(1, 0)}."
+            ),
+        }
+
+    synthetic_mask = _synthetic_source_mask(combined)
+    if set(combined.loc[synthetic_mask, "split"]) - {"train"}:
+        return {"status": "error", "message": "Dati sintetici rilevati fuori dallo split train."}
+    campaign_split_counts = combined.groupby("campaign_id")["split"].nunique()
+    if (campaign_split_counts > 1).any():
+        return {
+            "status": "error",
+            "message": "Leakage rilevato: una campagna quasi duplicata compare in piu split.",
+        }
+
+    for split in ("train", "validation", "test"):
+        labels = set(combined.loc[combined["split"] == split, "label"])
+        if labels != {0, 1}:
+            return {
+                "status": "error",
+                "message": f"Lo split {split} deve contenere entrambe le classi; trovate {sorted(labels)}.",
+            }
+
+    train_rows = int(combined["split"].eq("train").sum())
+    synthetic_rows = int(synthetic_mask.sum())
+    synthetic_fraction = synthetic_rows / train_rows if train_rows else 0.0
+    if synthetic_fraction > max_synthetic_train_fraction:
+        return {
+            "status": "error",
+            "message": (
+                f"Quota sintetica nel train troppo alta: {synthetic_fraction:.1%}. "
+                f"Limite di qualita: {max_synthetic_train_fraction:.0%}. Aggiungere piu email pubbliche reali."
+            ),
+        }
+
+    output_csv.parent.mkdir(parents=True, exist_ok=True)
+    combined = combined.sample(frac=1, random_state=42).reset_index(drop=True)
+    combined[OUTPUT_COLUMNS].to_csv(output_csv, index=False)
+    return {
+        "status": "ok",
+        "message": (
+            f"Creato dataset completo con {len(combined)} email; {synthetic_rows} sintetiche "
+            f"({synthetic_fraction:.1%} del train), tutte escluse da validation e test."
+        ),
+        "output": str(output_csv),
+        "stats": dataset_stats(output_csv),
+        "synthetic_rows": synthetic_rows,
+        "synthetic_train_fraction": synthetic_fraction,
+        "quality": {
+            "public": public_quality,
+            "synthetic": synthetic_quality,
+            "combined": combined_quality,
+        },
+    }
+
+
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def write_dataset_manifest(
+    output_csv: Path,
+    synthetic_csv: Path,
+    selected_sources: list[str],
+    source_results: list[BuildResult],
+    stats: dict,
+) -> Path:
+    artifact_paths: list[Path] = []
+    if "github_phishing_pot" in selected_sources:
+        artifact_paths.append(
+            SOURCES_DIR / "phishing" / "phishing_pot" / f"phishing_pot_{PHISHING_POT_COMMIT}.zip"
+        )
+    if "nazario" in selected_sources:
+        artifact_paths.extend(
+            SOURCES_DIR / "phishing" / "nazario" / f"phishing-{year}"
+            for year in range(MODERN_START_YEAR, MODERN_END_YEAR + 1)
+        )
+    if "ubuntu_modern_ham" in selected_sources:
+        artifact_paths.extend((SOURCES_DIR / "legitimate" / "ubuntu").rglob("*.txt.gz"))
+    artifact_paths.append(synthetic_csv)
+
+    manifest_path = output_csv.with_suffix(".manifest.json")
+    manifest = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "dataset": str(output_csv),
+        "dataset_sha256": _file_sha256(output_csv),
+        "label_semantics": {"0": "LEGITIMATE", "1": "MALICIOUS_PHISHING_OR_SPAM"},
+        "modern_source_policy": {
+            "minimum_year": MODERN_START_YEAR,
+            "maximum_year": MODERN_END_YEAR,
+            "excluded_legacy_sources": sorted(LEGACY_SOURCE_NAMES),
+        },
+        "campaign_similarity_threshold": CAMPAIGN_SIMILARITY_THRESHOLD,
+        "selected_sources": selected_sources,
+        "source_results": [asdict(result) for result in source_results],
+        "artifacts": [
+            {"path": str(path), "bytes": path.stat().st_size, "sha256": _file_sha256(path)}
+            for path in sorted(set(artifact_paths))
+            if path.exists()
+        ],
+        "stats": stats,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    return manifest_path
+
+
+def build_complete_training_dataset(
+    selected_sources: list[str],
+    output_csv: Path = DEFAULT_COMPLETE_OUTPUT_CSV,
+    public_output_csv: Path = DEFAULT_BALANCED_OUTPUT_CSV,
+    synthetic_csv: Path = DEFAULT_SYNTHETIC_CSV,
+    staging_csv: Path = DEFAULT_OUTPUT_CSV,
+    include_hard_ham: bool = True,
+    max_enron: int = 10000,
+    max_synthetic_train_fraction: float = MAX_SYNTHETIC_TRAIN_FRACTION,
+    progress: Callable[[str], None] | None = None,
+) -> dict:
+    """Pipeline one-click: fonti pubbliche bilanciate + augmentation sintetica controllata."""
+    public_result = build_balanced_public_dataset(
+        selected_sources=selected_sources,
+        output_csv=public_output_csv,
+        staging_csv=staging_csv,
+        include_hard_ham=include_hard_ham,
+        max_enron=max_enron,
+        progress=progress,
+    )
+    if public_result["status"] != "ok":
+        return public_result
+    if progress:
+        progress("Controllo qualita e aggiunta del dataset sintetico v2")
+    complete_result = combine_public_and_synthetic_datasets(
+        public_csv=public_output_csv,
+        synthetic_csv=synthetic_csv,
+        output_csv=output_csv,
+        max_synthetic_train_fraction=max_synthetic_train_fraction,
+    )
+    complete_result["results"] = public_result.get("results", [])
+    if complete_result.get("status") == "ok":
+        manifest_path = write_dataset_manifest(
+            output_csv=output_csv,
+            synthetic_csv=synthetic_csv,
+            selected_sources=selected_sources,
+            source_results=public_result.get("results", []),
+            stats=complete_result.get("stats", {}),
+        )
+        complete_result["manifest"] = str(manifest_path)
+    return complete_result
 
 
 def dataset_stats(csv_path: Path = DEFAULT_OUTPUT_CSV) -> dict:

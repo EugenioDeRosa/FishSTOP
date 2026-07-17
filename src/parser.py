@@ -4,6 +4,8 @@ import email
 from email import policy
 import pandas as pd
 
+from src.analyzer.html_utils import recover_mislabelled_utf7_html
+
 
 def _sanitize_eml_bytes(raw_bytes: bytes) -> bytes:
     """
@@ -122,18 +124,21 @@ class EmailParserPipeline:
                     payload = part.get_payload(decode=True)
                     if payload:
                         charset = part.get_content_charset() or 'utf-8'
-                        body_parts.append(payload.decode(charset, errors='ignore'))
+                        decoded = payload.decode(charset, errors='ignore')
+                        body_parts.append(recover_mislabelled_utf7_html(decoded))
                 elif content_type == 'text/html':
                     payload = part.get_payload(decode=True)
                     if payload:
                         charset = part.get_content_charset() or 'utf-8'
-                        html_parts.append(payload.decode(charset, errors='ignore'))
+                        decoded = payload.decode(charset, errors='ignore')
+                        html_parts.append(recover_mislabelled_utf7_html(decoded))
             
             # If plain text was found, join it all; otherwise use HTML as a fallback
             body = "\n".join(body_parts) if body_parts else "\n".join(html_parts)
         else:
             payload = msg.get_payload(decode=True)
             body = payload.decode(msg.get_content_charset() or 'utf-8', errors='ignore') if payload else ""
+            body = recover_mislabelled_utf7_html(body)
 
         return {
             "sender": sender,

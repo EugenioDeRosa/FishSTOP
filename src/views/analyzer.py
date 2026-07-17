@@ -16,6 +16,7 @@ from src.analyzer.llm_context_analyzer import (
     stream_phi4_email_analysis,
 )
 from src.bert_calibration import calibrated_probabilities, classify as classify_bert_result
+from src.bert_inference import predict_email_logits
 from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
 from src.views.backend import get_calibration, get_content_model, get_core_backend
@@ -1125,18 +1126,17 @@ def render():
                         _render_ioc_values(label, values, f"{phi4_key}_ioc_{key_label}")
 
             with content_tab:
-                import torch
                 st.markdown("#### AI Content Analysis")
                 clean_body = soc.get("body_for_ai") or soc.get("body_ai") or soc.get("body_clean") or ""
                 email_text = prepare_bert_input(soc.get("subject") or "", clean_body)
 
                 _render_phi4_analysis(soc, phi4_key, auto_run=False)
 
-                with st.spinner("Loading BERT model..."):
+                with st.spinner("Loading DistilBERT model..."):
                     tokenizer, model, model_source = get_content_model()
                 calibration = get_calibration()
 
-                st.info("BERT model loaded from Hugging Face.")
+                st.info("DistilBERT model loaded from Hugging Face.")
                 if calibration["source"] != "huggingface":
                     st.caption(
                         "⚠️ Nessun `calibration.json` trovato per questo modello: uso i "
@@ -1148,31 +1148,47 @@ def render():
                     soc["bert_ai_result"] = "not available"
                     st.warning("Email has no meaningful text for classification.")
                 else:
-                    with st.spinner("BERT is analyzing the content..."):
-                        inputs = tokenizer(email_text, return_tensors="pt", truncation=True, max_length=512)
-                        model.eval()
-                        with torch.inference_mode():
-                            outputs = model(**inputs)
-                            logits = outputs.logits
-                            probabilities = calibrated_probabilities(
-                                logits, temperature=calibration["temperature"]
-                            ).flatten().tolist()
-                    prob_safe = probabilities[0] * 100
-                    prob_phishing = probabilities[1] * 100
+                    with st.spinner("DistilBERT is analyzing the complete content..."):
+                        positive_label_id = int(calibration.get("positive_label_id", 1))
+                        logits, chunk_count = predict_email_logits(
+                            model,
+                            tokenizer,
+                            email_text,
+                            positive_label_id=positive_label_id,
+                        )
+                        probabilities = calibrated_probabilities(
+                            logits, temperature=calibration["temperature"]
+                        ).flatten().tolist()
+                    negative_label_id = 1 - positive_label_id
+                    prob_safe = probabilities[negative_label_id] * 100
+                    prob_malicious = probabilities[positive_label_id] * 100
                     c1, c2 = st.columns(2)
                     c1.metric("Legitimate", f"{prob_safe:.2f}%")
-                    c2.metric("Phishing", f"{prob_phishing:.2f}%")
-                    soc["bert_phishing_probability"] = prob_phishing
+                    c2.metric("Malicious (phishing/spam)", f"{prob_malicious:.2f}%")
+                    if calibration["source"] == "huggingface":
+                        st.caption(
+                            f"Calibrated probability from {chunk_count} text block(s). "
+                            "It measures the content signal only."
+                        )
+                    else:
+                        st.caption(
+                            f"Uncalibrated classifier confidence from {chunk_count} text block(s); "
+                            "it is not a real-world malicious-email probability."
+                        )
+                    soc["bert_phishing_probability"] = prob_malicious
+                    soc["bert_malicious_probability"] = prob_malicious
                     soc["bert_legitimate_probability"] = prob_safe
+                    soc["bert_chunk_count"] = chunk_count
+                    soc["bert_probability_calibrated"] = calibration["source"] == "huggingface"
 
                     result = classify_bert_result(
-                        probabilities[1],  # probabilita' phishing calibrata, 0-1
+                        probabilities[positive_label_id],
                         threshold=calibration["threshold"],
                         band=calibration["band"],
                     )
                     soc["bert_ai_result"] = result
                     if result == "phishing":
-                        st.error("AI result: possible phishing")
+                        st.error("AI result: possible malicious email (phishing or spam)")
                     elif result == "legitimate":
                         st.success("AI result: email probably legitimate")
                     else:
@@ -1184,6 +1200,8 @@ def render():
                             "calibration_temperature": calibration["temperature"],
                             "decision_threshold": calibration["threshold"],
                             "uncertain_band": calibration["band"],
+                            "positive_label_id": positive_label_id,
+                            "analyzed_chunks": chunk_count,
                             "calibration_source": calibration["source"],
                         })
 

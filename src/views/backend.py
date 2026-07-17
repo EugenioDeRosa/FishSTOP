@@ -2,7 +2,12 @@
 
 import streamlit as st
 
-from src.bert_calibration import DEFAULT_BAND, DEFAULT_TEMPERATURE, DEFAULT_THRESHOLD
+from src.bert_calibration import (
+    DEFAULT_BAND,
+    DEFAULT_POSITIVE_LABEL_ID,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_THRESHOLD,
+)
 from src.config import get_secret
 
 HF_MODEL_ID = "eugenioderodev/fishstop-bert"
@@ -54,6 +59,7 @@ def init_calibration(hf_token: str = "") -> dict:
         calibration.setdefault("temperature", DEFAULT_TEMPERATURE)
         calibration.setdefault("threshold", DEFAULT_THRESHOLD)
         calibration.setdefault("band", DEFAULT_BAND)
+        calibration.setdefault("positive_label_id", DEFAULT_POSITIVE_LABEL_ID)
         calibration["source"] = "huggingface"
         return calibration
     except (HfHubHTTPError, FileNotFoundError, OSError):
@@ -61,6 +67,7 @@ def init_calibration(hf_token: str = "") -> dict:
             "temperature": DEFAULT_TEMPERATURE,
             "threshold": DEFAULT_THRESHOLD,
             "band": DEFAULT_BAND,
+            "positive_label_id": DEFAULT_POSITIVE_LABEL_ID,
             "source": "default (nessun calibration.json pubblicato)",
         }
 

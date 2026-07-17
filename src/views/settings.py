@@ -17,7 +17,7 @@ KEY_HELP = {
     "VIRUSTOTAL_API_KEY": "Used for URL and attachment hash reputation checks.",
     "ABUSEIPDB_API_KEY": "Used for sender IP and resolved-domain reputation checks.",
     "GITHUB_MODELS_TOKEN": "Used by Phi-4 mini hosted analysis.",
-    "HF_TOKEN": "Used when loading the Hugging Face BERT model, especially private/gated access.",
+    "HF_TOKEN": "Used when loading the Hugging Face DistilBERT model, especially private/gated access.",
 }
 
 
@@ -34,7 +34,7 @@ def render():
     st.header("Settings")
 
     model_source = get_model_source()
-    st.info(f"Active BERT model from Hugging Face (`{model_source}`).")
+    st.info(f"Active DistilBERT model from Hugging Face (`{model_source}`).")
 
     st.divider()
     st.subheader("API Keys")

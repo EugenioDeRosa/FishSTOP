@@ -2,7 +2,7 @@
 
 FishStop is a local platform for SOC triage of suspicious emails in `.eml` format.
 
-The project combines forensic email parsing, authentication checks, link and attachment reputation, BERT-based content analysis, and local Phi-4 mini explanations through Ollama or GitHub Models.
+The project combines forensic email parsing, authentication checks, link and attachment reputation, calibrated DistilBERT content analysis, and local Phi-4 mini explanations through Ollama or GitHub Models.
 
 The main workflow is designed for a thesis project: upload an `.eml` file, let the system extract headers, body, links, and attachments, then review technical indicators and a readable verdict for the analyst.
 
@@ -14,7 +14,7 @@ The main workflow is designed for a thesis project: upload an `.eml` file, let t
 - Sender domain and IP reputation checks through AbuseIPDB.
 - URL extraction, lookalike-domain detection, redirect checks, and VirusTotal URL reputation.
 - Attachment analysis with extension, MIME type, magic bytes, SHA-256 hash, and VirusTotal lookup.
-- BERT content classification for legitimate vs phishing emails.
+- Calibrated DistilBERT content classification for legitimate vs phishing emails, including long-email chunking.
 - Local/hosted Phi-4 mini explanation focused on scam and phishing patterns.
 - Streamlit pages for EML analysis, settings, Colab training, and public dataset management.
 - Custom EML dataset builder with deduplication.
@@ -52,13 +52,26 @@ Secret loading priority:
 3. Upload an `.eml` file.
 4. Review the tabs: `Overview`, `Identity`, `Auth & Routing`, `Link Intel`, `Attachments`, `AI & Body`, and `Raw`.
 
-## Training
+## DistilBERT training
 
-The main training flow uses BERT (`bert-base-uncased`) to classify legitimate and phishing emails.
+Generate `data/processed/fishstop_train_complete.csv` from the Public Datasets page, then run:
 
-The app can export a balanced CSV for Google Colab. After training, publish the resulting model to Hugging Face and configure the app to use that model.
+```powershell
+python -m src.train --dataset data/processed/fishstop_train_complete.csv --output-dir models/fishstop-distilbert
+```
 
-Training data can come from Kaggle datasets through `kagglehub`, local `.eml` files, `data/custom_dataset.csv`, and public sources managed from the `Public Datasets` page.
+The CSV contains immutable `train`, `validation`, and `test` splits. The training command:
+
+1. fine-tunes `distilbert-base-uncased` with explicit `LEGITIMATE=0` and `MALICIOUS=1` labels; the malicious class includes phishing, scam and spam;
+2. selects the best checkpoint by validation F1;
+3. calibrates its probabilities on validation with temperature scaling;
+4. derives the decision threshold and uncertainty band from validation;
+5. evaluates once on the held-out test set;
+6. writes the model, tokenizer, `calibration.json`, `training_meta.json`, and model card to the output directory.
+
+Long emails use up to eight evenly spaced overlapping 512-token windows in training, calibration, test and runtime. FishSTOP chooses the window with the strongest malicious-content logit margin. Public dataset generation uses only modern 2022-2025 sources, keeps semantic campaign variants in one split, writes a reproducibility manifest and reserves synthetic email for training. The deployed app always loads `eugenioderodev/fishstop-bert`, so review the generated metrics before uploading the complete output directory to that repository.
+
+The old `notebooks/Phishing_detection.ipynb` is retained only as historical exploratory work; `src/train.py` is the canonical training pipeline.
 
 ## Validation
 
@@ -82,6 +95,6 @@ pytest
 
 If VirusTotal or AbuseIPDB results are missing, check the `.env` file or the `Settings` page.
 
-If the BERT model does not load, verify the Hugging Face model name, network access, and installed `transformers` dependencies.
+If the DistilBERT model does not load, verify the Hugging Face model name, network access, and installed `transformers` dependencies.
 
 If public datasets cannot be downloaded, verify Kaggle credentials and the availability of `kagglehub`.

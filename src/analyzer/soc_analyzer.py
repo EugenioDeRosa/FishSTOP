@@ -20,7 +20,7 @@ from typing import Optional
 
 from .attachment      import analyze_attachment
 from .body_context    import select_body_for_ai
-from .html_utils      import strip_html
+from .html_utils      import recover_mislabelled_utf7_html, strip_html
 from .link_extractor  import extract_links
 from .lookalike       import check_lookalike_domains, is_ip_url
 from .received_parser import parse_received_hop, parse_auth_results
@@ -180,11 +180,12 @@ def _decode_text_part(part) -> str:
                 continue
             decoded_candidates.append(decoded)
         if decoded_candidates:
-            return min(decoded_candidates, key=lambda value: value.count("\ufffd"))
+            decoded = min(decoded_candidates, key=lambda value: value.count("\ufffd"))
+            return recover_mislabelled_utf7_html(decoded)
 
     raw_payload = part.get_payload(decode=False)
     if isinstance(raw_payload, str):
-        return raw_payload
+        return recover_mislabelled_utf7_html(raw_payload)
     return ""
 
 
