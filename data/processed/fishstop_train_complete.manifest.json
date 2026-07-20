@@ -1,26 +1,29 @@
 {
-  "generated_at": "2026-07-17T11:56:25.381949+00:00",
+  "generated_at": "2026-07-20T09:29:27.439576+00:00",
   "dataset": "data\\processed\\fishstop_train_complete.csv",
-  "dataset_sha256": "b15eae01a277d50ee00952e7ebd5faf0f5050039e68e2e39d5b1ac2f6e262516",
+  "dataset_sha256": "916ec9eca5bb6a91ee074829cf60718a3e81aabef88441fdd9e3c5dd8cdc98ed",
   "label_semantics": {
     "0": "LEGITIMATE",
     "1": "MALICIOUS_PHISHING_OR_SPAM"
   },
-  "modern_source_policy": {
-    "minimum_year": 2022,
-    "maximum_year": 2025,
-    "excluded_legacy_sources": [
-      "enron",
+  "source_policy": {
+    "excluded_sources": [
       "kaggle",
       "kaggle_subhajournal_phishingemails",
-      "spamassassin"
+      "ubuntu_modern_ham"
+    ],
+    "split_strategy": "source_holdout",
+    "phishing_year_range": [
+      2022,
+      2025
     ]
   },
   "campaign_similarity_threshold": 0.83,
   "selected_sources": [
     "github_phishing_pot",
     "nazario",
-    "ubuntu_modern_ham"
+    "spamassassin",
+    "enron"
   ],
   "source_results": [
     {
@@ -33,19 +36,27 @@
     },
     {
       "source": "nazario",
-      "rows": 7930,
+      "rows": 7906,
       "added": 1411,
       "skipped": 139,
       "errors": 0,
       "message": "Nazario phishing importato"
     },
     {
-      "source": "ubuntu_modern_ham",
-      "rows": 20667,
-      "added": 12737,
-      "skipped": 15,
+      "source": "spamassassin",
+      "rows": 10627,
+      "added": 2721,
+      "skipped": 31,
       "errors": 0,
-      "message": "Ubuntu ham pubblico 2022-2025 importato"
+      "message": "SpamAssassin ham importato"
+    },
+    {
+      "source": "enron",
+      "rows": 19003,
+      "added": 8376,
+      "skipped": 1624,
+      "errors": 0,
+      "message": "Enron importato, limite 10000 email"
     }
   ],
   "artifacts": [
@@ -55,484 +66,19 @@
       "sha256": "a5b2dca6dc13baa33a9ad826e8ef6ba4d3aa094db1c2aef2b0a294083eeddd33"
     },
     {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-April.txt.gz",
-      "bytes": 21227,
-      "sha256": "c5bbc241781e67a6e22f8c93d644302cb58ab2c465c9f99768e49da1071389f1"
+      "path": "data\\training_sources\\legitimate\\enron\\enron_mail_20150507.tar.gz",
+      "bytes": 443254787,
+      "sha256": "b3da1b3fe0369ec3140bb4fbce94702c33b7da810ec15d718b3fadf5cd748ca7"
     },
     {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-August.txt.gz",
-      "bytes": 25118,
-      "sha256": "861186ab0e228737446a45c763d76479110cd9d76074c0c3bc87194605e2cbfd"
+      "path": "data\\training_sources\\legitimate\\spamassassin\\easy_ham.tar.bz2",
+      "bytes": 1612216,
+      "sha256": "2b7b65904bcfcc31d2b5f51946f2d261370b257402cbbd62930b46ab83367438"
     },
     {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-December.txt.gz",
-      "bytes": 18820,
-      "sha256": "7226d4e93d9478300e3658cbaf39ed38cc382852a188aed47ecb2fa80bda83ed"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-February.txt.gz",
-      "bytes": 21595,
-      "sha256": "b3afd1f8df1a48f648cd807ce0ce603ae17f0b95672841b4111a027e02153444"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-January.txt.gz",
-      "bytes": 22197,
-      "sha256": "d043e2aa9836e7cdedcf439c037cc6afdeb1743cfb9a4d6188c68235107c0905"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-July.txt.gz",
-      "bytes": 21384,
-      "sha256": "3ea30a0ef2df9d59fe2699db2389b43980200a7b9065cd46444331352e8f58ea"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-June.txt.gz",
-      "bytes": 28400,
-      "sha256": "1f7dc70d8408caf9744b7b83119629fe01ef0731ba05edd18bf316abb12a5896"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-March.txt.gz",
-      "bytes": 30065,
-      "sha256": "864182869c36f764eb6c3237d8a11d851adcdf28fc0d7bca65ec195c17748190"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-May.txt.gz",
-      "bytes": 26459,
-      "sha256": "3e36691437114033386cf1f3a4df9cf84a0f4838f9e30a29d6989d5763d2007d"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-November.txt.gz",
-      "bytes": 28481,
-      "sha256": "d4fc914aa77ff7fd8ce924dd80437df1df54189cd32d7ba81438ff2099f8e77d"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-October.txt.gz",
-      "bytes": 26620,
-      "sha256": "5c5f9e92567d016b573ae663351013f231b7c7c47bb7b4f9e79bd8822be442c6"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2022-September.txt.gz",
-      "bytes": 26656,
-      "sha256": "5e6e5cc7cf0fa687f1f7db376e10d11b997ef460a6acdf1027c19e2f989899e7"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-April.txt.gz",
-      "bytes": 38263,
-      "sha256": "3da818616fe66fb50fc2351858145cf8509ccd3ba178f5f49fc257e80b3d650c"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-August.txt.gz",
-      "bytes": 35565,
-      "sha256": "7245622d9a831e3d44efdca8b958d593afd5631a6f242c98defba14f4a6d4ef8"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-December.txt.gz",
-      "bytes": 23305,
-      "sha256": "c5683919728cf0ff2b00105e4e9ee05eea50671b12b9973b77f14e84fed05dc4"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-February.txt.gz",
-      "bytes": 38845,
-      "sha256": "1f82cb2d96ed2ee082172b696de7e3b4042bac12029f263e8b1ed377fea9f8a0"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-January.txt.gz",
-      "bytes": 32181,
-      "sha256": "ab2ddd07317cd5a74ab8e90d248631e76ecf340774658e9b7df20c18bd597bf4"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-July.txt.gz",
-      "bytes": 39214,
-      "sha256": "dcf70b3f0c06e5b1e134930fe533978a174f222e0ead02d8b0317168bbe06047"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-June.txt.gz",
-      "bytes": 41570,
-      "sha256": "7e6d51a03837ef8048f1c9eb8cbf887501b30c7c986786323fac174894c3bd0a"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-March.txt.gz",
-      "bytes": 53957,
-      "sha256": "45fe2ba100aa5d1d165ff2a75906a42494006b0253ff39cdbe84dc50e5f8b8c9"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-May.txt.gz",
-      "bytes": 42975,
-      "sha256": "93224931a98ce00b034124752651eadc22cad299c78e51b0dddaa75e28471908"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-November.txt.gz",
-      "bytes": 36718,
-      "sha256": "d858a60a916e9956d820b465855294b95e3fe25cb00b61216c32b98f678c90aa"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-October.txt.gz",
-      "bytes": 53866,
-      "sha256": "d131316f81449df75ccc4f494d69887409e16e6d736b4a3f13d3f3b9d829ae37"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2023-September.txt.gz",
-      "bytes": 41735,
-      "sha256": "d40fd227936f19da29129927eecbffe8a290dc40b8f3d7e3e1459d4bbc863d95"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-April.txt.gz",
-      "bytes": 36159,
-      "sha256": "196b9cb7d039fa514a29c74db020c6dc360315e5616a342dfaaf9150ae0eeb14"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-August.txt.gz",
-      "bytes": 45670,
-      "sha256": "37ffd503bd090caf821dbfd802f3855d239c03daf9db86795bf33633d68fe128"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-December.txt.gz",
-      "bytes": 48994,
-      "sha256": "d2f4cc10b02242e5b7cd2c7c5801df0b5e69b5c2f49bb8dc8da2fd391aa11c73"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-February.txt.gz",
-      "bytes": 34061,
-      "sha256": "0bffed19f6d3a067825f55a3d720b67eb6c1afceab68b4aa94f2398712ff2b07"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-January.txt.gz",
-      "bytes": 35083,
-      "sha256": "c8b9445c688d6e37c7aeb18920795fd5c012d992c9d338d1271c0ab033ef90a5"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-July.txt.gz",
-      "bytes": 78458,
-      "sha256": "0dd781ba15d2aee54656fc00e91b85885a9c230c4b0a16a03be4eed5ad00ce35"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-June.txt.gz",
-      "bytes": 54234,
-      "sha256": "c6a99aa6f78cc867856f142604b0cc6b044e668c5f40fadb862067984edb73cd"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-March.txt.gz",
-      "bytes": 35581,
-      "sha256": "e34059a84bab8f8fee4e4b50fb485b76056f9c340deba2059fb1312eeb1d51ec"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-May.txt.gz",
-      "bytes": 32393,
-      "sha256": "b5302157e4d31efade391b6518bdf5a039fe4902f3758a442f578a1ab6d34317"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-November.txt.gz",
-      "bytes": 60280,
-      "sha256": "160e366047a81a10c676a7378087b25cd45aa6490f35f1bdb1352a16315f21eb"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-October.txt.gz",
-      "bytes": 34525,
-      "sha256": "54dcf40a43208046ea4b50a4603b2fe27c612c3a8cb40512dae0f25dbe14ca83"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2024-September.txt.gz",
-      "bytes": 62690,
-      "sha256": "711a0a9547eca238bc0496e7195e0050d59b1f3ae1054a20ed816f28d54eb237"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-April.txt.gz",
-      "bytes": 92597,
-      "sha256": "7f7fecd20c60703a16d1e824d47cafb541540db8955e739797ce3624a770274b"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-August.txt.gz",
-      "bytes": 42593,
-      "sha256": "3bad7dbaaab94718a67c7bfc5bd2327f653e7cd8a71755cf125ac490ed1ad887"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-December.txt.gz",
-      "bytes": 39524,
-      "sha256": "2567d7daad842a45b2aaea4e0d37551d53dbe83d985de1f3bdea7b9bd362faf6"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-February.txt.gz",
-      "bytes": 72692,
-      "sha256": "aeb58ce794f56ffc4669ac1231d2e4786a909e905d48fff6122acd2baabcbdb2"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-January.txt.gz",
-      "bytes": 55209,
-      "sha256": "fa2195705b3d7d62c4fd05f1375d53d13751b1793afa9cbbc4d48e466b6b6704"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-July.txt.gz",
-      "bytes": 73671,
-      "sha256": "2a913ad0d6ae879d334b1932f7edadacf16247416d49e22ae64445b0b6bf232c"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-June.txt.gz",
-      "bytes": 48388,
-      "sha256": "a8561791ab1898632279ed112978eaa83c1f9fe7ecb8a83317c20ee3cb352e33"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-March.txt.gz",
-      "bytes": 77534,
-      "sha256": "98d885bc83b7948cb8163509ab5c9eacbee2fc6950f9e87870cb95633e4da67a"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-May.txt.gz",
-      "bytes": 89366,
-      "sha256": "fea3ce280ba36178d793954fad7f97dda3103bf92839e4a43d08bb5b970703bd"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-November.txt.gz",
-      "bytes": 38359,
-      "sha256": "4699ae963e9e11e63fb6c336744b87113a62d2949346072195859592845147a4"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-October.txt.gz",
-      "bytes": 57111,
-      "sha256": "a709a350429f0b9e759ec5defd6e504051cf4091d52a5d6474969a2868c068ab"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-security-announce\\2025-September.txt.gz",
-      "bytes": 47830,
-      "sha256": "3170816fa242d6276866e2b73a3dfa9009cc1a06261604fc0d45a4b66c5c7ab0"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-April.txt.gz",
-      "bytes": 55040,
-      "sha256": "91fbe9358b1ea0844a68d2860ecf73a81f84bba11220918c4c12616576c03dea"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-August.txt.gz",
-      "bytes": 103069,
-      "sha256": "d18b96ae7912b259cd376a2b619c10896cc3c396b5f4b11ed3f5d3741b197cbe"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-December.txt.gz",
-      "bytes": 126226,
-      "sha256": "b5ea4ebc49ca005ab71e690e9b60da70ab611d04914fb35c3e40695ea7553939"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-February.txt.gz",
-      "bytes": 131787,
-      "sha256": "e77a41968ffc4bb05dfe88cae13be0796a9fa56593e9ddca49a2e1e92cdc1124"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-January.txt.gz",
-      "bytes": 136089,
-      "sha256": "9f445c205861a6a33b909bf2a51f637db301394eb551a0ee30ec46f7247e6c0a"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-July.txt.gz",
-      "bytes": 89446,
-      "sha256": "f0137c06b554c8a7013d708292e6a7b24a6fe0f2a9839ab5e10d6ffc3b858c1f"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-June.txt.gz",
-      "bytes": 97511,
-      "sha256": "a27205a51753879153971eaf73bd7c8b994efe852fbaa5887ef7e305219755df"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-March.txt.gz",
-      "bytes": 69149,
-      "sha256": "5e3769c1bd5369a5d3531809c5d6e5c20fa2f2f510449b13a77642741d628c0d"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-May.txt.gz",
-      "bytes": 145157,
-      "sha256": "716ae309f9a159ced3597905bbe8af71679a0b1a04bbb35b3b842303fcfb56a9"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-November.txt.gz",
-      "bytes": 92762,
-      "sha256": "df355c346d61a39ca1a2cac24c13315183d6c21d575fa0d9d2b2f471655ac972"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-October.txt.gz",
-      "bytes": 112345,
-      "sha256": "57c8c71179613d82300570272e057401b4539d159c236b069e0a02280ff2f214"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2022-September.txt.gz",
-      "bytes": 76515,
-      "sha256": "c2aaf8c0d903615aab639b4841dad7d37440eb1126b3a57730ca6ba823b6b2e8"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-April.txt.gz",
-      "bytes": 177721,
-      "sha256": "d1dfeea527f909fd165aacd9d0d66255046613b2b013b087dac76fdbd331f04d"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-August.txt.gz",
-      "bytes": 74481,
-      "sha256": "cfe46f8f40fce336b7b3a96d7a41764844ca30303e78432536e8eb9a0df56e9e"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-December.txt.gz",
-      "bytes": 68316,
-      "sha256": "0e6cd721ef519462a196a41ab4f016157404e4392d335d03f227ff7aa1a699a5"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-February.txt.gz",
-      "bytes": 52646,
-      "sha256": "c417591f0e3686592ba192b05504678255a0422426a4f5b4a6a3057f74c03e94"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-January.txt.gz",
-      "bytes": 153030,
-      "sha256": "cf008dc403c484c661b729191c5f711779da2d0bb9f89394be2902c551a4e49e"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-July.txt.gz",
-      "bytes": 113619,
-      "sha256": "716b6e452b0229b5c84474ba152d8329868ab8ecf30c54c7c5ff8fea8014c2e3"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-June.txt.gz",
-      "bytes": 91183,
-      "sha256": "553bc5883556381c0bbad9c08037e7619dbe3cb8c1e6d132629be09f19a7665b"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-March.txt.gz",
-      "bytes": 148395,
-      "sha256": "36e478bfb6375450158ccc39bfb3bf072718c095bc51cf844dca2f54d98e913a"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-May.txt.gz",
-      "bytes": 82239,
-      "sha256": "a71559583d307ee28d74d8126c76589f7b0d299d25a9701a4f563b68b33caeeb"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-November.txt.gz",
-      "bytes": 81574,
-      "sha256": "3a64de21edb0655f2cbcb184771c698ca1fdeed2011aed3e90ee4d746ad82a57"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-October.txt.gz",
-      "bytes": 66718,
-      "sha256": "a02936ba383e1bc0379cc6a3c31e04aae7a0967e41380d6e5e5d52c8df8c24cd"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2023-September.txt.gz",
-      "bytes": 70498,
-      "sha256": "42114facda6d498a89a0be6bd409176aa591183bf76ded091615595f9f503a37"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-April.txt.gz",
-      "bytes": 66178,
-      "sha256": "3bb0509ff3c904340cb5b953fe7eea70e43ec0664ce3d0f78b64b731756700e7"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-August.txt.gz",
-      "bytes": 117318,
-      "sha256": "92b2557085159da037402f406824203f8a26a293af81b728f39e4cd5ebbf7a80"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-December.txt.gz",
-      "bytes": 107056,
-      "sha256": "2815f24d116051a390eb533a590a98241aefff28c4eb5883bfd8a5c2735c53b9"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-February.txt.gz",
-      "bytes": 59968,
-      "sha256": "a55bac346895342822d522524b6e8e876e88028714e16a90ffaeea33b6ec6f64"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-January.txt.gz",
-      "bytes": 68670,
-      "sha256": "b8cf720f2bc7e20d6b4cfbc8ea8f5ac23ad8319a0bdf7dbcdb287a5f8db2e486"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-July.txt.gz",
-      "bytes": 59981,
-      "sha256": "52659f2fe2e3a886c03cb8c7ab13bda388e82fe2e4e71f0e718f8e911e18bb8c"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-June.txt.gz",
-      "bytes": 35804,
-      "sha256": "9390466fdb738c051f5ef52d57f2d2eed557759527e6e283db020a010f94fd0f"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-March.txt.gz",
-      "bytes": 47162,
-      "sha256": "9754ed495779b9ad972231096bfa83f6f5e5cff25b395d68d7c78339f0739626"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-May.txt.gz",
-      "bytes": 49881,
-      "sha256": "e17ef40e06e0515434ca3e85ffcd0ecb46dbc6d2f37b303a29e456679252662f"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-November.txt.gz",
-      "bytes": 101120,
-      "sha256": "0616b42d0dabc3ba0890fdeb79e2f8da89e475f974d3319201302e243eb9ed23"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-October.txt.gz",
-      "bytes": 76284,
-      "sha256": "2f255811adcc3f18165b703feba57f8b8455f164c8e2db8d8bab44fb0822d125"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2024-September.txt.gz",
-      "bytes": 87638,
-      "sha256": "521c9e6a4a4a2428e81f5699828890b529433ee7b07f396d894d606ffe080950"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-April.txt.gz",
-      "bytes": 28609,
-      "sha256": "42f1bb2989b3bd65f7c4372470e390f5d3a9ec4b554060408dc8b40fac8eb709"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-August.txt.gz",
-      "bytes": 46595,
-      "sha256": "a3c431029f46dc0026f2da23de5fd54eb090baaeca741e7d9cf4ea056aa9c50d"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-December.txt.gz",
-      "bytes": 36838,
-      "sha256": "e788cca05197dfd0997856c3b9eed7469d8e77be152c90ffdd1771d49d930be0"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-February.txt.gz",
-      "bytes": 63271,
-      "sha256": "e0695962ef41918dd7d020e9711f87e5ffa4e366439c0c4daf357413c85385f7"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-January.txt.gz",
-      "bytes": 53576,
-      "sha256": "f81c1c7e1f61b2dbd5286dee7a87f43d9aa23f885470f12b4789f5ad776b82c4"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-July.txt.gz",
-      "bytes": 64258,
-      "sha256": "df071c159fb1dbf1f13111a885b9c7d82e132bf03e4b81694334eff091109fa3"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-June.txt.gz",
-      "bytes": 84624,
-      "sha256": "009a3a11e8d1b5e58020fabd3120b4086047586974a6411ca33c77eab3fbf085"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-March.txt.gz",
-      "bytes": 49439,
-      "sha256": "e8e49538bb005c4aa4043c14859b6c3b26397f50c732897533f9903ef1518617"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-May.txt.gz",
-      "bytes": 41229,
-      "sha256": "d062874638a08e81dd83cf9337300a8ed44f84ab501d7db63b22be486203d1b1"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-November.txt.gz",
-      "bytes": 63166,
-      "sha256": "314e565cf63210d582f8982cb0c186b6e952cafb69426a306f0e44a05b5524ea"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-October.txt.gz",
-      "bytes": 53787,
-      "sha256": "f9fab4d86d917169068a8db33bbc90557f406c5a4a2b9013796c669d1ae1c14d"
-    },
-    {
-      "path": "data\\training_sources\\legitimate\\ubuntu\\ubuntu-users\\2025-September.txt.gz",
-      "bytes": 85272,
-      "sha256": "3805168ddc1b2f8e483906116fed73840c1ebd386e9482f1b0b7e124853b7563"
+      "path": "data\\training_sources\\legitimate\\spamassassin\\hard_ham.tar.bz2",
+      "bytes": 1029898,
+      "sha256": "ce2ce67880643dbde65ea7f85bffbfe4417349c4bd80b6b0de56262ae6b0a9c9"
     },
     {
       "path": "data\\training_sources\\phishing\\nazario\\phishing-2022",
@@ -562,9 +108,9 @@
   ],
   "stats": {
     "exists": true,
-    "rows": 14808,
-    "legitimate": 7404,
-    "phishing": 7404,
+    "rows": 14016,
+    "legitimate": 7008,
+    "phishing": 7008,
     "duplicates": 0,
     "template_duplicates": 0,
     "label_conflicts": 0,
@@ -572,29 +118,25 @@
     "invalid_text": 0,
     "invalid_label": 0,
     "too_short": 0,
+    "too_few_words": 0,
     "too_long": 0,
     "missing_label": false,
     "sources": {
-      "github_phishing_pot": 5942,
-      "ubuntu_ubuntu-users_2022": 1573,
-      "ubuntu_ubuntu-users_2023": 1518,
-      "ubuntu_ubuntu-users_2024": 1185,
-      "ubuntu_ubuntu-users_2025": 922,
-      "ubuntu_ubuntu-security-announce_2025": 656,
-      "ubuntu_ubuntu-security-announce_2023": 557,
-      "ubuntu_ubuntu-security-announce_2024": 508,
-      "nazario_phishing-2025": 433,
-      "nazario_phishing-2023": 367,
-      "ubuntu_ubuntu-security-announce_2022": 365,
-      "nazario_phishing-2024": 350,
+      "github_phishing_pot": 5902,
+      "enron": 5902,
+      "spamassassin_easy_ham": 745,
+      "nazario_phishing-2025": 416,
+      "nazario_phishing-2024": 329,
+      "spamassassin_hard_ham": 241,
       "synthetic_modern_v2": 240,
-      "nazario_phishing-2022": 192
+      "nazario_phishing-2023": 152,
+      "nazario_phishing-2022": 89
     },
     "splits": {
-      "train": 10438,
-      "test": 2914,
-      "validation": 1456
+      "train": 12044,
+      "test": 1490,
+      "validation": 482
     },
-    "rows_after_template_dedupe": 14808
+    "rows_after_template_dedupe": 14016
   }
 }

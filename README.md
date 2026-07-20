@@ -63,13 +63,13 @@ python -m src.train --dataset data/processed/fishstop_train_complete.csv --outpu
 The CSV contains immutable `train`, `validation`, and `test` splits. The training command:
 
 1. fine-tunes `distilbert-base-uncased` with explicit `LEGITIMATE=0` and `MALICIOUS=1` labels; the malicious class includes phishing, scam and spam;
-2. selects the best checkpoint by validation F1;
+2. weights chunks so every email contributes equally and selects the best checkpoint by email-level validation F1;
 3. calibrates its probabilities on validation with temperature scaling;
 4. derives the decision threshold and uncertainty band from validation;
 5. evaluates once on the held-out test set;
 6. writes the model, tokenizer, `calibration.json`, `training_meta.json`, and model card to the output directory.
 
-Long emails use up to eight evenly spaced overlapping 512-token windows in training, calibration, test and runtime. FishSTOP chooses the window with the strongest malicious-content logit margin. Public dataset generation uses only modern 2022-2025 sources, keeps semantic campaign variants in one split, writes a reproducibility manifest and reserves synthetic email for training. The deployed app always loads `eugenioderodev/fishstop-bert`, so review the generated metrics before uploading the complete output directory to that repository.
+Long emails use up to eight evenly spaced overlapping 512-token windows in training, calibration, test and runtime. FishSTOP chooses the window with the strongest malicious-content logit margin. Public dataset generation excludes Ubuntu, uses SpamAssassin and Enron as independent legitimate sources, reserves entire real sources for validation/test, keeps synthetic email train-only, and writes a reproducibility manifest. The deployed app loads `eugenioderodev/fishstop-bert`; set `FISHSTOP_HF_MODEL_REVISION` to a published commit and upload the model, tokenizer, `calibration.json`, and metadata together.
 
 The old `notebooks/Phishing_detection.ipynb` is retained only as historical exploratory work; `src/train.py` is the canonical training pipeline.
 

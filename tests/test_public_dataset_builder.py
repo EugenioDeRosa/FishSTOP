@@ -4,6 +4,7 @@ import pandas as pd
 
 from src.public_dataset_builder import (
     MAX_TEXT_CHARS,
+    _assign_source_holdout_splits,
     _assign_splits,
     _clean_dataset_frame,
     _dedupe_templates,
@@ -23,6 +24,35 @@ def test_binary_labels_are_strict_and_source_values_are_supported():
     assert _parse_binary_label("Safe Email") == 0
     assert _parse_binary_label("Phishing Email") == 1
     assert _parse_binary_label("spam") == 1
+
+
+def test_source_holdout_keeps_real_sources_out_of_other_splits():
+    rows = []
+    source_words = {
+        0: ("calendar", "project", "meeting"),
+        1: ("credential", "invoice", "airdrop"),
+    }
+    for label in (0, 1):
+        for source_index, source_word in enumerate(source_words[label]):
+            source = f"source-{label}-{source_word}"
+            for row_index in range(4):
+                text = _text(
+                    f"{source_word} {'routine collaboration notes' if label == 0 else 'urgent security action'} "
+                    f"variant {chr(97 + row_index)}"
+                )
+                rows.append({
+                    "text": text,
+                    "label": label,
+                    "source": source,
+                    "source_file": str(row_index),
+                    "text_hash": text_hash(text),
+                })
+
+    split = _assign_source_holdout_splits(pd.DataFrame(rows))
+
+    assert not split.groupby("source")["split"].nunique().gt(1).any()
+    assert set(split["split"]) == {"train", "validation", "test"}
+    assert all(set(group["label"]) == {0, 1} for _, group in split.groupby("split"))
     assert _parse_binary_label(2) is None
     assert _parse_binary_label("unknown") is None
 
@@ -74,11 +104,16 @@ def test_synthetic_rows_are_train_only_when_real_test_data_exists():
         "alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet",
         "kilo", "lima", "mike", "november", "oscar", "papa", "quebec", "romeo", "sierra", "tango",
     ]
+    danger_topics = [
+        "amber", "bronze", "crimson", "denim", "emerald", "fuchsia", "ginger", "hazel", "ivory", "jade",
+        "khaki", "lilac", "magenta", "navy", "ochre", "pearl", "quartz", "ruby", "scarlet", "teal",
+    ]
     for label in (0, 1):
         for index in range(20):
-            topic = topics[index]
+            topic = (topics if label == 0 else danger_topics)[index]
             unit = f"{topic}{'safe' if label == 0 else 'danger'}"
-            text = f"Subject {unit} " + " ".join([unit] * 50)
+            class_context = "routine project collaboration" if label == 0 else "urgent credential theft warning"
+            text = f"Subject {unit} {class_context} " + " ".join([unit] * 50)
             rows.append({"text": text, "label": label, "source": "real", "source_file": str(index), "text_hash": text_hash(text)})
         for index in range(5):
             text = _text(f"synthetic-{label}-{index}")
@@ -95,7 +130,8 @@ def test_near_duplicate_campaign_variants_stay_in_the_same_split():
     rows = []
     for label in (0, 1):
         for index in range(20):
-            text = _text(f"independent alphabetic campaign {chr(97 + index)} labelword {label}")
+            class_context = "routine team scheduling" if label == 0 else "credential harvesting request"
+            text = _text(f"independent alphabetic campaign {chr(97 + index)} {class_context}")
             rows.append(
                 {
                     "text": text,

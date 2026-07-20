@@ -27,17 +27,25 @@ SOURCE_OPTIONS = {
         "caption": "Email phishing reali 2022-2025 in formato mbox/raw; gli anni precedenti sono esclusi.",
         "url": "https://monkey.org/~jose/phishing/",
     },
-    "ubuntu_modern_ham": {
-        "label": "Ubuntu public mailing lists 2022-2025",
+    "spamassassin": {
+        "label": "SpamAssassin public ham corpus",
         "caption": (
-            "Email legitimate recenti dagli archivi pubblici ubuntu-users e ubuntu-security-announce. "
-            "Sostituiscono i vecchi corpus SpamAssassin ed Enron."
+            "Email legittime pubbliche easy-ham e hard-ham. Usate insieme a Enron per evitare "
+            "che una sola fonte rappresenti tutta la classe legittima."
         ),
-        "url": "https://lists.ubuntu.com/archives/ubuntu-users/",
+        "url": "https://spamassassin.apache.org/old/publiccorpus/",
+    },
+    "enron": {
+        "label": "Enron public email corpus",
+        "caption": (
+            "Email aziendali legittime da una fonte indipendente. Gli split source-held-out "
+            "mantengono intere fonti fuori dal train."
+        ),
+        "url": "https://www.cs.cmu.edu/~enron/",
     },
 }
 
-RECOMMENDED_DEFAULT_SOURCES = {"github_phishing_pot", "nazario", "ubuntu_modern_ham"}
+RECOMMENDED_DEFAULT_SOURCES = {"github_phishing_pot", "nazario", "spamassassin", "enron"}
 
 def _render_stats(csv_path: Path) -> None:
     stats = dataset_stats(csv_path)
@@ -56,6 +64,7 @@ def _render_stats(csv_path: Path) -> None:
         "Invalid text": stats.get("invalid_text", 0),
         "Invalid label": stats.get("invalid_label", 0),
         "Too short": stats.get("too_short", 0),
+        "Too few words": stats.get("too_few_words", 0),
         "Too long/corrupt": stats.get("too_long", 0),
         "Exact label conflicts": stats.get("exact_label_conflicts", 0),
     }
@@ -140,7 +149,10 @@ def render() -> None:
 
     st.divider()
     st.subheader("Sources to include")
-    st.caption("La policy moderna esclude Enron, SpamAssassin e i Kaggle derivati da corpus storici.")
+    st.caption(
+        "Le fonti Ubuntu sono escluse. Il test e la validation riservano intere fonti, "
+        "così il modello viene misurato anche su origini non viste nel train."
+    )
 
     selected_sources: list[str] = []
     for key, option in SOURCE_OPTIONS.items():

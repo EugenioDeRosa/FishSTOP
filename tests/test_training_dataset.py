@@ -1,7 +1,8 @@
 import pandas as pd
+import numpy as np
 import pytest
 
-from src.train import load_training_dataframe
+from src.train import DistilBERTPhishingTrainer, load_training_dataframe
 
 
 def _valid_rows():
@@ -14,6 +15,39 @@ def _valid_rows():
             ]
         )
     return rows
+
+
+def test_chunk_weights_sum_to_one_per_email():
+    class FakeTokenizer:
+        def __call__(self, texts, **kwargs):
+            return {
+                "input_ids": [[1], [2], [3]],
+                "attention_mask": [[1], [1], [1]],
+                "overflow_to_sample_mapping": [0, 0, 1],
+            }
+
+    trainer = object.__new__(DistilBERTPhishingTrainer)
+    trainer.tokenizer = FakeTokenizer()
+    tokenized = trainer._tokenize({
+        "text": ["first", "second"],
+        "label": [0, 1],
+        "email_id": [10, 11],
+    })
+
+    weights_by_email = {}
+    for owner, weight in zip(tokenized["email_id"], tokenized["sample_weight"]):
+        weights_by_email[owner] = weights_by_email.get(owner, 0.0) + weight
+    assert weights_by_email == {10: 1.0, 11: 1.0}
+
+
+def test_validation_metrics_aggregate_chunks_at_email_level():
+    metrics = DistilBERTPhishingTrainer.compute_email_metrics(
+        (np.array([[3.0, 0.0], [0.0, 4.0], [4.0, 0.0]]), np.array([1, 1, 0])),
+        [0, 0, 1],
+    )
+
+    assert metrics["accuracy"] == 1.0
+    assert metrics["f1"] == 1.0
 
 
 def test_training_loader_preserves_preassigned_splits_and_labels(tmp_path):
@@ -52,4 +86,16 @@ def test_training_loader_blocks_synthetic_validation_or_test_rows(tmp_path):
     pd.DataFrame(rows).to_csv(path, index=False)
 
     with pytest.raises(ValueError, match="only in the train split"):
+        load_training_dataframe(path)
+
+
+def test_training_loader_rejects_ubuntu_sources(tmp_path):
+    rows = _valid_rows()
+    for index, row in enumerate(rows):
+        row["source"] = f"real_source_{index}"
+    rows[0]["source"] = "ubuntu_users_2024"
+    path = tmp_path / "ubuntu.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+    with pytest.raises(ValueError, match="Ubuntu emails are not allowed"):
         load_training_dataframe(path)

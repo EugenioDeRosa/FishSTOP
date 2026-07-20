@@ -1,5 +1,7 @@
 ﻿import json
 
+import os
+
 import streamlit as st
 
 from src.bert_calibration import (
@@ -12,6 +14,7 @@ from src.config import get_secret
 
 HF_MODEL_ID = "eugenioderodev/fishstop-bert"
 CALIBRATION_FILENAME = "calibration.json"
+HF_MODEL_REVISION = os.getenv("FISHSTOP_HF_MODEL_REVISION", "").strip()
 
 
 @st.cache_resource
@@ -31,6 +34,8 @@ def init_content_model(hf_token: str = ""):
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
     hf_auth = {"token": hf_token} if hf_token else {}
+    if HF_MODEL_REVISION:
+        hf_auth["revision"] = HF_MODEL_REVISION
     tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_ID, **hf_auth)
     model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_ID, **hf_auth)
     model.eval()
@@ -52,6 +57,8 @@ def init_calibration(hf_token: str = "") -> dict:
     from huggingface_hub.utils import HfHubHTTPError
 
     hf_auth = {"token": hf_token} if hf_token else {}
+    if HF_MODEL_REVISION:
+        hf_auth["revision"] = HF_MODEL_REVISION
     try:
         path = hf_hub_download(repo_id=HF_MODEL_ID, filename=CALIBRATION_FILENAME, **hf_auth)
         with open(path, "r", encoding="utf-8") as f:
@@ -92,7 +99,7 @@ def get_calibration() -> dict:
 
 
 def get_model_source() -> str:
-    return f"huggingface ({HF_MODEL_ID})"
+    return f"huggingface ({HF_MODEL_ID}@{HF_MODEL_REVISION or 'main (not pinned)'})"
 
 
 def warm_up_backend(preload_content_model: bool = True):

@@ -1,0 +1,70 @@
+{
+  "run": {
+    "started_utc": "2026-07-20T12:23:48.207305+00:00",
+    "finished_utc": "2026-07-20T12:23:55.210163+00:00",
+    "elapsed_seconds": 7.001546800001961,
+    "email_dir": "C:\\Users\\DEROSAEU\\Downloads\\email_test",
+    "output_dir": "C:\\Users\\DEROSAEU\\Documents\\Progetti\\FishSTOP\\reports\\bert_email_eval_smoke",
+    "command": "C:\\Users\\DEROSAEU\\Documents\\Progetti\\FishSTOP\\.venv\\Scripts\\python.exe C:\\Users\\DEROSAEU\\Documents\\Progetti\\FishSTOP\\scripts\\batch_bert_email_eval.py C:\\Users\\DEROSAEU\\Downloads\\email_test --output-dir reports\\bert_email_eval_smoke --limit 20 --batch-size 8 --flush-chunks 16 --checkpoint-every 10",
+    "python": "3.14.6",
+    "torch": "2.12.1+cpu",
+    "device": "cpu"
+  },
+  "model": {
+    "model_id": "eugenioderodev/fishstop-bert",
+    "requested_revision": "main (not pinned)",
+    "resolved_revision": "67d2a3b4de475ecfb127f0bb076df210306edeaf",
+    "model_type": "distilbert",
+    "id2label": {
+      "0": "LABEL_0",
+      "1": "LABEL_1"
+    },
+    "positive_label_id": 1
+  },
+  "decision": {
+    "positive_label": "malicious (phishing/spam)",
+    "positive_label_id": 1,
+    "temperature": 1.0,
+    "threshold_center": 0.5,
+    "uncertainty_band_total_width": 0.3,
+    "legitimate_at_or_below": 0.35,
+    "phishing_at_or_above": 0.65,
+    "calibration_source": "default (nessun calibration.json pubblicato)"
+  },
+  "counts": {
+    "eml_files_found": 8614,
+    "rows_written": 20,
+    "valid_parsed_files": 20,
+    "parse_errors": 0,
+    "successful_inferences": 20,
+    "inference_or_postprocessing_errors": 0,
+    "classified_phishing": 20,
+    "classified_phishing_percent": 100.0,
+    "not_classified_phishing_false_negatives": 0,
+    "not_classified_phishing_false_negatives_percent": 0.0,
+    "classification_distribution": {
+      "phishing": 20
+    }
+  },
+  "probability_malicious_distribution": {
+    "percentiles_0_to_1": {
+      "p00": 0.9999991655349731,
+      "p01": 0.9999991881847382,
+      "p05": 0.9999992787837982,
+      "p10": 0.9999993920326233,
+      "p25": 0.999999612569809,
+      "p50": 0.9999996423721313,
+      "p75": 0.9999996423721313,
+      "p90": 0.9999997615814209,
+      "p95": 0.9999997615814209,
+      "p99": 0.9999997615814209,
+      "p100": 0.9999997615814209
+    },
+    "histogram_10_percentage_point_bins": {
+      "90-100%": 20
+    },
+    "mean": 0.9999995946884155,
+    "standard_deviation": 1.479348378895623e-07
+  },
+  "error_distribution": {}
+}

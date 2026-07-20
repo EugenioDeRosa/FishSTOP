@@ -6,12 +6,14 @@ import argparse
 import hashlib
 import json
 import os
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import torch
+import torch.nn.functional as F
 from datasets import Dataset
 from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
 from transformers import (
@@ -19,6 +21,7 @@ from transformers import (
     AutoTokenizer,
     DataCollatorWithPadding,
     Trainer,
+    TrainerCallback,
     TrainingArguments,
 )
 
@@ -38,6 +41,69 @@ DEFAULT_OUTPUT_DIR = Path("models/fishstop-distilbert")
 ID2LABEL = {0: "LEGITIMATE", 1: "MALICIOUS"}
 LABEL2ID = {label: index for index, label in ID2LABEL.items()}
 REQUIRED_SPLITS = {"train", "validation", "test"}
+
+
+def _format_duration(seconds: float) -> str:
+    seconds = max(0, int(seconds))
+    hours, remainder = divmod(seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+class TrainingProgressCallback(TrainerCallback):
+    """Print stable newline-based progress that remains visible in Colab subprocesses."""
+
+    def __init__(self):
+        self.started_at = 0.0
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        self.started_at = time.monotonic()
+        print(
+            f"Training loop started: {state.max_steps} optimizer steps across "
+            f"{args.num_train_epochs:g} epochs.",
+            flush=True,
+        )
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        if not state.is_world_process_zero or state.global_step <= 0:
+            return
+        logs = logs or {}
+        elapsed = time.monotonic() - self.started_at
+        progress = state.global_step / max(1, state.max_steps)
+        remaining = elapsed * (1 - progress) / progress if progress > 0 else 0
+        details = []
+        for key in ("loss", "eval_loss", "eval_f1", "learning_rate", "grad_norm"):
+            if key in logs:
+                value = logs[key]
+                details.append(f"{key}={value:.6g}" if isinstance(value, (int, float)) else f"{key}={value}")
+        print(
+            f"[TRAIN] {progress * 100:6.2f}% | epoch {float(state.epoch or 0):.2f}/{args.num_train_epochs:g} "
+            f"| step {state.global_step}/{state.max_steps} | elapsed {_format_duration(elapsed)} "
+            f"| ETA {_format_duration(remaining)}"
+            + (" | " + " | ".join(details) if details else ""),
+            flush=True,
+        )
+
+    def on_train_end(self, args, state, control, **kwargs):
+        elapsed = time.monotonic() - self.started_at
+        print(f"Training loop completed in {_format_duration(elapsed)}.", flush=True)
+
+
+class EmailWeightedTrainer(Trainer):
+    """Give every email total weight 1 even when it produces several chunks."""
+
+    def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
+        inputs = dict(inputs)
+        sample_weight = inputs.pop("sample_weight", None)
+        labels = inputs.pop("labels")
+        outputs = model(**inputs)
+        losses = F.cross_entropy(outputs.logits, labels, reduction="none")
+        if sample_weight is None:
+            loss = losses.mean()
+        else:
+            weights = sample_weight.to(losses.device, dtype=losses.dtype)
+            loss = (losses * weights).sum() / weights.sum().clamp_min(1e-12)
+        return (loss, outputs) if return_outputs else loss
 
 
 def _text_hash(text: str) -> str:
@@ -72,9 +138,18 @@ def load_training_dataframe(path: str | Path) -> pd.DataFrame:
 
     if "source" in df.columns:
         sources = df["source"].fillna("").astype(str).str.lower()
+        if sources.str.startswith("ubuntu_").any():
+            raise ValueError("Ubuntu emails are not allowed in the FishSTOP training dataset")
         synthetic = sources.eq("kaggle_phishing_and_legitimate_emails") | sources.str.startswith("synthetic_")
         if (synthetic & df["split"].ne("train")).any():
             raise ValueError("Synthetic emails are allowed only in the train split")
+        real_source_splits = df.loc[~synthetic].groupby("source")["split"].nunique()
+        leaked_sources = real_source_splits[real_source_splits > 1]
+        if not leaked_sources.empty:
+            raise ValueError(
+                "Source leakage detected: real sources occur in multiple splits: "
+                + ", ".join(map(str, leaked_sources.index[:10]))
+            )
 
     df["_normalized_hash"] = df["text"].map(_text_hash)
     split_counts = df.groupby("_normalized_hash")["split"].nunique()
@@ -131,23 +206,45 @@ class DistilBERTPhishingTrainer:
             for key, values in encoded.items()
         }
         tokenized["label"] = [examples["label"][mapping[position]] for position in selected_positions]
+        selected_counts = {
+            sample_index: sum(mapping[position] == sample_index for position in selected_positions)
+            for sample_index in range(len(examples["text"]))
+        }
+        tokenized["sample_weight"] = [
+            1.0 / selected_counts[mapping[position]] for position in selected_positions
+        ]
+        if "email_id" in examples:
+            tokenized["email_id"] = [examples["email_id"][mapping[position]] for position in selected_positions]
         return tokenized
 
     @staticmethod
-    def compute_metrics(eval_prediction):
+    def compute_email_metrics(eval_prediction, email_owners):
         logits, labels = eval_prediction
-        predictions = np.argmax(logits, axis=1)
+        owners = np.asarray(email_owners, dtype=int)
+        labels = np.asarray(labels, dtype=int)
+        email_logits = []
+        email_labels = []
+        for owner in np.unique(owners):
+            positions = np.flatnonzero(owners == owner)
+            owner_logits = logits[positions]
+            best = int(np.argmax(owner_logits[:, 1] - owner_logits[:, 0]))
+            email_logits.append(owner_logits[best])
+            email_labels.append(labels[positions[0]])
+        predictions = np.argmax(np.asarray(email_logits), axis=1)
+        email_labels = np.asarray(email_labels)
         return {
-            "accuracy": float(accuracy_score(labels, predictions)),
-            "precision": float(precision_score(labels, predictions, zero_division=0)),
-            "recall": float(recall_score(labels, predictions, zero_division=0)),
-            "f1": float(f1_score(labels, predictions, zero_division=0)),
+            "accuracy": float(accuracy_score(email_labels, predictions)),
+            "precision": float(precision_score(email_labels, predictions, zero_division=0)),
+            "recall": float(recall_score(email_labels, predictions, zero_division=0)),
+            "f1": float(f1_score(email_labels, predictions, zero_division=0)),
         }
 
     @staticmethod
     def prepare_datasets(df: pd.DataFrame) -> tuple[Dataset, Dataset]:
         train_df = df[df["split"] == "train"][["text", "label"]].reset_index(drop=True)
         validation_df = df[df["split"] == "validation"][["text", "label"]].reset_index(drop=True)
+        train_df["email_id"] = np.arange(len(train_df), dtype=int)
+        validation_df["email_id"] = np.arange(len(validation_df), dtype=int)
         return Dataset.from_pandas(train_df), Dataset.from_pandas(validation_df)
 
     def train(
@@ -157,7 +254,13 @@ class DistilBERTPhishingTrainer:
         epochs: int = 5,
     ) -> Trainer:
         output_dir = Path(output_dir)
+        print("Preparing train and validation datasets...", flush=True)
         train_dataset, validation_dataset = self.prepare_datasets(df)
+        print(
+            f"Email rows: train={len(train_dataset)}, validation={len(validation_dataset)}. "
+            "Tokenizing long messages into weighted chunks...",
+            flush=True,
+        )
         train_tokenized = train_dataset.map(
             self._tokenize,
             batched=True,
@@ -168,6 +271,13 @@ class DistilBERTPhishingTrainer:
             batched=True,
             remove_columns=validation_dataset.column_names,
         )
+        validation_owners = validation_tokenized["email_id"]
+        print(
+            f"Tokenized chunks: train={len(train_tokenized)}, validation={len(validation_tokenized)}.",
+            flush=True,
+        )
+        train_tokenized = train_tokenized.remove_columns("email_id")
+        validation_tokenized = validation_tokenized.remove_columns("email_id")
 
         if self.device.type == "cuda":
             batch_size, gradient_accumulation = 16, 1
@@ -194,19 +304,24 @@ class DistilBERTPhishingTrainer:
             metric_for_best_model="f1",
             greater_is_better=True,
             logging_dir=str(output_dir / "logs"),
-            logging_strategy="epoch",
+            logging_strategy="steps",
+            logging_steps=50,
+            logging_first_step=True,
+            disable_tqdm=False,
             report_to="none",
+            remove_unused_columns=False,
             seed=42,
             data_seed=42,
         )
-        trainer = Trainer(
+        trainer = EmailWeightedTrainer(
             model=self.model,
             args=args,
             train_dataset=train_tokenized,
             eval_dataset=validation_tokenized,
             processing_class=self.tokenizer,
             data_collator=DataCollatorWithPadding(tokenizer=self.tokenizer),
-            compute_metrics=self.compute_metrics,
+            compute_metrics=lambda prediction: self.compute_email_metrics(prediction, validation_owners),
+            callbacks=[TrainingProgressCallback()],
         )
         trainer.train()
 
@@ -303,11 +418,20 @@ def run_training(
 ) -> dict:
     dataset_path = Path(dataset_path)
     output_dir = Path(output_dir)
+    print(f"Loading training dataset: {dataset_path}", flush=True)
+    dataset_sha256 = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
     df = load_training_dataframe(dataset_path)
+    split_counts = df["split"].value_counts().to_dict()
+    print(f"Validated {len(df)} emails. Split counts: {split_counts}", flush=True)
+    print(f"Loading base model: {base_model}", flush=True)
     trainer = DistilBERTPhishingTrainer(base_model)
     trainer.train(df, output_dir=output_dir, epochs=epochs)
+    trainer.model.config.fishstop_dataset_sha256 = dataset_sha256
+    trainer.model.config.fishstop_split_strategy = "source_holdout"
+    trainer.model.save_pretrained(output_dir)
 
     validation_df = df[df["split"] == "validation"]
+    print(f"Calibrating probabilities on {len(validation_df)} validation emails...", flush=True)
     validation_logits, validation_labels, validation_chunks = trainer.collect_email_logits(validation_df)
     calibration = fit_calibration(validation_logits, validation_labels, positive_label_id=1)
     calibration.update(
@@ -317,21 +441,29 @@ def run_training(
             "max_length": MAX_BERT_TOKENS,
             "stride": DEFAULT_CHUNK_STRIDE,
             "max_chunks": MAX_EMAIL_CHUNKS,
+            "dataset_sha256": dataset_sha256,
         }
     )
     save_calibration(calibration, output_dir / "calibration.json")
 
     test_df = df[df["split"] == "test"]
+    print(f"Running final evaluation on {len(test_df)} held-out test emails...", flush=True)
     test_logits, test_labels, test_chunks = trainer.collect_email_logits(test_df)
     test_metrics = evaluate_calibrated(test_logits, test_labels, calibration)
     metadata = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "base_model": base_model,
         "dataset": str(dataset_path),
-        "dataset_sha256": hashlib.sha256(dataset_path.read_bytes()).hexdigest(),
+        "dataset_sha256": dataset_sha256,
         "rows": {split: int((df["split"] == split).sum()) for split in sorted(REQUIRED_SPLITS)},
         "labels": ID2LABEL,
         "epochs": int(epochs),
+        "best_validation_email_f1": float(trainer.state.best_metric or 0.0),
+        "sources_by_split": {
+            split: sorted(df.loc[df["split"].eq(split), "source"].dropna().astype(str).unique().tolist())
+            if "source" in df else []
+            for split in sorted(REQUIRED_SPLITS)
+        },
         "validation_multi_chunk_emails": int(sum(count > 1 for count in validation_chunks)),
         "test_multi_chunk_emails": int(sum(count > 1 for count in test_chunks)),
         "calibration": calibration,

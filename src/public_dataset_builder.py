@@ -22,7 +22,6 @@ import os
 import re
 import tarfile
 import tempfile
-import unicodedata
 import urllib.request
 import zipfile
 from dataclasses import asdict, dataclass
@@ -56,11 +55,13 @@ FINAL_COLUMNS = ["text", "label", "source", "source_file", "text_hash"]
 OUTPUT_COLUMNS = FINAL_COLUMNS + ["campaign_id", "split"]
 SYNTHETIC_SOURCE_PREFIXES = ("synthetic_",)
 SYNTHETIC_SOURCE_NAMES = {"kaggle_phishing_and_legitimate_emails"}
+DISALLOWED_SOURCE_NAMES = {"ubuntu_modern_ham"}
 MAX_SYNTHETIC_TRAIN_FRACTION = 0.10
 CAMPAIGN_SIMILARITY_THRESHOLD = 0.83
 MODERN_START_YEAR = 2022
 MODERN_END_YEAR = 2025
 MIN_TEXT_CHARS = 40
+MIN_TEXT_WORDS = 5
 MAX_TEXT_CHARS = 200_000
 INVALID_TEXT_VALUES = {
     "",
@@ -90,7 +91,7 @@ KAGGLE_COMBINED_OVERLAP_SOURCES = {"enron", "nazario", "spamassassin"}
 PHISHING_POT_COMMIT = "80685cbfe69a1f905707be92e144ba5b71f9ee37"
 PHISHING_POT_ZIP_URL = f"https://github.com/rf-peixoto/phishing_pot/archive/{PHISHING_POT_COMMIT}.zip"
 UBUNTU_LISTS = ("ubuntu-users", "ubuntu-security-announce")
-LEGACY_SOURCE_NAMES = {"spamassassin", "enron", "kaggle", "kaggle_subhajournal_phishingemails"}
+LEGACY_SOURCE_NAMES = {"kaggle", "kaggle_subhajournal_phishingemails"}
 
 KAGGLE_SCHEMAS = {
     KAGGLE_DATASET: {
@@ -151,11 +152,6 @@ def normalize_text(text: str) -> str:
     if text is None or pd.isna(text):
         return ""
     text = str(text)
-    text = unicodedata.normalize("NFKC", text)
-    text = "".join(
-        char if char in "\n\t" or unicodedata.category(char) != "Cc" else " "
-        for char in text
-    )
     return normalize_bert_text(text)
 
 def text_hash(text: str) -> str:
@@ -333,6 +329,7 @@ def _row(text: str, label: int, source: str, source_file: str) -> dict:
 def _clean_dataset_frame(
     df: pd.DataFrame,
     min_chars: int = MIN_TEXT_CHARS,
+    min_words: int = MIN_TEXT_WORDS,
     max_chars: int = MAX_TEXT_CHARS,
 ) -> tuple[pd.DataFrame, dict]:
     """Normalizza e filtra il dataset senza nascondere conflitti di etichetta."""
@@ -349,16 +346,19 @@ def _clean_dataset_frame(
     working["text"] = working["text"].map(normalize_text)
     parsed_labels = working["label"].map(_parse_binary_label)
     lengths = working["text"].str.len()
+    word_counts = working["text"].str.split().str.len()
     invalid_text = working["text"].isin(INVALID_TEXT_VALUES)
     invalid_label = parsed_labels.isna()
     too_short = ~invalid_text & lengths.lt(min_chars)
+    too_few_words = ~invalid_text & word_counts.lt(min_words)
     too_long = lengths.gt(max_chars)
-    valid = ~(invalid_text | invalid_label | too_short | too_long)
+    valid = ~(invalid_text | invalid_label | too_short | too_few_words | too_long)
 
     stats = {
         "invalid_text": int(invalid_text.sum()),
         "invalid_label": int(invalid_label.sum()),
         "too_short": int(too_short.sum()),
+        "too_few_words": int(too_few_words.sum()),
         "too_long": int(too_long.sum()),
         "exact_duplicates": 0,
         "exact_label_conflicts": 0,
@@ -834,8 +834,8 @@ def _assign_splits(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
     synthetic_mask = _synthetic_source_mask(result)
     real_mask = ~synthetic_mask
     result["campaign_id"] = "synthetic:" + result["text_hash"].astype(str)
-    for _, label_rows in result.loc[real_mask].groupby("label"):
-        result.loc[label_rows.index, "campaign_id"] = _campaign_groups(label_rows)
+    if real_mask.any():
+        result.loc[real_mask, "campaign_id"] = _campaign_groups(result.loc[real_mask])
 
     campaign_labels = result.loc[real_mask].groupby("campaign_id")["label"].nunique()
     conflicts = campaign_labels[campaign_labels > 1]
@@ -877,11 +877,96 @@ def _assign_splits(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
     return result
 
 
+def _assign_source_holdout_splits(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
+    """Reserve entire real sources for validation/test to measure source generalization."""
+    result = df.copy()
+    result["split"] = "train"
+    synthetic_mask = _synthetic_source_mask(result)
+    real_mask = ~synthetic_mask
+    result["campaign_id"] = "synthetic:" + result["text_hash"].astype(str)
+    if real_mask.any():
+        result.loc[real_mask, "campaign_id"] = _campaign_groups(result.loc[real_mask])
+    campaign_labels = result.loc[real_mask].groupby("campaign_id")["label"].nunique()
+    conflicts = campaign_labels[campaign_labels > 1]
+    if not conflicts.empty:
+        raise ValueError(
+            f"Detected {len(conflicts)} near-duplicate real campaigns with conflicting labels"
+        )
+
+    # A near-duplicate campaign imported by more than one corpus would force
+    # those sources into the same split. Keep one deterministic representative
+    # instead, preserving both source isolation and campaign isolation.
+    campaign_source_counts = result.loc[real_mask].groupby("campaign_id")["source"].nunique()
+    cross_source_campaigns = set(campaign_source_counts[campaign_source_counts > 1].index)
+    if cross_source_campaigns:
+        cross_source_rows = result.loc[real_mask & result["campaign_id"].isin(cross_source_campaigns)]
+        keep_indices = set(
+            cross_source_rows.sort_values(["campaign_id", "text_hash"])
+            .drop_duplicates("campaign_id", keep="first")
+            .index
+        )
+        drop_mask = (
+            real_mask
+            & result["campaign_id"].isin(cross_source_campaigns)
+            & ~result.index.isin(keep_indices)
+        )
+        result = result.loc[~drop_mask].copy()
+        synthetic_mask = _synthetic_source_mask(result)
+        real_mask = ~synthetic_mask
+
+    for label in (0, 1):
+        label_rows = result.loc[real_mask & result["label"].eq(label)]
+        source_sizes = label_rows.groupby("source").size().to_dict()
+        if len(source_sizes) < 3:
+            raise ValueError(
+                f"Source-held-out splitting requires at least three real sources for label {label}; "
+                f"found {sorted(source_sizes)}"
+            )
+        targets = {
+            "train": round(len(label_rows) * 0.70),
+            "validation": round(len(label_rows) * 0.10),
+            "test": round(len(label_rows) * 0.20),
+        }
+        assigned = {split: 0 for split in targets}
+        ordered_sources = sorted(
+            source_sizes,
+            key=lambda source: (
+                -source_sizes[source],
+                hashlib.sha256(f"{random_state}:{label}:{source}".encode("utf-8")).hexdigest(),
+            ),
+        )
+        initial_splits = ("train", "test", "validation")
+        for source_index, source in enumerate(ordered_sources):
+            size = source_sizes[source]
+            if source_index < len(initial_splits):
+                split = initial_splits[source_index]
+            else:
+                split = max(
+                    targets,
+                    key=lambda candidate: (
+                        (targets[candidate] - assigned[candidate]) / max(targets[candidate], 1),
+                        hashlib.sha256(f"{source}:{candidate}".encode("utf-8")).hexdigest(),
+                    ),
+                )
+            assigned[split] += size
+            mask = real_mask & result["label"].eq(label) & result["source"].eq(source)
+            result.loc[mask, "split"] = split
+
+    source_split_counts = result.loc[real_mask].groupby("source")["split"].nunique()
+    if (source_split_counts > 1).any():
+        raise ValueError("Source leakage detected: a real source occurs in multiple splits")
+    campaign_split_counts = result.loc[real_mask].groupby("campaign_id")["split"].nunique()
+    if (campaign_split_counts > 1).any():
+        raise ValueError("Campaign leakage detected after source-held-out splitting")
+    return result
+
+
 def balance_dataset(
     input_csv: Path = DEFAULT_OUTPUT_CSV,
     output_csv: Path | None = None,
     per_class: int | None = None,
     random_state: int = 42,
+    split_strategy: str = "campaign",
 ) -> dict:
     output_csv = output_csv or input_csv.with_name(f"{input_csv.stem}_balanced.csv")
     df, dedupe_info = _dedupe_templates(pd.read_csv(input_csv))
@@ -891,14 +976,35 @@ def balance_dataset(
         pd.DataFrame(columns=OUTPUT_COLUMNS).to_csv(output_csv, index=False)
         return {"rows": 0, "per_class": 0, "output": str(output_csv), **dedupe_info}
 
-    target = min(per_class or int(counts.min()), int(counts.min()))
-    sampled_parts = [
-        df[df["label"] == label].sample(n=target, random_state=random_state + label)
-        for label in (0, 1)
-    ]
-    balanced = pd.concat(sampled_parts, ignore_index=True)
+    if split_strategy == "source_holdout":
+        assigned = _assign_source_holdout_splits(df, random_state=random_state)
+        sampled_parts = []
+        for split in ("train", "validation", "test"):
+            split_rows = assigned[assigned["split"].eq(split)]
+            split_counts = split_rows["label"].value_counts()
+            if any(split_counts.get(label, 0) == 0 for label in (0, 1)):
+                raise ValueError(f"Source-held-out split '{split}' does not contain both labels")
+            split_target = min(int(split_counts.get(0, 0)), int(split_counts.get(1, 0)))
+            if per_class is not None:
+                split_target = min(split_target, int(per_class))
+            sampled_parts.extend(
+                split_rows[split_rows["label"].eq(label)].sample(
+                    n=split_target,
+                    random_state=random_state + label + {"train": 0, "validation": 10, "test": 20}[split],
+                )
+                for label in (0, 1)
+            )
+        balanced = pd.concat(sampled_parts, ignore_index=True)
+        target = int(balanced.groupby("label").size().min())
+    else:
+        target = min(per_class or int(counts.min()), int(counts.min()))
+        sampled_parts = [
+            df[df["label"] == label].sample(n=target, random_state=random_state + label)
+            for label in (0, 1)
+        ]
+        balanced = pd.concat(sampled_parts, ignore_index=True)
+        balanced = _assign_splits(balanced, random_state=random_state)
     balanced = balanced.sample(frac=1, random_state=random_state).reset_index(drop=True)
-    balanced = _assign_splits(balanced, random_state=random_state)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
     balanced.to_csv(output_csv, index=False)
     return {
@@ -922,6 +1028,13 @@ def build_balanced_public_dataset(
         return {"status": "error", "message": "Select at least one source.", "results": []}
 
     selected_sources = list(dict.fromkeys(selected_sources))
+    disallowed_sources = sorted(set(selected_sources) & DISALLOWED_SOURCE_NAMES)
+    if disallowed_sources:
+        return {
+            "status": "error",
+            "message": "Fonti non consentite: " + ", ".join(disallowed_sources),
+            "results": [],
+        }
     legacy_sources = sorted(set(selected_sources) & LEGACY_SOURCE_NAMES)
     if legacy_sources:
         return {
@@ -999,7 +1112,11 @@ def build_balanced_public_dataset(
         }
 
     try:
-        balanced = balance_dataset(staging_csv, output_csv=output_csv)
+        balanced = balance_dataset(
+            staging_csv,
+            output_csv=output_csv,
+            split_strategy="source_holdout",
+        )
     except ValueError as exc:
         return {
             "status": "error",
@@ -1188,8 +1305,10 @@ def write_dataset_manifest(
             SOURCES_DIR / "phishing" / "nazario" / f"phishing-{year}"
             for year in range(MODERN_START_YEAR, MODERN_END_YEAR + 1)
         )
-    if "ubuntu_modern_ham" in selected_sources:
-        artifact_paths.extend((SOURCES_DIR / "legitimate" / "ubuntu").rglob("*.txt.gz"))
+    if "spamassassin" in selected_sources:
+        artifact_paths.extend((SOURCES_DIR / "legitimate" / "spamassassin").glob("*.tar.bz2"))
+    if "enron" in selected_sources:
+        artifact_paths.append(SOURCES_DIR / "legitimate" / "enron" / "enron_mail_20150507.tar.gz")
     artifact_paths.append(synthetic_csv)
 
     manifest_path = output_csv.with_suffix(".manifest.json")
@@ -1198,10 +1317,10 @@ def write_dataset_manifest(
         "dataset": str(output_csv),
         "dataset_sha256": _file_sha256(output_csv),
         "label_semantics": {"0": "LEGITIMATE", "1": "MALICIOUS_PHISHING_OR_SPAM"},
-        "modern_source_policy": {
-            "minimum_year": MODERN_START_YEAR,
-            "maximum_year": MODERN_END_YEAR,
-            "excluded_legacy_sources": sorted(LEGACY_SOURCE_NAMES),
+        "source_policy": {
+            "excluded_sources": sorted(DISALLOWED_SOURCE_NAMES | LEGACY_SOURCE_NAMES),
+            "split_strategy": "source_holdout",
+            "phishing_year_range": [MODERN_START_YEAR, MODERN_END_YEAR],
         },
         "campaign_similarity_threshold": CAMPAIGN_SIMILARITY_THRESHOLD,
         "selected_sources": selected_sources,
@@ -1273,6 +1392,7 @@ def dataset_stats(csv_path: Path = DEFAULT_OUTPUT_CSV) -> dict:
         "invalid_text": 0,
         "invalid_label": 0,
         "too_short": 0,
+        "too_few_words": 0,
         "too_long": 0,
         "missing_label": False,
         "sources": {},
@@ -1306,6 +1426,7 @@ def dataset_stats(csv_path: Path = DEFAULT_OUTPUT_CSV) -> dict:
         "invalid_text": clean_info["invalid_text"],
         "invalid_label": clean_info["invalid_label"],
         "too_short": clean_info["too_short"],
+        "too_few_words": clean_info["too_few_words"],
         "too_long": clean_info["too_long"],
         "rows_after_template_dedupe": len(deduped_df),
         "missing_label": False,

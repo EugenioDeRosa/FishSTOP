@@ -13,6 +13,7 @@ from src.analyzer.html_utils import sanitize_html_for_js_preview, sanitize_html_
 from src.analyzer.llm_context_analyzer import (
     PROMPT_VERSION,
     active_llm_backend,
+    format_email_risk_analysis,
     stream_phi4_email_analysis,
 )
 from src.bert_calibration import calibrated_probabilities, classify as classify_bert_result
@@ -266,27 +267,7 @@ def _show_phi4_result(target, result):
         return
 
     verdict = str(result.get("final_verdict") or "review").lower()
-    title = {
-        "legitimate": "LEGITIMATE",
-        "review": "REVIEW REQUIRED",
-        "phishing": "PHISHING",
-    }.get(verdict, "REVIEW REQUIRED")
-    evidence = result.get("evidence") or {}
-    evidence_lines = []
-    for axis in ("content", "identity", "technical"):
-        values = evidence.get(axis) or []
-        if values:
-            evidence_lines.append(f"- **{axis.title()}:** {'; '.join(str(value) for value in values)}")
-    evidence_text = "\n".join(evidence_lines)
-    message = (
-        f"**{title}** — {result.get('explanation') or ''}\n\n"
-        f"Content `{result.get('content_risk', 'unknown')}` · "
-        f"Identity `{result.get('identity_risk', 'unknown')}` · "
-        f"Technical `{result.get('technical_risk', 'unknown')}`\n\n"
-        f"Requested action: `{result.get('requested_action', 'unknown')}` via "
-        f"`{result.get('action_channel', 'unknown')}`.\n\n"
-        f"{evidence_text}"
-    )
+    message = format_email_risk_analysis(result)
     if verdict == "phishing":
         target.error(message)
     elif verdict == "review":
@@ -1135,6 +1116,12 @@ def render():
                 with st.spinner("Loading DistilBERT model..."):
                     tokenizer, model, model_source = get_content_model()
                 calibration = get_calibration()
+                model_dataset_hash = str(getattr(model.config, "fishstop_dataset_sha256", "") or "")
+                calibration_dataset_hash = str(calibration.get("dataset_sha256") or "")
+                if model_dataset_hash and calibration_dataset_hash and model_dataset_hash != calibration_dataset_hash:
+                    raise ValueError(
+                        "DistilBERT model and calibration.json were produced from different datasets"
+                    )
 
                 st.info("DistilBERT model loaded from Hugging Face.")
                 if calibration["source"] != "huggingface":
