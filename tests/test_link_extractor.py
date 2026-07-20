@@ -27,3 +27,19 @@ def test_possible_shortener_is_generic_not_whitelist_based():
 
     assert links[0]["is_possible_shortener"] is True
     assert links[0]["shortener_reason"]
+
+
+def test_bracketed_placeholder_userinfo_recovers_real_destination_without_crashing():
+    html = '<a href="https://[an_21]@bit.ly/48Q8bWj#campaign">Claim reward</a>'
+
+    links = extract_links("", html)
+
+    assert len(links) == 1
+    assert links[0]["url"] == "https://bit.ly/48Q8bWj#campaign"
+    assert links[0]["host"] == "bit.ly"
+
+
+def test_unrecoverable_bracketed_host_is_ignored_without_crashing():
+    html = '<a href="https://[not-an-ip]/claim">Claim reward</a>'
+
+    assert extract_links("", html) == []

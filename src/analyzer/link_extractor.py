@@ -36,13 +36,36 @@ _ANCHOR_RE = re.compile(
     re.IGNORECASE | re.DOTALL,
 )
 _WEB_SCHEMES = {"http", "https"}
+_BRACKETED_PLACEHOLDER_USERINFO_RE = re.compile(
+    r"^(?P<scheme>https?://)\[[^\]/?#@]*\]@(?P<destination>.+)$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_malformed_userinfo(value: str) -> str:
+    """Recover the destination from URLs such as https://[token]@example.com/."""
+    value = (value or "").strip()
+    match = _BRACKETED_PLACEHOLDER_USERINFO_RE.match(value)
+    if not match:
+        return value
+    return f"{match.group('scheme')}{match.group('destination')}"
+
+
+def _safe_urlparse(value: str):
+    """Parse untrusted email URLs without allowing malformed brackets to abort analysis."""
+    try:
+        return urlparse(_normalize_malformed_userinfo(value))
+    except ValueError:
+        return None
 
 
 def _is_web_url_candidate(value: str) -> bool:
     value = (value or "").strip()
     if not value:
         return False
-    parsed = urlparse(value)
+    parsed = _safe_urlparse(value)
+    if parsed is None:
+        return False
     if parsed.scheme:
         return parsed.scheme.lower() in _WEB_SCHEMES
     return value.lower().startswith("www.") or bool(_BARE_DOMAIN_RE.fullmatch(value.rstrip(".,;)")))
@@ -77,8 +100,10 @@ def _extract_display_destination(display: str) -> tuple[str, str]:
         return "", ""
     candidate = _with_scheme(match.group(0).strip().rstrip(".,;)"))
     try:
-        parsed = urlparse(candidate)
+        parsed = _safe_urlparse(candidate)
     except Exception:
+        return "", ""
+    if parsed is None:
         return "", ""
     return candidate, (parsed.hostname or "").lower()
 
@@ -117,15 +142,14 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
         raw_url = (url or "").strip().rstrip(".,;)")
         if not _is_web_url_candidate(raw_url):
             return
-        url = _with_scheme(raw_url)
+        url = _normalize_malformed_userinfo(_with_scheme(raw_url))
         if not url or url in seen:
             return
-        try:
-            parsed = urlparse(url)
-            host = (parsed.hostname or "").lower()
-            scheme = parsed.scheme.lower()
-        except Exception:
+        parsed = _safe_urlparse(url)
+        if parsed is None:
             return
+        host = (parsed.hostname or "").lower()
+        scheme = parsed.scheme.lower()
         if scheme not in _WEB_SCHEMES or not host:
             return
         seen.add(url)

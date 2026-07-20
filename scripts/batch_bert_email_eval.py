@@ -94,6 +94,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--flush-chunks", type=int, default=64, help="Pending chunks before inference.")
     parser.add_argument("--checkpoint-every", type=int, default=100)
     parser.add_argument("--limit", type=int, default=0, help="Optional test limit; 0 means all EML files.")
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from email_results.csv, skipping rows already present.",
+    )
+    parser.add_argument(
+        "--retry-errors",
+        action="store_true",
+        help="With --resume, retry rows whose parsing or inference did not finish successfully.",
+    )
     return parser.parse_args()
 
 
@@ -159,7 +169,19 @@ def write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=CSV_FIELDS, extrasaction="ignore")
         writer.writeheader()
         writer.writerows(rows)
-    os.replace(tmp, path)
+    for attempt in range(10):
+        try:
+            os.replace(tmp, path)
+            return
+        except PermissionError:
+            if attempt == 9:
+                raise
+            time.sleep(0.5 * (attempt + 1))
+
+
+def read_csv(path: Path) -> list[dict[str, Any]]:
+    with path.open("r", newline="", encoding="utf-8-sig") as handle:
+        return list(csv.DictReader(handle))
 
 
 def pad_chunk_batch(chunks: list[dict[str, torch.Tensor]], device: torch.device) -> dict[str, torch.Tensor]:
@@ -424,12 +446,22 @@ def main() -> int:
     }
 
     analyzer = EmlSOCAnalyzer()
-    rows: list[dict[str, Any]] = []
+    csv_path = args.output_dir / "email_results.csv"
+    rows: list[dict[str, Any]] = read_csv(csv_path) if args.resume and csv_path.exists() else []
+    if args.retry_errors and not args.resume:
+        raise SystemExit("--retry-errors requires --resume")
+    if args.retry_errors:
+        rows = [
+            row
+            for row in rows
+            if row.get("parse_status") == "ok" and row.get("inference_status") == "ok"
+        ]
+    completed_paths = {str(row["relative_path"]) for row in rows}
+    files = [path for path in files if path.relative_to(args.email_dir).as_posix() not in completed_paths]
     pending: list[dict[str, Any]] = []
     pending_chunks = 0
     started = time.perf_counter()
     started_utc = datetime.now(timezone.utc).isoformat()
-    csv_path = args.output_dir / "email_results.csv"
 
     def flush() -> None:
         nonlocal pending, pending_chunks
@@ -437,6 +469,7 @@ def main() -> int:
         pending = []
         pending_chunks = 0
 
+    initial_count = len(rows)
     for index, path in enumerate(files, start=1):
         item_started = time.perf_counter()
         row = base_row(path, args.email_dir)
@@ -490,11 +523,12 @@ def main() -> int:
 
         if pending_chunks >= args.flush_chunks:
             flush()
-        if index % args.checkpoint_every == 0:
+        total_done = initial_count + index
+        if total_done % args.checkpoint_every == 0:
             flush()
             write_csv(csv_path, rows)
             ok = sum(row["inference_status"] == "ok" for row in rows)
-            print(f"[{index}/{len(files)}] completed; successful inference={ok}", flush=True)
+            print(f"[{total_done}/{initial_count + len(files)}] completed; successful inference={ok}", flush=True)
 
     flush()
     write_csv(csv_path, rows)
