@@ -1,9 +1,54 @@
 from src.analyzer.llm_context_analyzer import (
+    _identity_risk,
+    _technical_context_lines,
     _fallback_content_summary,
     _valid_content_summary,
     apply_email_risk_policy,
     format_email_risk_analysis,
 )
+
+
+def test_missing_dkim_is_reported_as_absent_not_failed():
+    soc = {
+        "effective_auth_results": {
+            "SPF": {"status": "softfail"},
+            "DKIM": {"status": "none"},
+            "DMARC": {"status": "fail"},
+        },
+        "dkim_signature_present": False,
+    }
+
+    risk, reasons = _identity_risk(soc)
+    context = _technical_context_lines(soc)
+
+    assert risk == "uncertain"
+    assert reasons == [
+        "SPF did not pass (softfail)",
+        "DKIM signature is absent",
+        "DMARC did not pass (fail)",
+    ]
+    assert any("DKIM signature is absent" in line for line in context)
+
+
+def test_missing_dkim_is_included_in_readable_explanation():
+    text = format_email_risk_analysis({
+        "final_verdict": "phishing",
+        "content_summary": "The subject and body indicate a phishing attempt",
+        "identity_risk": "uncertain",
+        "technical_risk": "clean",
+        "evidence": {
+            "identity": [
+                "SPF did not pass (softfail)",
+                "DKIM signature is absent",
+                "DMARC did not pass (fail)",
+            ],
+            "technical": ["no strong technical threat was detected"],
+        },
+    })
+
+    assert "SPF did not pass (softfail)" in text
+    assert "the message has no DKIM signature" in text
+    assert "DMARC did not pass (fail)" in text
 
 
 def _semantic(**overrides):

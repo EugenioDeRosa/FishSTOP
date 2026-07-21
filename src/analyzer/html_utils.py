@@ -57,6 +57,16 @@ _HTML_TAG_RE = re.compile(
     r"(?is)<\s*/?\s*(?:html|head|body|table|tbody|tr|td|div|span|p|br|a|img|style|strong|ul|li)\b"
 )
 
+_BLOCK_TEXT_TAGS = {
+    "address", "article", "aside", "blockquote", "dd", "div", "dl", "dt",
+    "figcaption", "figure", "footer", "h1", "h2", "h3", "h4", "h5", "h6",
+    "header", "hr", "li", "main", "nav", "ol", "p", "pre", "section",
+    "table", "tbody", "td", "tfoot", "th", "thead", "tr", "ul",
+}
+_HIDDEN_STYLE_RE = re.compile(
+    r"(?is)(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\D|$)|font-size\s*:\s*0(?:\D|$))"
+)
+
 
 def recover_mislabelled_utf7_html(value: str) -> str:
     """Recover an HTML body encoded as UTF-7 but declared as another charset.
@@ -164,22 +174,43 @@ def strip_html(html: str) -> str:
         except Exception:
             soup = BeautifulSoup(html, "html.parser")
 
-        for tag in soup(["script", "style", "head"]):
+        for tag in soup(["script", "style", "head", "template", "svg", "math"]):
             tag.decompose()
 
-        text = soup.get_text(separator="\n")
+        for tag in list(soup.find_all(True)):
+            # Decomposing a hidden parent invalidates its descendants that are
+            # still present in this snapshot of find_all().
+            if tag.parent is None or tag.attrs is None:
+                continue
+            if tag.attrs.get("hidden") is not None:
+                tag.decompose()
+                continue
+            if str(tag.get("aria-hidden") or "").strip().lower() == "true":
+                tag.decompose()
+                continue
+            if _HIDDEN_STYLE_RE.search(str(tag.get("style") or "")):
+                tag.decompose()
+
+        for image in soup.find_all("img"):
+            alt = str(image.get("alt") or "").strip()
+            image.replace_with(f" {alt} " if alt else "")
+        for line_break in soup.find_all("br"):
+            line_break.replace_with("\n")
+        for tag in soup.find_all(_BLOCK_TEXT_TAGS):
+            tag.insert_before("\n")
+            tag.insert_after("\n")
+
+        # Do not insert separators between inline nodes: Pa<span>y</span>Pal
+        # must become PayPal, not "Pa y Pal".
+        text = soup.get_text(separator="")
     else:
         # Fallback regex
         html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*>.*?</\1>", " ", html)
         html = re.sub(r"(?is)<(script|style|head|iframe|object|embed|form|button|input|meta)\b[^>]*?/?>", " ", html)
-        text = re.sub(r"<[^>]+>", " ", html)
-        text = (text
-                .replace("&amp;",  "&")
-                .replace("&lt;",   "<")
-                .replace("&gt;",   ">")
-                .replace("&nbsp;", " ")
-                .replace("&quot;", '"')
-                .replace("&#39;",  "'"))
+        block_names = "|".join(sorted(_BLOCK_TEXT_TAGS | {"br"}))
+        html = re.sub(rf"(?is)<\s*/?\s*(?:{block_names})\b[^>]*>", "\n", html)
+        text = re.sub(r"<[^>]+>", "", html)
+        text = html_lib.unescape(text)
 
     lines = [line.strip() for line in text.splitlines()]
     lines = [l for l in lines if l]

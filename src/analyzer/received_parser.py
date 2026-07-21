@@ -36,6 +36,33 @@ _AUTH_IDENTITY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Authentication results are not boolean: a message can contain multiple
+# results for the same protocol, possibly produced at different hops.  When a
+# compact status is required, retain the most adverse result instead of the
+# last one encountered in the header text.
+_AUTH_STATUS_PRIORITY = {
+    "fail": 100,
+    "permerror": 95,
+    "temperror": 90,
+    "softfail": 85,
+    "policy": 80,
+    "neutral": 70,
+    "none": 60,
+    "unknown": 50,
+    "bestguesspass": 10,
+    "pass": 0,
+}
+
+
+def _auth_priority(result: Dict[str, Any]) -> int:
+    return _AUTH_STATUS_PRIORITY.get(str(result.get("status") or "unknown").lower(), 50)
+
+
+def _select_worst_auth_result(items: List[Dict[str, Any]]) -> Dict[str, Any]:
+    selected = dict(max(items, key=_auth_priority))
+    selected["all_results"] = [dict(item) for item in items]
+    return selected
+
 
 # ── Funzioni di Utility Internizzate ─────────────────────────────────────────
 
@@ -164,14 +191,14 @@ def parse_received_hop(raw: str) -> Dict[str, Any]:
     return hop
 
 
-def parse_auth_results(raw: str) -> Dict[str, Dict[str, str]]:
+def parse_auth_results(raw: str) -> Dict[str, Dict[str, Any]]:
     """
     Parsa l'header Authentication-Results normalizzando i risultati
     secondo lo standard RFC 8601.
     """
-    results: Dict[str, Dict[str, str]] = {}
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
     if not raw:
-        return results
+        return {}
 
     matches = list(_AUTH_FIELD_RE.finditer(raw))
     for index, m in enumerate(matches):
@@ -182,9 +209,45 @@ def parse_auth_results(raw: str) -> Dict[str, Dict[str, str]]:
         identity_match = _AUTH_IDENTITY_RE.search(segment)
         identity = identity_match.group(1) if identity_match else ""
 
-        results[proto] = {
+        grouped.setdefault(proto, []).append({
             "status": status,
             "identity": identity.strip("<>\"'"),
             "raw": segment,
-        }
-    return results
+        })
+    return {
+        proto: _select_worst_auth_result(items)
+        for proto, items in grouped.items()
+    }
+
+
+def parse_received_spf_results(headers: List[str]) -> Dict[str, Dict[str, Any]]:
+    """Parse every Received-SPF header and retain the most adverse result."""
+    items: List[Dict[str, Any]] = []
+    for raw in headers or []:
+        match = re.match(r"\s*([a-zA-Z0-9_-]+)", str(raw))
+        if not match:
+            continue
+        items.append({
+            "status": match.group(1).lower(),
+            "identity": "",
+            "raw": str(raw).strip(),
+        })
+    return {"SPF": _select_worst_auth_result(items)} if items else {}
+
+
+def merge_auth_results(
+    *sources: tuple[str, Dict[str, Dict[str, Any]]],
+) -> Dict[str, Dict[str, Any]]:
+    """Merge parsed auth sources, selecting the most adverse result per protocol."""
+    grouped: Dict[str, List[Dict[str, Any]]] = {}
+    for source_name, parsed in sources:
+        for proto, result in (parsed or {}).items():
+            result_items = result.get("all_results") or [result]
+            for item in result_items:
+                enriched = {key: value for key, value in item.items() if key != "all_results"}
+                enriched["source"] = source_name
+                grouped.setdefault(proto.upper(), []).append(enriched)
+    return {
+        proto: _select_worst_auth_result(items)
+        for proto, items in grouped.items()
+    }

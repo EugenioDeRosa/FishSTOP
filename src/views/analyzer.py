@@ -596,10 +596,29 @@ def _status_from_received_spf(raw: str) -> str:
 
 def _auth_from_eml_header(soc: dict, protocol: str) -> dict:
     protocol = protocol.upper()
+    effective_auth_results = soc.get("effective_auth_results") or {}
     auth_results = soc.get("auth_results") or {}
     arc_auth_results = soc.get("arc_auth_results") or {}
     auth_raw = soc.get("authentication_results_raw") or ""
     arc_auth_raw = soc.get("arc_authentication_results") or ""
+
+    if effective_auth_results.get(protocol):
+        result = effective_auth_results[protocol]
+        source = result.get("source") or "Authentication headers"
+        if source == "ARC-Authentication-Results":
+            source_raw = arc_auth_raw
+        elif source == "Received-SPF":
+            source_raw = soc.get("received_spf_raw") or ""
+        else:
+            source_raw = auth_raw
+        return {
+            "status": result.get("status") or "unknown",
+            "identity": result.get("identity") or "",
+            "raw": result.get("raw") or source_raw,
+            "source": source,
+            "source_raw": source_raw,
+            "all_results": result.get("all_results") or [],
+        }
 
     if auth_results.get(protocol):
         result = auth_results[protocol]

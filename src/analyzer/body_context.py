@@ -45,6 +45,12 @@ _OUTLOOK_REPLY_HEADER_RE = re.compile(
     re.IGNORECASE,
 )
 
+_THREAD_SEPARATOR_RE = re.compile(r"^\s*[_=*-]{10,}\s*$")
+_THREAD_SEPARATOR_HEADER_RE = re.compile(
+    r"^\s*(?:from|da|de|sent|inviato|date|data|to|a|cc|bcc|subject|oggetto)\s*:",
+    re.IGNORECASE,
+)
+
 
 _AI_TAIL_BOILERPLATE_RE = re.compile(
     r"^\s*(?:"
@@ -77,6 +83,9 @@ _AI_SIGNATURE_START_RE = re.compile(
     r"regards|"
     r"thanks|"
     r"thank you"
+    r"|good luck"
+    r"|sincerely"
+    r"|cheers"
     r")\s*,?\s*$",
     re.IGNORECASE,
 )
@@ -167,6 +176,17 @@ def _looks_like_outlook_reply_header(lines: list[str], index: int) -> bool:
     return nearby_headers >= 2
 
 
+def _looks_like_thread_separator(lines: list[str], index: int) -> bool:
+    if not _THREAD_SEPARATOR_RE.match(lines[index]):
+        return False
+    nearby_headers = sum(
+        1
+        for line in lines[index + 1:index + 9]
+        if _THREAD_SEPARATOR_HEADER_RE.match(line.strip())
+    )
+    return nearby_headers >= 2
+
+
 def select_body_for_ai(body_clean: str) -> dict:
     """
     Returns a BERT-focused body while preserving metadata about the selection.
@@ -218,6 +238,22 @@ def select_body_for_ai(body_clean: str) -> dict:
 
     for index, line in enumerate(lines):
         if _looks_like_outlook_reply_header(lines, index):
+            selected, removed_quotes = _remove_quoted_lines(lines[:index])
+            body_ai, removed_quotes, removed_headers, removed_tail = _finalize_body_ai(
+                selected, removed_quotes, len(lines[index:])
+            )
+            if body_ai:
+                return {
+                    "body_ai": body_ai,
+                    "body_context": "reply",
+                    "body_ai_removed_quoted_lines": removed_quotes,
+                    "body_ai_removed_header_lines": removed_headers,
+                    "body_ai_removed_tail_lines": removed_tail,
+                }
+            break
+
+    for index, line in enumerate(lines):
+        if _looks_like_thread_separator(lines, index):
             selected, removed_quotes = _remove_quoted_lines(lines[:index])
             body_ai, removed_quotes, removed_headers, removed_tail = _finalize_body_ai(
                 selected, removed_quotes, len(lines[index:])

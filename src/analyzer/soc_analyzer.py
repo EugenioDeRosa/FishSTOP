@@ -23,7 +23,12 @@ from .body_context    import select_body_for_ai
 from .html_utils      import recover_mislabelled_utf7_html, strip_html
 from .link_extractor  import extract_links
 from .lookalike       import check_lookalike_domains, is_ip_url
-from .received_parser import parse_received_hop, parse_auth_results
+from .received_parser import (
+    merge_auth_results,
+    parse_auth_results,
+    parse_received_hop,
+    parse_received_spf_results,
+)
 
 
 NO_REPLY_LOCAL_PARTS = {
@@ -80,6 +85,9 @@ BULK_OR_CRM_HEADERS = {
 }
 
 BULK_SENDER_SIGNAL_THRESHOLD = 4
+_ENCODED_NOISE_LINE_RE = re.compile(r"[A-Za-z0-9+/=_-]{64,}")
+_ENCODED_NOISE_MIN_LINES = 8
+_ENCODED_NOISE_MIN_CHARS = 4096
 
 
 def _extract_domain(email_or_addr: str) -> str:
@@ -171,17 +179,17 @@ def _decode_text_part(part) -> str:
     payload = part.get_payload(decode=True)
     charset = part.get_content_charset() or "utf-8"
 
-    if payload:
-        decoded_candidates = []
-        for candidate in (charset, "utf-8", "latin-1", "cp1252"):
+    if payload is not None:
+        candidates = []
+        for candidate in (charset, "utf-8", "cp1252", "latin-1"):
+            if candidate and candidate.lower() not in {item.lower() for item in candidates}:
+                candidates.append(candidate)
+        for candidate in candidates:
             try:
-                decoded = payload.decode(candidate, errors="replace")
-            except LookupError:
+                return recover_mislabelled_utf7_html(payload.decode(candidate, errors="strict"))
+            except (LookupError, UnicodeDecodeError):
                 continue
-            decoded_candidates.append(decoded)
-        if decoded_candidates:
-            decoded = min(decoded_candidates, key=lambda value: value.count("\ufffd"))
-            return recover_mislabelled_utf7_html(decoded)
+        return recover_mislabelled_utf7_html(payload.decode("utf-8", errors="replace"))
 
     raw_payload = part.get_payload(decode=False)
     if isinstance(raw_payload, str):
@@ -196,6 +204,57 @@ def _looks_like_html(value: str) -> bool:
         r"(?is)<\s*(?:!doctype\s+html|html|body|table|div|span|p|br|a|img|style|head)\b",
         value,
     ))
+
+
+def _strip_plaintext_noise_blocks(value: str) -> tuple[str, int, int]:
+    """Remove large encoded/random padding blocks while preserving isolated tokens.
+
+    Spam campaigns sometimes copy a hidden HTML poison block into the plain-text
+    MIME alternative. A single hash, token, URL, or encoded line is legitimate,
+    so removal requires a long consecutive run and a large aggregate size.
+    """
+    lines = (value or "").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    output: list[str] = []
+    candidate: list[str] = []
+    removed_lines = 0
+    removed_chars = 0
+
+    def flush_candidate() -> None:
+        nonlocal removed_lines, removed_chars
+        if (
+            len(candidate) >= _ENCODED_NOISE_MIN_LINES
+            and sum(len(line.strip()) for line in candidate) >= _ENCODED_NOISE_MIN_CHARS
+        ):
+            removed_lines += len(candidate)
+            removed_chars += sum(len(line) for line in candidate)
+        else:
+            output.extend(candidate)
+        candidate.clear()
+
+    for line in lines:
+        stripped = line.strip()
+        if _ENCODED_NOISE_LINE_RE.fullmatch(stripped) and len(set(stripped)) >= 12:
+            candidate.append(line)
+            continue
+        flush_candidate()
+        output.append(line)
+    flush_candidate()
+    cleaned = re.sub(r"\n{3,}", "\n\n", "\n".join(output)).strip()
+    return cleaned, removed_lines, removed_chars
+
+
+def _iter_body_leaf_parts(part):
+    """Yield body leaves without descending into attachments or attached emails."""
+    disposition = str(part.get("Content-Disposition") or "").lower()
+    if "attachment" in disposition or part.get_filename():
+        return
+    if part.get_content_type() == "message/rfc822":
+        return
+    if part.is_multipart():
+        for child in part.iter_parts():
+            yield from _iter_body_leaf_parts(child)
+        return
+    yield part
 
 
 def _is_public_ip(value: str | None) -> bool:
@@ -288,7 +347,9 @@ class EmlSOCAnalyzer:
         # ── 4. Header ARC ─────────────────────────────────────────────────
         report["arc_seal"]                   = self._header(msg, "ARC-Seal")
         report["arc_message_signature"]      = self._header(msg, "ARC-Message-Signature")
-        report["arc_authentication_results"] = self._header(msg, "ARC-Authentication-Results")
+        report["arc_authentication_results"] = "\n".join(
+            self._headers(msg, "ARC-Authentication-Results")
+        )
 
         # ── 5. Catena Received ────────────────────────────────────────────
         raw_received = msg.get_all("Received") or []
@@ -300,7 +361,9 @@ class EmlSOCAnalyzer:
         report["injection_sender_ip"]   = self._extract_spf_sender_ip(msg, hops)
 
         # ── 6. Received-SPF raw ───────────────────────────────────────────
-        report["received_spf_raw"] = self._header(msg, "Received-SPF")
+        received_spf_headers = self._headers(msg, "Received-SPF")
+        report["received_spf_raw"] = "\n".join(received_spf_headers)
+        report["received_spf_results"] = parse_received_spf_results(received_spf_headers)
 
         # ── 7. Authentication-Results ─────────────────────────────────────
         auth_raw     = "\n".join(self._headers(msg, "Authentication-Results"))
@@ -308,6 +371,11 @@ class EmlSOCAnalyzer:
         report["authentication_results_raw"] = auth_raw
         report["auth_results"]     = parse_auth_results(auth_raw)
         report["arc_auth_results"] = parse_auth_results(arc_auth_raw)
+        report["effective_auth_results"] = merge_auth_results(
+            ("Authentication-Results", report["auth_results"]),
+            ("ARC-Authentication-Results", report["arc_auth_results"]),
+            ("Received-SPF", report["received_spf_results"]),
+        )
 
         # ── 8. Firma DKIM ─────────────────────────────────────────────────
         dkim_headers = self._headers(msg, "DKIM-Signature")
@@ -318,6 +386,8 @@ class EmlSOCAnalyzer:
         body_parts       = []
         html_parts       = []
         attachments_info = []
+        plain_noise_removed_lines = 0
+        plain_noise_removed_chars = 0
 
         for part in msg.walk():
             ct       = part.get_content_type()
@@ -334,13 +404,20 @@ class EmlSOCAnalyzer:
                     encoding=encoding,
                     raw_payload=raw_payload,
                 ))
-            elif ct == "text/plain":
+
+        for part in _iter_body_leaf_parts(msg):
+            ct = part.get_content_type()
+            if ct == "text/plain":
                 text = _decode_text_part(part)
                 if text and text.strip():
                     if _looks_like_html(text):
                         html_parts.append(text)
                     else:
-                        body_parts.append(text)
+                        text, removed_lines, removed_chars = _strip_plaintext_noise_blocks(text)
+                        plain_noise_removed_lines += removed_lines
+                        plain_noise_removed_chars += removed_chars
+                        if text:
+                            body_parts.append(text)
             elif ct == "text/html":
                 text = _decode_text_part(part)
                 if text and text.strip():
@@ -358,17 +435,16 @@ class EmlSOCAnalyzer:
 
         report["body_source"] = "text/plain" if body_parts else ("text/html" if html_parts else "empty")
         report["html_strip_applied"] = bool(html_parts)
+        report["body_plain_noise_removed_lines"] = plain_noise_removed_lines
+        report["body_plain_noise_removed_chars"] = plain_noise_removed_chars
         report["attachments"] = attachments_info
         report.update(select_body_for_ai(report["body_clean"]))
         report["body_clean_full"] = report["body_clean"]
         report["body_extracted"] = report.get("body_ai") or report["body_clean"]
-
-        ai_body_parts = [report["body_extracted"]]
-        body_norm = re.sub(r"\s+", " ", report["body_extracted"].strip()).lower()
-        html_norm = re.sub(r"\s+", " ", html_clean.strip()).lower()
-        if html_clean and html_norm and html_norm != body_norm and html_norm not in body_norm:
-            ai_body_parts.append("HTML-derived visible text:\n" + html_clean)
-        report["body_for_ai"] = "\n\n".join(part for part in ai_body_parts if part).strip()
+        # multipart/alternative representations describe the same message.
+        # Links remain available from body_html, but BERT receives one canonical
+        # body only so removed signatures/threads are not reintroduced.
+        report["body_for_ai"] = report["body_extracted"].strip()
 
         # ── 10. Link e lookalike ──────────────────────────────────────────
         report["links"] = extract_links(
@@ -447,7 +523,8 @@ class EmlSOCAnalyzer:
             flags.append({"level": level, "field": field, "message": message})
 
         # SPF: useful for triage, but auth-only findings should not dominate verdicts.
-        spf = report["auth_results"].get("SPF") or report["arc_auth_results"].get("SPF")
+        effective = report.get("effective_auth_results") or {}
+        spf = effective.get("SPF") or report["auth_results"].get("SPF") or report["arc_auth_results"].get("SPF")
         if spf:
             spf_status = (spf.get("status") or "unknown").lower()
             if spf_status != "pass":
@@ -456,7 +533,7 @@ class EmlSOCAnalyzer:
             flag("MEDIUM", "SPF", "No SPF result found in headers")
 
         # DKIM: missing/none is an absence of evidence, not a strong malicious signal.
-        dkim = report["auth_results"].get("DKIM") or report["arc_auth_results"].get("DKIM")
+        dkim = effective.get("DKIM") or report["auth_results"].get("DKIM") or report["arc_auth_results"].get("DKIM")
         dkim_status = (dkim.get("status") or "") .lower() if dkim else ""
         if dkim_status and dkim_status != "pass":
             flag("MEDIUM", "DKIM", f"DKIM {dkim_status.upper()} - signature validation should be reviewed")
@@ -464,7 +541,7 @@ class EmlSOCAnalyzer:
             flag("MEDIUM", "DKIM", "DKIM signature missing from headers")
 
         # DMARC
-        dmarc = report["auth_results"].get("DMARC") or report["arc_auth_results"].get("DMARC")
+        dmarc = effective.get("DMARC") or report["auth_results"].get("DMARC") or report["arc_auth_results"].get("DMARC")
         if dmarc and dmarc["status"] not in ("pass", "bestguesspass"):
             flag("MEDIUM", "DMARC", f"DMARC {dmarc['status'].upper()}")
         elif not dmarc:

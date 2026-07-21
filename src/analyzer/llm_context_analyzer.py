@@ -242,7 +242,12 @@ def _summarize_useful_vt_results(link_reputation: dict) -> str:
 
 
 def _auth_status(soc: dict, name: str) -> str:
-    result = (soc.get("auth_results") or {}).get(name) or (soc.get("arc_auth_results") or {}).get(name) or {}
+    result = (
+        (soc.get("effective_auth_results") or {}).get(name)
+        or (soc.get("auth_results") or {}).get(name)
+        or (soc.get("arc_auth_results") or {}).get(name)
+        or {}
+    )
     return str(result.get("status") or "unknown").lower()
 
 
@@ -315,6 +320,8 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
         lines.append(f"SPF check did not pass: {spf_status}")
     if dkim_status in {"fail", "temperror", "permerror", "policy"}:
         lines.append(f"DKIM check did not pass: {dkim_status}")
+    elif dkim_status == "none":
+        lines.append("DKIM signature is absent (status=none); this is weaker evidence than a failed signature")
     if dmarc_status in {"fail", "temperror", "permerror", "policy"}:
         lines.append(f"DMARC check did not pass: {dmarc_status}")
 
@@ -708,9 +715,14 @@ def _identity_risk(soc: dict) -> tuple[str, list[str]]:
     ))
     if compauth_failed:
         reasons.append("Microsoft composite authentication failed")
-    if all(status == "none" for status in statuses.values()):
+    all_auth_absent = all(status == "none" for status in statuses.values())
+    if all_auth_absent:
         reasons.append("SPF, DKIM and DMARC are absent")
     for name, status in statuses.items():
+        if name == "DKIM" and status == "none":
+            if not all_auth_absent:
+                reasons.append("DKIM signature is absent")
+            continue
         if status in {"fail", "temperror", "permerror", "policy", "softfail", "neutral"}:
             reasons.append(f"{name} did not pass ({status})")
     if soc.get("return_path_domain_mismatch"):
@@ -890,6 +902,7 @@ def _format_evidence(values: list) -> str:
     translations = {
         "sender authentication passed": "the sender is authenticated",
         "sender authentication is incomplete or unavailable": "sender authentication is incomplete",
+        "DKIM signature is absent": "the message has no DKIM signature",
         "Return-Path differs from the visible sender domain": "the Return-Path differs from the visible sender",
         "Reply-To differs unexpectedly from the sender identity": "the Reply-To differs from the sender",
         "display-name spoofing was detected": "possible display-name spoofing was detected",

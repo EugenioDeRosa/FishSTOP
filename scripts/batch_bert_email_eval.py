@@ -64,6 +64,8 @@ CSV_FIELDS = [
     "body_source",
     "body_clean_chars",
     "body_for_ai_chars",
+    "body_plain_noise_removed_lines",
+    "body_plain_noise_removed_chars",
     "bert_input_chars",
     "chunk_count",
     "logit_legitimate",
@@ -312,6 +314,9 @@ def build_summary(
         lower = min(int(value * 10) * 10, 90)
         bins[f"{lower:02d}-{lower + 10:02d}%"] += 1
     denominator = len(inferred)
+    noise_rows = [
+        row for row in rows if int(row.get("body_plain_noise_removed_lines") or 0) > 0
+    ]
     threshold = float(calibration["threshold"])
     band = float(calibration["band"])
     return {
@@ -353,6 +358,13 @@ def build_summary(
             if denominator
             else 0.0,
             "classification_distribution": dict(sorted(classifications.items())),
+            "plaintext_noise_files": len(noise_rows),
+            "plaintext_noise_removed_lines": sum(
+                int(row.get("body_plain_noise_removed_lines") or 0) for row in noise_rows
+            ),
+            "plaintext_noise_removed_chars": sum(
+                int(row.get("body_plain_noise_removed_chars") or 0) for row in noise_rows
+            ),
         },
         "probability_malicious_distribution": {
             "percentiles_0_to_1": percentile_map(probs),
@@ -389,6 +401,9 @@ def human_summary(summary: dict[str, Any]) -> str:
         f"{counts['not_classified_phishing_false_negatives']} "
         f"({counts['not_classified_phishing_false_negatives_percent']:.4f}%)",
         f"Distribuzione etichette: {json.dumps(counts['classification_distribution'], ensure_ascii=False)}",
+        f"Email con padding plain-text rimosso: {counts['plaintext_noise_files']}",
+        f"Righe di padding rimosse: {counts['plaintext_noise_removed_lines']}",
+        f"Caratteri di padding rimossi: {counts['plaintext_noise_removed_chars']}",
         "",
         f"Temperatura: {decision['temperature']}",
         f"Soglia centrale: {decision['threshold_center']}",
@@ -488,6 +503,12 @@ def main() -> int:
                     "body_source": soc.get("body_source") or "",
                     "body_clean_chars": len(soc.get("body_clean") or ""),
                     "body_for_ai_chars": len(body),
+                    "body_plain_noise_removed_lines": int(
+                        soc.get("body_plain_noise_removed_lines") or 0
+                    ),
+                    "body_plain_noise_removed_chars": int(
+                        soc.get("body_plain_noise_removed_chars") or 0
+                    ),
                     "bert_input_chars": len(bert_text),
                 }
             )

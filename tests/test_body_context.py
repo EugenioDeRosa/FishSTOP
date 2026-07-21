@@ -51,3 +51,28 @@ Please delete it if received in error.
     assert result["body_context"] == "normal"
     assert result["body_ai"] == "Ciao,\n\npuoi confermarmi lo slot per domani?"
     assert result["body_ai_removed_tail_lines"] == 2
+
+
+def test_underscore_separator_removes_previous_thread_and_good_luck_signature():
+    body = """Dear Eugenio,
+
+Please reply within a day if you agree.
+
+Good luck,
+Journal Operations Executive
+______________________________________________
+Monday, May 30, 2026, at 10:45:18 AM
+To: recipient@example.com
+Subject: Previous invitation
+
+Old message with repeated pressure and deadlines.
+"""
+
+    result = select_body_for_ai(body)
+
+    assert result["body_context"] == "reply"
+    assert result["body_ai"] == "Dear Eugenio,\n\nPlease reply within a day if you agree."
+    assert "Old message" not in result["body_ai"]
+    assert "Journal Operations Executive" not in result["body_ai"]
+    assert result["body_ai_removed_header_lines"] > 0
+    assert result["body_ai_removed_tail_lines"] > 0
