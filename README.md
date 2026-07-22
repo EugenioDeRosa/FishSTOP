@@ -50,7 +50,7 @@ Secret loading priority:
 1. Start the app.
 2. Open `Analyze EML`.
 3. Upload an `.eml` file.
-4. Review the tabs: `Overview`, `Identity`, `Auth & Routing`, `Link Intel`, `Attachments`, `AI & Body`, and `Raw`.
+4. Review the tabs: `Summary`, `Sender`, `Authentication`, `Links`, `Files`, `Content`, `Indicators`, and `Technical`.
 
 ## DistilBERT training
 

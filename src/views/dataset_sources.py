@@ -1,7 +1,10 @@
+import json
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+
+from src.ui import page_intro
 
 from src.public_dataset_builder import (
     DEFAULT_BALANCED_OUTPUT_CSV,
@@ -47,8 +50,65 @@ SOURCE_OPTIONS = {
 
 RECOMMENDED_DEFAULT_SOURCES = {"github_phishing_pot", "nazario", "spamassassin", "enron"}
 
+@st.cache_data(show_spinner=False)
+def _cached_ui_stats(path_value: str, csv_mtime: float, manifest_mtime: float) -> dict:
+    """Read precomputed stats when available, avoiding a full dedupe scan on page load."""
+    csv_path = Path(path_value)
+    manifest_path = csv_path.with_suffix(".manifest.json")
+    if manifest_path.exists():
+        try:
+            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+            stats = payload.get("stats")
+            if isinstance(stats, dict):
+                return stats
+        except (OSError, json.JSONDecodeError):
+            pass
+
+    if not csv_path.exists():
+        return {
+            "exists": False,
+            "rows": 0,
+            "legitimate": 0,
+            "phishing": 0,
+            "sources": {},
+            "splits": {},
+        }
+
+    # Only load the three small columns needed by the UI. Deep quality checks
+    # still run as part of dataset generation and are saved in the manifest.
+    frame = pd.read_csv(
+        csv_path,
+        usecols=lambda column: column in {"label", "source", "split"},
+    )
+    labels = (
+        pd.to_numeric(frame["label"], errors="coerce")
+        if "label" in frame
+        else pd.Series(dtype="float64")
+    )
+    return {
+        "exists": True,
+        "rows": len(frame),
+        "legitimate": int((labels == 0).sum()),
+        "phishing": int((labels == 1).sum()),
+        "missing_label": "label" not in frame,
+        "sources": frame["source"].value_counts().to_dict() if "source" in frame else {},
+        "splits": frame["split"].value_counts().to_dict() if "split" in frame else {},
+    }
+
+
+def _ui_stats(csv_path: Path) -> dict:
+    manifest_path = csv_path.with_suffix(".manifest.json")
+    csv_mtime = csv_path.stat().st_mtime if csv_path.exists() else 0.0
+    manifest_mtime = manifest_path.stat().st_mtime if manifest_path.exists() else 0.0
+    return _cached_ui_stats(str(csv_path), csv_mtime, manifest_mtime)
+
+
 def _render_stats(csv_path: Path) -> None:
-    stats = dataset_stats(csv_path)
+    stats = _ui_stats(csv_path)
+    if not stats.get("exists"):
+        st.info("No generated dataset found at this path yet.")
+        return
+
     c1, c2, c3, c4, c5, c6 = st.columns(6)
     c1.metric("Total rows", stats["rows"])
     c2.metric("Legitimate", stats["legitimate"])
@@ -118,7 +178,11 @@ def _run_builder(label: str, builder=build_balanced_public_dataset, *args, **kwa
 
 
 def render() -> None:
-    st.header("Public Dataset Builder")
+    page_intro(
+        "Project tools",
+        "Training datasets",
+        "Build and inspect the balanced dataset used to train the FishStop content classifier.",
+    )
     st.markdown(
         "Seleziona le fonti pubbliche e genera un CSV pronto per DistilBERT: bilanciato 50/50, "
         "deduplicato e con phishing e spam entrambi nella classe malevola. Il dataset sintetico "
@@ -139,7 +203,7 @@ def render() -> None:
     st.subheader("Complete dataset status")
     _render_stats(output_csv)
     if synthetic_csv.exists():
-        synthetic_stats = dataset_stats(synthetic_csv)
+        synthetic_stats = _ui_stats(synthetic_csv)
         st.caption(
             f"Synthetic augmentation available: {synthetic_stats['rows']} rows "
             f"({synthetic_stats['legitimate']} legitimate, {synthetic_stats['phishing']} malicious)."

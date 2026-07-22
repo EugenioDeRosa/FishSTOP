@@ -20,6 +20,7 @@ from src.bert_calibration import calibrated_probabilities, classify as classify_
 from src.bert_inference import predict_email_logits
 from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
+from src.ui import page_intro, risk_banner
 from src.views.backend import get_calibration, get_content_model, get_core_backend
 
 
@@ -123,7 +124,7 @@ def _main_alert_flags(flags: list[dict], limit: int = 5) -> list[dict]:
     severity_rank = {"HIGH": 0, "MEDIUM": 1, "LOW": 2, "INFO": 3}
     pdf_priority_fields = {"PDF Content", "PDF Attachment"}
     return sorted(
-        flags,
+        [flag for flag in flags if flag.get("level", "INFO") != "INFO"],
         key=lambda flag: (
             severity_rank.get(flag.get("level", "INFO"), 9),
             0 if flag.get("field") in pdf_priority_fields else 1,
@@ -132,9 +133,160 @@ def _main_alert_flags(flags: list[dict], limit: int = 5) -> list[dict]:
     )[:limit]
 
 
-def _field_value(label: str, value: str | None):
-    value = str(value or "-")
+def _is_meaningful_value(value) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip()
+        compact = re.sub(r"\s+", "", normalized)
+        return bool(normalized) and compact not in {"-", "--", "<>", "null", "none", "n/a", "unknown"}
+    return True
+
+
+def _field_value(label: str, value: str | None) -> bool:
+    if not _is_meaningful_value(value):
+        return False
+    value = str(value).strip()
     st.write(f"**{label}:** `{value}`")
+    return True
+
+
+def _report_table(fields: list[tuple[str, object]]) -> None:
+    rows = []
+    for label, value in fields:
+        if not _is_meaningful_value(value):
+            continue
+        if isinstance(value, (dict, list, tuple)):
+            value = json.dumps(value, ensure_ascii=False, default=str)
+        rows.append({"Field": label, "Value": value})
+    if rows:
+        st.dataframe(rows, hide_index=True, width="stretch")
+    else:
+        st.caption("No data available in this section.")
+
+
+def _render_structured_report(
+    soc: dict,
+    eml_auth: dict,
+    flags: list[dict],
+    links: list[dict],
+    attachments: list[dict],
+) -> None:
+    """Render the machine report as readable analyst sections, with JSON as a fallback."""
+    report_copy = {key: value for key, value in soc.items() if key != "raw_eml_bytes"}
+    report_json = json.dumps(report_copy, indent=2, ensure_ascii=False, default=str)
+    actionable_flags = [flag for flag in flags if flag.get("level", "INFO") != "INFO"]
+
+    message_tab, security_tab, evidence_tab, routing_tab, full_tab = st.tabs(
+        ["Message", "Security", "Evidence", "Routing", "Full report"]
+    )
+
+    with message_tab:
+        _report_table(
+            [
+                ("From", soc.get("from_")),
+                ("To", soc.get("to")),
+                ("Subject", soc.get("subject")),
+                ("Date", soc.get("date")),
+                ("Reply-To", soc.get("reply_to")),
+                ("Return-Path", soc.get("return_path")),
+                ("Message-ID", soc.get("message_id")),
+                ("Body source", soc.get("body_source")),
+            ]
+        )
+
+    with security_tab:
+        counts = _flag_counts(actionable_flags)
+        c1, c2, c3 = st.columns(3)
+        c1.metric("High", counts["HIGH"])
+        c2.metric("Medium", counts["MEDIUM"])
+        c3.metric("Low", counts["LOW"])
+        _report_table(
+            [
+                ("SPF", eml_auth.get("spf", {}).get("status")),
+                ("DKIM", eml_auth.get("dkim", {}).get("status")),
+                ("DMARC", eml_auth.get("dmarc", {}).get("status")),
+                ("Injection sender IP", soc.get("injection_sender_ip")),
+                ("Return-Path mismatch", soc.get("return_path_domain_mismatch")),
+                ("Reply-To mismatch", soc.get("reply_to_mismatch")),
+                ("Display-name spoofing", soc.get("display_name_spoofing")),
+            ]
+        )
+        if actionable_flags:
+            st.markdown("##### Findings")
+            for flag in actionable_flags:
+                _render_flag(flag)
+
+    with evidence_tab:
+        c1, c2 = st.columns(2)
+        c1.metric("Links", len(links))
+        c2.metric("Attachments", len(attachments))
+        if links:
+            st.markdown("##### Links")
+            st.dataframe(
+                [
+                    {
+                        "Host": link.get("host") or "-",
+                        "URL": _defang_url(link.get("url") or ""),
+                        "Source": link.get("source") or "-",
+                    }
+                    for link in links
+                ],
+                hide_index=True,
+                width="stretch",
+            )
+        if attachments:
+            st.markdown("##### Attachments")
+            st.dataframe(
+                [
+                    {
+                        "File": item.get("filename") or "(unnamed)",
+                        "Type": item.get("content_type") or "-",
+                        "Format": item.get("magic_detected_format") or item.get("extension_from_filename") or "-",
+                        "SHA-256": item.get("hash_sha256") or "-",
+                    }
+                    for item in attachments
+                ],
+                hide_index=True,
+                width="stretch",
+            )
+        if not links and not attachments:
+            st.caption("No links or attachments were extracted.")
+
+    with routing_tab:
+        hops = list(reversed(soc.get("received_hops", [])))
+        if hops:
+            st.dataframe(
+                [
+                    {
+                        "Hop": index,
+                        "From": _hop_from_label(hop),
+                        "By": _hop_by_label(hop),
+                        "Sender IP": hop.get("sender_ip") or "-",
+                        "TLS": " ".join(
+                            part for part in (hop.get("tls_version"), hop.get("tls_cipher")) if part
+                        ) or "-",
+                    }
+                    for index, hop in enumerate(hops, start=1)
+                ],
+                hide_index=True,
+                width="stretch",
+            )
+        else:
+            st.caption("No routing hops were extracted.")
+
+    with full_tab:
+        st.download_button(
+            "Download JSON report",
+            data=report_json,
+            file_name="fishstop_report.json",
+            mime="application/json",
+            use_container_width=True,
+        )
+        with st.expander("View complete JSON", expanded=False):
+            st.code(report_json, language="json")
 
 
 def _defang_url(url: str) -> str:
@@ -732,16 +884,19 @@ def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_java
 def render():
     parser, validator, analyzer = get_core_backend()
 
-    st.title("FishStop SOC Console")
-    st.caption("Email triage, authentication checks, threat intelligence e classificazione AI")
+    page_intro(
+        "Email analysis",
+        "Investigate a suspicious email",
+        "Upload an .eml file to review its risk, sender authenticity, links, and attachments in one place.",
+    )
 
     col_upload = st.container(border=True)
     col_results = st.container()
 
     with col_upload:
-        st.subheader("Case Intake")
-        uploaded_file = st.file_uploader("Upload an `.eml` file", type=["eml"])
-        st.caption("Il file viene analizzato localmente e convertito in un report SOC.")
+        st.markdown('<div class="fs-section-label">Add email file</div>', unsafe_allow_html=True)
+        uploaded_file = st.file_uploader("Choose an .eml file", type=["eml"], label_visibility="collapsed")
+        st.caption("Your file is parsed locally. Only indicators are sent to reputation services when configured.")
 
         if uploaded_file is not None:
             raw_bytes = uploaded_file.getvalue()
@@ -758,14 +913,13 @@ def render():
             with open(temp_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            st.success("File pronto per il triage")
             file_col, size_col = st.columns([2, 1])
-            file_col.metric("Nome file", uploaded_file.name)
-            size_col.metric("Dimensione", f"{len(uploaded_file.getbuffer()) / 1024:.1f} KB")
+            file_col.metric("File", uploaded_file.name)
+            size_col.metric("Size", f"{len(uploaded_file.getbuffer()) / 1024:.1f} KB")
 
     with col_results:
         if uploaded_file is None:
-            st.info("Upload an `.eml` to open the analysis case.")
+            st.info("Upload an email to begin. The analysis will appear here automatically.")
             return
 
         try:
@@ -801,53 +955,52 @@ def render():
             soc["link_reputation"] = vt_url_results
             soc["link_reputation_summary"] = _summarize_link_reputation(vt_url_results)
 
-            st.subheader("Executive Triage")
-            c1, c2, c3, c4, c5 = st.columns(5)
-            c1.metric("Severity", severity)
-            c2.metric("High", counts["HIGH"])
-            c3.metric("Medium", counts["MEDIUM"])
-            c4.metric("Link", len(links))
-            c5.metric("Attachments", len(attachments))
-            st.caption(severity_caption)
+            st.markdown("### Analysis summary")
+            risk_banner(severity, severity_caption)
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Critical signals", counts["HIGH"])
+            c2.metric("Review signals", counts["MEDIUM"])
+            c3.metric("Links", len(links))
+            c4.metric("Attachments", len(attachments))
 
             eml_digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
             phi4_key = f"phi4_analysis_{PROMPT_VERSION}_{eml_digest}"
             with st.container(border=True):
                 phi4_placeholder = _render_phi4_analysis(soc, phi4_key, auto_run=True)
 
-            if flags:
+            actionable_flags = [flag for flag in flags if flag.get("level", "INFO") != "INFO"]
+            main_flags = _main_alert_flags(flags)
+            if main_flags:
                 with st.container(border=True):
-                    st.markdown("#### Main alerts")
-                    main_flags = _main_alert_flags(flags)
+                    st.markdown("#### Priority findings")
                     for flag in main_flags:
                         _render_flag(flag)
-                    if len(flags) > len(main_flags):
-                        st.caption(f"Altri {len(flags) - len(main_flags)} indicators are available in the SOC Details tab.")
+                    if len(actionable_flags) > len(main_flags):
+                        st.caption(f"{len(actionable_flags) - len(main_flags)} more findings are available in the Summary tab.")
 
-            overview, identity, auth, links_tab, attach_tab, ioc_tab, content_tab, raw_tab = st.tabs(
+            overview, identity, auth, links_tab, attach_tab, content_tab, ioc_tab, raw_tab = st.tabs(
                 [
-                    "Overview",
-                    "Identity",
-                    "Auth & Routing",
-                    "Link Intel",
-                    "Attachments",
-                    "IoC",
-                    "AI & Body",
-                    "Raw",
+                    "Summary",
+                    "Sender",
+                    "Authentication",
+                    "Links",
+                    "Files",
+                    "Content",
+                    "Indicators",
+                    "Technical",
                 ]
             )
 
             with overview:
                 left, right = st.columns([1, 1])
                 with left:
-                    st.markdown("#### Email Snapshot")
+                    st.markdown("#### Message")
                     _field_value("From", soc.get("from_"))
                     _field_value("To", soc.get("to"))
                     _field_value("Subject", soc.get("subject"))
                     st.write(f"**Date:** `{soc.get('date') or '-'}`")
-                    _field_value("Message-ID", soc.get("message_id"))
                 with right:
-                    st.markdown("#### Signal Matrix")
+                    st.markdown("#### Trust checks")
                     _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"), show_help=False)
                     _auth_status_box("DKIM", eml_auth["dkim"].get("status", "unknown"), show_help=False)
                     _auth_status_box("DMARC", eml_auth["dmarc"].get("status", "unknown"), show_help=False)
@@ -856,44 +1009,44 @@ def render():
                     else:
                         st.success("Lookalike domains: no match")
 
-                st.markdown("#### SOC Details")
-                if flags:
-                    for flag in flags:
+                st.markdown("#### All findings")
+                if actionable_flags:
+                    for flag in actionable_flags:
                         _render_flag(flag)
                 else:
-                    st.success("No SOC flags generated.")
+                    st.success("No security findings require attention.")
 
             with identity:
-                st.markdown("#### Envelope & Identity")
-                c1, c2 = st.columns(2)
-                with c1:
-                    st.write(f"**Delivered-To:** `{soc.get('delivered_to') or '-'}`")
-                    _field_value("Return-Path", soc.get("return_path"))
-                    _field_value("Reply-To", soc.get("reply_to"))
-                    st.write(f"**Errors-To:** `{soc.get('errors_to') or '-'}`")
-                with c2:
-                    st.write(f"**Content-Type:** `{soc.get('content_type') or '-'}`")
-                    st.write(f"**MIME-Version:** `{soc.get('mime_version') or '-'}`")
-                    st.write(f"**Importance:** `{soc.get('importance') or '-'}`")
+                st.markdown("#### Sender identity")
+                sender_identity_fields = [
+                    ("Delivered-To", soc.get("delivered_to")),
+                    ("Return-Path", soc.get("return_path")),
+                    ("Reply-To", soc.get("reply_to")),
+                    ("Errors-To", soc.get("errors_to")),
+                    ("Importance", soc.get("importance")),
+                ]
+                if any(_is_meaningful_value(value) for _, value in sender_identity_fields):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        for label, value in sender_identity_fields[:4]:
+                            _field_value(label, value)
+                    with c2:
+                        _field_value(*sender_identity_fields[4])
+                else:
+                    st.info("No additional sender identity fields were found in this email.")
 
                 if soc.get("reply_to_mismatch"):
                     st.error("Reply-To differs from From.")
-                elif soc.get("reply_to"):
-                    st.success("Reply-To is consistent with From.")
-                else:
-                    st.info("Reply-To absent.")
 
                 if soc.get("return_path_domain_mismatch"):
                     st.error(
                         f"Return-Path mismatch: `{soc.get('return_path_domain')}` differs from the From domain."
                     )
-                elif soc.get("return_path"):
-                    st.success("Return-Path is consistent with the From domain.")
 
                 if soc.get("display_name_spoofing"):
                     st.error(f"Display Name Spoofing: `{soc['display_name_spoofing']}`")
 
-                st.markdown("#### Sender domain reputation")
+                st.markdown("#### Domain reputation")
                 domains = {}
 
                 def pull_domain(raw: str | None) -> str:
@@ -967,7 +1120,7 @@ def render():
                             st.code(hop.get("raw", ""), language="text")
 
             with links_tab:
-                st.markdown("#### Link Intelligence")
+                st.markdown("#### Link intelligence")
                 if not links:
                     st.info("No URL found in the email body.")
                 else:
@@ -1002,8 +1155,6 @@ def render():
                                     st.error("Direct IP")
                                 elif risky:
                                     st.warning(rep.get("status", "suspicious"))
-                                else:
-                                    st.success("checked")
                             _render_vt_url(rep)
                             st.markdown(
                                 f"[VirusTotal](https://www.virustotal.com/gui/domain/{lnk['host']})"
@@ -1059,8 +1210,8 @@ def render():
 
 
             with ioc_tab:
-                st.markdown("#### Indicators of Compromise")
-                st.caption("Valori utili per bloccare, monitorare o cercare future email simili. Copia solo gli indicatori che vuoi usare in strumenti di sicurezza.")
+                st.markdown("#### Indicators of compromise")
+                st.caption("Copy or export the values you need for blocking, monitoring, or threat hunting.")
 
                 def unique_values(values):
                     result = []
@@ -1126,7 +1277,7 @@ def render():
                         _render_ioc_values(label, values, f"{phi4_key}_ioc_{key_label}")
 
             with content_tab:
-                st.markdown("#### AI Content Analysis")
+                st.markdown("#### Content assessment")
                 clean_body = soc.get("body_for_ai") or soc.get("body_ai") or soc.get("body_clean") or ""
                 email_text = prepare_bert_input(soc.get("subject") or "", clean_body)
 
@@ -1267,8 +1418,8 @@ def render():
 
             with raw_tab:
                 st.markdown("#### Structured report")
-                report_copy = {k: v for k, v in soc.items() if k != "raw_eml_bytes"}
-                st.json(report_copy, expanded=False)
+                st.caption("A readable breakdown of the parsed message, security evidence, and routing data.")
+                _render_structured_report(soc, eml_auth, flags, links, attachments)
                 st.markdown("#### Cleaned raw EML")
                 hide_encoded_content = st.checkbox(
                     "Remove base64/quoted-printable content",

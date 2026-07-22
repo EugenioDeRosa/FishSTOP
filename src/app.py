@@ -4,11 +4,13 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.ui import inject_global_styles
+
 
 def configure_page() -> None:
     st.set_page_config(
-        page_title="FishStop - Triage & Phishing Detection",
-        page_icon="shield",
+        page_title="FishStop | Email analysis",
+        page_icon="🛡️",
         layout="wide",
     )
 
@@ -40,8 +42,8 @@ PAGES = {
 
 
 def initialize_session_state() -> None:
-    if st.session_state.get("page") not in {"home", *PAGES}:
-        st.session_state.page = "home"
+    if st.session_state.get("page") not in PAGES:
+        st.session_state.page = "analyze"
 
 
 def _render_startup_splash():
@@ -188,66 +190,29 @@ def set_page(page_name: str) -> None:
 
 
 def render_home() -> None:
-    st.title("FishStop")
-    st.markdown("Email Security Platform")
-    st.divider()
-    st.markdown("### Select a section")
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        st.button(
-            "Settings",
-            use_container_width=True,
-            type="primary",
-            on_click=set_page,
-            args=("settings",),
-        )
-    with c2:
-        st.button(
-            "Analyze EML",
-            use_container_width=True,
-            type="primary",
-            on_click=set_page,
-            args=("analyze",),
-        )
-    with c3:
-        st.button(
-            "Public Datasets",
-            use_container_width=True,
-            type="primary",
-            on_click=set_page,
-            args=("dataset_sources",),
-        )
+    set_page("analyze")
+    st.rerun()
 
 
 def render_sidebar() -> None:
     with st.sidebar:
-        st.markdown("## FishStop")
-        st.caption(f"Build: `{APP_VERSION}`")
+        st.markdown(
+            '<div class="fs-brand"><div class="fs-brand-mark">F</div><div>'
+            '<div class="fs-brand-name">FishStop</div><div class="fs-brand-note">EMAIL SECURITY</div>'
+            '</div></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("ANALYSIS")
+        st.button("Analyze email", use_container_width=True, type="primary" if st.session_state.page == "analyze" else "secondary", on_click=set_page, args=("analyze",))
+        st.button("Connections", use_container_width=True, type="primary" if st.session_state.page == "settings" else "secondary", on_click=set_page, args=("settings",))
 
-        if st.session_state.page != "home":
-            st.button(
-                "Main menu",
-                use_container_width=True,
-                on_click=set_page,
-                args=("home",),
-            )
-            st.divider()
+        with st.expander("Project tools", expanded=False):
+            st.caption("Dataset preparation is separate from day-to-day analysis.")
+            st.button("Training datasets", use_container_width=True, on_click=set_page, args=("dataset_sources",))
 
-        if st.session_state.page == "analyze":
-            if st.session_state.get("raw_eml_debug_data"):
-                st.markdown("### Raw EML Debugger (Cleaned)")
-                current_file_name = st.session_state.get("current_eml_name", "default")
-                st.text_area(
-                    label="MIME content (without encoded blocks)",
-                    value=st.session_state["raw_eml_debug_data"],
-                    height=500,
-                    disabled=True,
-                    key=f"sidebar_debug_{current_file_name}",
-                )
-                st.divider()
-
-        st.caption("FishStop - Email Security Platform")
+        st.markdown("---")
+        st.caption("Local-first analysis")
+        st.caption(f"Version {APP_VERSION}")
 
 
 def render_selected_page(page_name: str) -> None:
@@ -276,12 +241,10 @@ def render_selected_page(page_name: str) -> None:
 
 def main() -> None:
     configure_page()
+    inject_global_styles()
     initialize_session_state()
     if not run_startup_warmup():
         return
     render_sidebar()
 
-    if st.session_state.page == "home":
-        render_home()
-    else:
-        render_selected_page(st.session_state.page)
+    render_selected_page(st.session_state.page)

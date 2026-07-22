@@ -168,8 +168,17 @@ def check_lookalike_domains(
             continue
 
         # Unicode is common and legitimate in IDNs. Alert only when the domain
-        # contains known confusable characters and is close to a protected brand.
+        # contains characters from the explicit confusable-character map.
         has_homoglyph_chars = _has_homoglyph_chars(host)
+        if has_homoglyph_chars and host_norm != host.lower():
+            _alert(
+                url,
+                host,
+                "-",
+                "unicode_homoglyph",
+                f"The domain `{host}` contains Unicode confusable characters; "
+                f"its normalized form is `{host_norm}`.",
+            )
 
         for brand in brands:
             brand_norm = normalize_homoglyphs(brand)

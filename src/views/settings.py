@@ -4,6 +4,7 @@ from src.config import MANAGED_API_KEYS, get_secret, get_secret_source, set_user
 from src.views import backend
 from src.views.backend import get_model_source
 from src.analyzer.llm_context_analyzer import active_llm_backend
+from src.ui import page_intro
 
 
 KEY_LABELS = {
@@ -31,14 +32,18 @@ def _masked(value: str) -> str:
 
 
 def render():
-    st.header("Settings")
+    page_intro(
+        "Connections",
+        "Analysis services",
+        "Manage optional reputation and AI services used during email analysis.",
+    )
 
     model_source = get_model_source()
-    st.info(f"Active DistilBERT model from Hugging Face (`{model_source}`).")
+    st.success("Content classifier ready")
+    st.caption(f"Active model: {model_source}")
 
-    st.divider()
-    st.subheader("API Keys")
-    st.caption("Keys entered here are used first for API requests in this Streamlit session. If a field is empty, FishSTOP falls back to `.env`, environment variables, or Streamlit secrets.")
+    st.subheader("Service credentials")
+    st.caption("Credentials entered here are kept for this session. Leave a field empty to keep its current value.")
 
     with st.form("api_keys_form"):
         pending_values = {}
@@ -74,8 +79,7 @@ def render():
         st.success("Session API keys cleared. FishSTOP will use .env/environment/secrets fallbacks.")
         st.rerun()
 
-    st.divider()
-    st.subheader("Status")
+    st.subheader("Connection status")
     c1, c2, c3, c4 = st.columns(4)
     status_cols = {
         "VIRUSTOTAL_API_KEY": c1,
@@ -91,17 +95,8 @@ def render():
                 st.error(KEY_LABELS[key])
             st.caption(get_secret_source(key))
 
-    st.divider()
-    st.subheader("Online models")
-    st.code(
-        "\n".join(
-            [
-                "bert_model : https://huggingface.co/eugenioderodev/fishstop-bert",
-                f"phi4_mini  : {active_llm_backend()}",
-                "local dev  : Ollama auto-selected when reachable at OLLAMA_CHAT_ENDPOINT",
-                "hosted     : GitHub Models fallback via GITHUB_MODELS_TOKEN",
-            ]
-        ),
-        language="text",
-    )
+    with st.expander("Model details", expanded=False):
+        st.write("**DistilBERT:** Hugging Face content classification")
+        st.write(f"**Phi-4 mini:** {active_llm_backend()}")
+        st.caption("A reachable local Ollama service is preferred; GitHub Models is used as fallback when configured.")
 
