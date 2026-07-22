@@ -16,6 +16,7 @@ from src.analyzer.llm_context_analyzer import (
     format_email_risk_analysis,
     stream_phi4_email_analysis,
 )
+from src.analyzer.received_parser import order_received_hops
 from src.bert_calibration import calibrated_probabilities, classify as classify_bert_result
 from src.bert_inference import predict_email_logits
 from src.bert_input import prepare_bert_input
@@ -256,7 +257,7 @@ def _render_structured_report(
             st.caption("No links or attachments were extracted.")
 
     with routing_tab:
-        hops = list(reversed(soc.get("received_hops", [])))
+        hops = order_received_hops(soc.get("received_hops", []))
         if hops:
             st.dataframe(
                 [
@@ -265,6 +266,7 @@ def _render_structured_report(
                         "From": _hop_from_label(hop),
                         "By": _hop_by_label(hop),
                         "Sender IP": hop.get("sender_ip") or "-",
+                        "Timestamp": hop.get("received_at") or "-",
                         "TLS": " ".join(
                             part for part in (hop.get("tls_version"), hop.get("tls_cipher")) if part
                         ) or "-",
@@ -1088,7 +1090,7 @@ def render():
 
                 st.markdown("#### Routing")
                 hops = soc.get("received_hops", [])
-                routing_hops = list(reversed(hops))
+                routing_hops = order_received_hops(hops)
 
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Received hops", len(hops))
@@ -1101,6 +1103,8 @@ def render():
                 for idx, hop in enumerate(routing_hops, start=1):
                     title = f"Hop {idx}: {_hop_from_label(hop)} -> {_hop_by_label(hop)}"
                     with st.expander(title):
+                        if hop.get("received_at"):
+                            st.caption(f"Received at: `{hop['received_at']}`")
                         st.write(f"**Sender IP:** `{hop.get('sender_ip') or '-'}`")
                         tls_version = hop.get("tls_version")
                         tls_cipher = hop.get("tls_cipher")

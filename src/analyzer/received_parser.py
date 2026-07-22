@@ -8,6 +8,8 @@ Espone:
 
 import ipaddress
 import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 
 # ── Regex Enterprise-Grade ──────────────────────────────────────────────────
@@ -116,6 +118,52 @@ def _clean_host_token(value: str | None) -> Optional[str]:
     return value.rstrip(".,;") or None
 
 
+def _received_timestamp(raw: str) -> Optional[str]:
+    """Extract and normalize the RFC date after the final Received semicolon."""
+    if ";" not in (raw or ""):
+        return None
+    raw_date = raw.rsplit(";", 1)[-1].strip()
+    if not raw_date:
+        return None
+    try:
+        parsed = parsedate_to_datetime(raw_date)
+    except (TypeError, ValueError, OverflowError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def order_received_hops(hops: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Return sender-to-recipient hops, preferring timestamps when all are valid."""
+    current_route_order = list(reversed(hops or []))
+    if len(current_route_order) < 2:
+        return current_route_order
+
+    timestamps: List[float] = []
+    for hop in current_route_order:
+        value = hop.get("received_at")
+        if not value:
+            return current_route_order
+        try:
+            parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            timestamps.append(parsed.astimezone(timezone.utc).timestamp())
+        except (TypeError, ValueError, OverflowError):
+            return current_route_order
+
+    return [
+        hop
+        for _, hop in sorted(
+            zip(timestamps, current_route_order),
+            key=lambda item: item[0],
+        )
+    ]
+
+
 # ── Funzioni Principali Esposte ──────────────────────────────────────────────
 
 
@@ -135,9 +183,13 @@ def parse_received_hop(raw: str) -> Dict[str, Any]:
             "tls_version": None,
             "tls_cipher": None,
             "all_ips": [],
+            "received_at": None,
         }
 
-    hop: Dict[str, Any] = {"raw": raw.strip()}
+    hop: Dict[str, Any] = {
+        "raw": raw.strip(),
+        "received_at": _received_timestamp(raw),
+    }
     clean_raw = " ".join(raw.split())
 
     # Estrazione di tutti gli IP validi presenti nell'header
