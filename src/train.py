@@ -170,6 +170,7 @@ def load_training_dataframe(path: str | Path) -> pd.DataFrame:
 class DistilBERTPhishingTrainer:
     def __init__(self, base_model: str = DEFAULT_BASE_MODEL):
         self.base_model = base_model
+        self.hf_trainer: Trainer | None = None
         self.tokenizer = AutoTokenizer.from_pretrained(base_model)
         self.model = AutoModelForSequenceClassification.from_pretrained(
             base_model,
@@ -303,7 +304,6 @@ class DistilBERTPhishingTrainer:
             load_best_model_at_end=True,
             metric_for_best_model="f1",
             greater_is_better=True,
-            logging_dir=str(output_dir / "logs"),
             logging_strategy="steps",
             logging_steps=50,
             logging_first_step=True,
@@ -313,7 +313,7 @@ class DistilBERTPhishingTrainer:
             seed=42,
             data_seed=42,
         )
-        trainer = EmailWeightedTrainer(
+        hf_trainer = EmailWeightedTrainer(
             model=self.model,
             args=args,
             train_dataset=train_tokenized,
@@ -323,7 +323,10 @@ class DistilBERTPhishingTrainer:
             compute_metrics=lambda prediction: self.compute_email_metrics(prediction, validation_owners),
             callbacks=[TrainingProgressCallback()],
         )
-        trainer.train()
+        # Keep the Hugging Face Trainer available on the wrapper.  Trainer.state
+        # belongs to this object, not to DistilBERTPhishingTrainer itself.
+        self.hf_trainer = hf_trainer
+        hf_trainer.train()
 
         self.model.config.id2label = ID2LABEL
         self.model.config.label2id = LABEL2ID
@@ -332,7 +335,7 @@ class DistilBERTPhishingTrainer:
         self.model.config.fishstop_chunk_aggregation = "maximum_positive_logit_margin"
         self.model.save_pretrained(output_dir)
         self.tokenizer.save_pretrained(output_dir)
-        return trainer
+        return hf_trainer
 
     def collect_email_logits(self, frame: pd.DataFrame) -> tuple[torch.Tensor, torch.Tensor, list[int]]:
         logits = []
@@ -424,15 +427,15 @@ def run_training(
     split_counts = df["split"].value_counts().to_dict()
     print(f"Validated {len(df)} emails. Split counts: {split_counts}", flush=True)
     print(f"Loading base model: {base_model}", flush=True)
-    trainer = DistilBERTPhishingTrainer(base_model)
-    trainer.train(df, output_dir=output_dir, epochs=epochs)
-    trainer.model.config.fishstop_dataset_sha256 = dataset_sha256
-    trainer.model.config.fishstop_split_strategy = "source_holdout"
-    trainer.model.save_pretrained(output_dir)
+    training_pipeline = DistilBERTPhishingTrainer(base_model)
+    hf_trainer = training_pipeline.train(df, output_dir=output_dir, epochs=epochs)
+    training_pipeline.model.config.fishstop_dataset_sha256 = dataset_sha256
+    training_pipeline.model.config.fishstop_split_strategy = "source_holdout"
+    training_pipeline.model.save_pretrained(output_dir)
 
     validation_df = df[df["split"] == "validation"]
     print(f"Calibrating probabilities on {len(validation_df)} validation emails...", flush=True)
-    validation_logits, validation_labels, validation_chunks = trainer.collect_email_logits(validation_df)
+    validation_logits, validation_labels, validation_chunks = training_pipeline.collect_email_logits(validation_df)
     calibration = fit_calibration(validation_logits, validation_labels, positive_label_id=1)
     calibration.update(
         {
@@ -448,7 +451,7 @@ def run_training(
 
     test_df = df[df["split"] == "test"]
     print(f"Running final evaluation on {len(test_df)} held-out test emails...", flush=True)
-    test_logits, test_labels, test_chunks = trainer.collect_email_logits(test_df)
+    test_logits, test_labels, test_chunks = training_pipeline.collect_email_logits(test_df)
     test_metrics = evaluate_calibrated(test_logits, test_labels, calibration)
     metadata = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
@@ -458,7 +461,7 @@ def run_training(
         "rows": {split: int((df["split"] == split).sum()) for split in sorted(REQUIRED_SPLITS)},
         "labels": ID2LABEL,
         "epochs": int(epochs),
-        "best_validation_email_f1": float(trainer.state.best_metric or 0.0),
+        "best_validation_email_f1": float(hf_trainer.state.best_metric or 0.0),
         "sources_by_split": {
             split: sorted(df.loc[df["split"].eq(split), "source"].dropna().astype(str).unique().tolist())
             if "source" in df else []
