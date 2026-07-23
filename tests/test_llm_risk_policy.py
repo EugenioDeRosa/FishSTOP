@@ -430,6 +430,103 @@ def test_authenticated_account_verification_link_is_review_not_automatic_phishin
     assert analysis["technical_risk"] == "clean"
 
 
+def test_unusual_signin_report_link_corrects_phi4_informational_false_negative():
+    url = "https://account-alert.example/report"
+    body = (
+        "Microsoft account\nUnusual sign.in activity\n"
+        "We detected something unusual about a recent sign-in to the Microsoft account.\n"
+        "A user from Russia/Moscow just logged into your account from a new device. "
+        "If this wasn't you, please report the user. If this was you, we'll trust similar activity.\n"
+        "Report The User"
+    )
+    analysis = apply_email_risk_policy(
+        {
+            "subject": "Microsoft account - Unusual sign.in activity",
+            "body_clean": body,
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "none"},
+                "DMARC": {"status": "pass"},
+            },
+            "reply_to_mismatch": True,
+            "bert_ai_result": "phishing",
+            "links": [{"url": url, "host": "account-alert.example", "source": "html_href"}],
+            "link_reputation": {url: {"status": "clean"}},
+        },
+        # Reproduce Phi-4 mini noticing the alert but missing its requested action.
+        _semantic(
+            requested_action="informational",
+            action_channel="unclear",
+            asks_to_click_link=False,
+            content_summary=(
+                "The subject and body provide information without a clearly identified risky request."
+            ),
+        ),
+    )
+
+    assert analysis["final_verdict"] == "phishing"
+    assert analysis["content_risk"] == "suspicious"
+    assert analysis["requested_action"] == "verify_account"
+    assert analysis["action_channel"] == "supplied_link"
+    assert analysis["content_summary"] == (
+        "The subject and body claim suspicious account activity and direct the recipient to respond "
+        "through a supplied link, a common account-security phishing lure"
+    )
+
+
+def test_unusual_signin_notice_without_supplied_channel_remains_informational():
+    analysis = apply_email_risk_policy(
+        {
+            "subject": "Unusual sign-in activity",
+            "body_clean": (
+                "We detected a new sign-in to your account. If this wasn't you, "
+                "open the service manually and review recent activity."
+            ),
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "pass"},
+                "DMARC": {"status": "pass"},
+            },
+            "links": [],
+        },
+        _semantic(
+            requested_action="informational",
+            action_channel="normal_known_procedure",
+            asks_to_click_link=False,
+        ),
+    )
+
+    assert analysis["final_verdict"] == "legitimate"
+    assert analysis["content_risk"] == "benign"
+    assert analysis["requested_action"] == "informational"
+
+
+def test_authenticated_unusual_signin_report_link_requires_review_not_automatic_phishing():
+    url = "https://security.service.example/report"
+    analysis = apply_email_risk_policy(
+        {
+            "subject": "Unusual account sign-in",
+            "body_clean": (
+                "We detected an unusual sign-in to your account. "
+                "If this wasn't you, report the activity using the supplied button."
+            ),
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "pass"},
+                "DMARC": {"status": "pass"},
+            },
+            "links": [{"url": url, "host": "security.service.example"}],
+            "link_reputation": {url: {"status": "clean"}},
+        },
+        _semantic(),
+    )
+
+    assert analysis["final_verdict"] == "review"
+    assert analysis["content_risk"] == "suspicious"
+    assert analysis["identity_risk"] == "verified"
+    assert analysis["technical_risk"] == "clean"
+
+
 def test_reward_claim_through_supplied_link_requires_review():
     url = "https://storage.example/claim"
     analysis = apply_email_risk_policy(

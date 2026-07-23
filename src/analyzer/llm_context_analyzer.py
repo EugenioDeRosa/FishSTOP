@@ -73,8 +73,9 @@ SYSTEM_MESSAGE = (
 
 TASK_INSTRUCTIONS = (
     "Assess SUBJECT+EMAIL first; CHECKS may affect only check_relation. A link or urgency alone is neutral. "
-    "Risky: credentials/sensitive data, payment or transfer, account verify/change via supplied channel, reward, bypass. "
+    "Risky: credentials/sensitive data, payment or transfer, account verify/change or response to a claimed security alert via supplied channel, reward, bypass. "
     "Marketing, scheduling, sales and business are benign without these. META link/file supplies an invoice/payment channel. "
+    "For confirm/deny/report of alleged account activity, use verify_account. "
     "Then compare CHECKS: auth=identity; BERT=support only; low_risk=context; malicious URL/domain/file=strong phishing evidence; "
     "hop=support only. Use present facts.\n"
     "JSON only:\n"
@@ -761,12 +762,51 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
         semantic["action_channel"] = "supplied_link"
         semantic["asks_for_credentials"] = False
 
-    # A bank/account verification through a destination supplied by the
-    # message is a sensitive action even when the small model calls it merely
-    # informational. Keep it review-level here; independent technical or
-    # identity evidence determines whether it is promoted to phishing.
+    # Account-security lures often present an alleged unusual sign-in, then ask
+    # the recipient to confirm, deny, report or secure it through a supplied
+    # destination. Small models may summarize the alert but miss that requested
+    # response. Require all four elements so a notification without an action
+    # or supplied channel remains informational.
     message_text = _body_context_for_llm(soc)
     message_text = f"{soc.get('subject') or ''}\n{message_text}".lower()
+    account_context = bool(re.search(
+        r"\b(?:account|konto|compte|cuenta|profilo|account\s+microsoft|onlinebanking|online-banking)\b",
+        message_text,
+        re.IGNORECASE,
+    ))
+    security_event_language = bool(re.search(
+        r"\b(?:unusual|suspicious|unauthori[sz]ed|unknown)\b[^\n.!?]{0,45}"
+        r"\b(?:sign[ .-]?in|login|access|activity|device)\b|"
+        r"\b(?:new\s+(?:device|sign[ .-]?in|login)|logged\s+into|"
+        r"accesso\s+(?:insolito|sospetto|non\s+autorizzato)|"
+        r"attivit[aà]\s+(?:insolita|sospetta)|nuovo\s+dispositivo)\b",
+        message_text,
+        re.IGNORECASE,
+    ))
+    security_response_language = bool(re.search(
+        r"\b(?:report(?:\s+the)?\s+(?:user|activity)|report\s+(?:it|this)|"
+        r"wasn['’]?t\s+you|not\s+you|deny|review\s+(?:the\s+)?activity|"
+        r"secure\s+(?:your\s+)?account|protect\s+(?:your\s+)?account|"
+        r"segnal\w*|disconosc\w*|non\s+(?:sei|eri)\s+tu|metti\s+in\s+sicurezza)\b",
+        message_text,
+        re.IGNORECASE,
+    ))
+    security_alert_via_supplied_channel = bool(
+        links and account_context and security_event_language and security_response_language
+    )
+    if security_alert_via_supplied_channel:
+        semantic["requested_action"] = "verify_account"
+        semantic["asks_to_verify_account"] = True
+        semantic["asks_to_click_link"] = True
+        semantic["action_channel"] = "supplied_link"
+        semantic["content_summary"] = (
+            "The subject and body claim suspicious account activity and direct the recipient to respond "
+            "through a supplied link, a common account-security phishing lure"
+        )
+
+    # A bank/account verification through a destination supplied by the
+    # message is also sensitive. Keep it review-level here; independent
+    # technical or identity evidence determines whether it becomes phishing.
     verification_language = bool(re.search(
         r"\b(?:verify|verification|confirm|authenticate|authentication|security\s+check|"
         r"verific\w*|best[aä]tig\w*|authentifiz\w*|sicherheitscheck|pr[uü]fportal)\b",
@@ -778,7 +818,7 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
         message_text,
         re.IGNORECASE,
     ))
-    if links and verification_language and financial_account_context:
+    if links and verification_language and financial_account_context and not security_alert_via_supplied_channel:
         semantic["requested_action"] = "verify_account"
         semantic["asks_to_verify_account"] = True
         semantic["asks_to_click_link"] = True
@@ -1251,7 +1291,7 @@ def _fallback_content_summary(soc: dict, semantic: dict) -> str:
             else "contain an operational request without asking the recipient to disclose sensitive information"
         ),
         "change_account_settings": "requests account changes, an action that can expose the recipient to account takeover",
-        "verify_account": "claims to be from a bank and asks the recipient to verify an account through a supplied link, a common credential-phishing pattern",
+        "verify_account": "claims an account-security issue and asks the recipient to respond through a supplied channel, a common phishing pattern",
         "open_attachment": "asks the recipient to open an attachment, which may deliver malicious content",
         "visit_link": "directs the recipient to a supplied link, a pattern that requires destination verification",
         "reply": "asks the recipient to reply, without presenting another clearly identified risky action",

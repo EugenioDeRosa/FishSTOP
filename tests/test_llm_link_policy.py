@@ -98,3 +98,10 @@ def test_phi4_receives_normalized_reputation_context_with_malicious_as_strong():
     assert "malicious URL/domain/file=strong phishing evidence" in (
         llm_context_analyzer.TASK_INSTRUCTIONS
     )
+
+
+def test_phi4_maps_response_to_claimed_account_alert_to_verification_action():
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
+
+    assert "response to a claimed security alert via supplied channel" in prompt_source
+    assert "For confirm/deny/report of alleged account activity, use verify_account" in prompt_source
