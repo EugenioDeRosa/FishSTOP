@@ -8,7 +8,7 @@ from src.analyzer.llm_context_analyzer import (
 )
 
 
-def test_bert_is_passed_as_compact_supporting_context_not_as_the_verdict():
+def test_bert_is_not_passed_to_phi4_semantic_analysis():
     soc = {
         "from_": "sales@example.com",
         "to": "customer@example.net",
@@ -38,17 +38,17 @@ def test_bert_is_passed_as_compact_supporting_context_not_as_the_verdict():
 
     prompt = build_fast_email_prompt(soc)
 
-    assert "BERT=phishing" in prompt
+    assert "BERT" not in prompt
     assert "SUBJECT: Service improvement discussion" in prompt
-    assert "Semantic analysis (BERT): phishing" not in prompt
+    assert "phishing" not in prompt.lower()
 
 
-def test_phi4_instructions_keep_bert_supporting_and_out_of_content_summary():
+def test_phi4_instructions_exclude_bert_and_the_final_verdict():
     prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "BERT=support only" in prompt_source
-    assert "content only; no verdict/checks" in prompt_source
-    assert "link or urgency alone is neutral" in prompt_source
+    assert "BERT" not in prompt_source
+    assert "no verdict or technical checks" in prompt_source
+    assert "link or urgency alone is neutral" in prompt_source.lower()
 
 
 def test_bert_is_reported_after_intent_analysis_as_support_or_contrary_evidence():

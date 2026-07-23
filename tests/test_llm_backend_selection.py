@@ -37,8 +37,7 @@ def test_phi4_compact_schema_reaches_stable_policy_without_retry(monkeypatch):
             "status": "ok",
             "model": model,
             "text": (
-                '{"action":"payment","channel":"link","signals":["click","payment"],'
-                '"confidence":0.92,"reason":"Payment requested through a supplied link.",'
+                '{"action":"payment","channel":"link",'
                 '"summary":"The email body requests payment through a supplied link, a financial phishing pattern."}'
             ),
         }
@@ -68,7 +67,8 @@ def test_phi4_compact_schema_reaches_stable_policy_without_retry(monkeypatch):
     assert analysis["content_risk"] == "suspicious"
 
     user_prompt = captured["messages"][1]["content"]
-    assert '"signals":[]' in user_prompt
+    assert '"signals"' not in user_prompt
+    assert '"check_relation"' not in user_prompt
     assert '"asks_for_payment"' not in user_prompt
     assert '"content_risk"' not in user_prompt
 
@@ -102,3 +102,34 @@ def test_ollama_uses_schema_constrained_output_and_zero_temperature(monkeypatch)
 
     assert captured["payload"]["format"] == llm.PHI4_OUTPUT_SCHEMA
     assert captured["payload"]["options"]["temperature"] == 0.0
+
+
+def test_natural_model_summary_is_not_replaced_by_generic_visit_link_fallback(monkeypatch):
+    def fake_stream(messages, model, timeout):
+        yield {
+            "status": "ok",
+            "model": model,
+            "text": (
+                '{"action":"visit_link","channel":"link",'
+                '"summary":"This message announces a routine monthly update and offers an optional website link."}'
+            ),
+        }
+
+    monkeypatch.setattr(llm, "_use_ollama", lambda: False)
+    monkeypatch.setattr(llm, "_github_models_token", lambda: "token")
+    monkeypatch.setattr(llm, "_stream_github_models", fake_stream)
+
+    events = list(llm.stream_phi4_email_analysis({
+        "subject": "Monthly update",
+        "body_for_ai": "Here is the monthly update. Read more on our website.",
+        "links": [{"url": "https://example.test/news", "host": "example.test"}],
+        "auth_results": {
+            "SPF": {"status": "pass"},
+            "DKIM": {"status": "pass"},
+            "DMARC": {"status": "pass"},
+        },
+    }))
+
+    text = events[-1]["text"]
+    assert "This message announces a routine monthly update" in text
+    assert "a pattern that requires destination verification" not in text

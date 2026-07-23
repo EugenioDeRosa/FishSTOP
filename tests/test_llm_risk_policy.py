@@ -206,8 +206,98 @@ def test_compact_phi4_schema_derives_action_signals_without_repeated_booleans():
     assert semantic["action_channel"] == "external_form"
 
 
-def test_literal_content_recap_is_not_accepted_as_security_analysis():
-    assert not _valid_content_summary(
+def test_compact_provide_information_action_is_sensitive_without_old_signals_field():
+    semantic = normalize_semantic_extraction({
+        "action": "provide_information",
+        "channel": "form",
+        "summary": "Submit personal details through the supplied form.",
+    })
+
+    assert semantic["requested_action"] == "provide_information"
+    assert semantic["asks_for_sensitive_information"] is True
+
+
+def test_explicit_reward_claim_corrects_generic_link_or_payment_label():
+    soc = {
+        "subject": "Your free spins expire tonight — claim now",
+        "body_for_ai": "Claim your free spins using the link.",
+        "links": [{"url": "https://example.test/claim", "host": "example.test"}],
+        "auth_results": {},
+    }
+
+    analysis = apply_email_risk_policy(soc, {
+        "action": "visit_link",
+        "channel": "link",
+        "summary": "Claim free spins using the supplied link.",
+    })
+
+    assert analysis["requested_action"] == "claim_reward"
+    assert analysis["content_risk"] == "suspicious"
+
+    payment_misread = apply_email_risk_policy(soc, {
+        "action": "payment",
+        "channel": "link",
+        "summary": "Request for payment of a bonus.",
+    })
+    assert payment_misread["requested_action"] == "claim_reward"
+    assert "ask the recipient to claim it" in payment_misread["content_summary"]
+
+
+def test_explicit_password_creation_corrects_generic_link_label():
+    analysis = apply_email_risk_policy({
+        "subject": "Cree una contraseña para SIX DEGREES IT",
+        "body_for_ai": "Cree una contraseña mediante este enlace.",
+        "links": [{"url": "https://example.test/password", "host": "example.test"}],
+        "auth_results": {},
+    }, {
+        "action": "visit_link",
+        "channel": "link",
+        "summary": "Create a password for SIX DEGREES IT.",
+    })
+
+    assert analysis["requested_action"] == "change_account_settings"
+    assert analysis["content_risk"] == "suspicious"
+
+
+def test_reward_survey_requesting_personal_data_uses_more_specific_information_action():
+    analysis = apply_email_risk_policy({
+        "subject": "WOW TV Standard-Abo",
+        "body_for_ai": (
+            "Sie können sich Ihren Gewinn sichern. Nehmen Sie an unserer Umfrage teil. "
+            "Tragen Sie auf den nachfolgenden Seiten Ihre Datein ein."
+        ),
+        "links": [{"url": "https://example.test/survey", "host": "example.test"}],
+        "auth_results": {},
+    }, {
+        "action": "reply",
+        "channel": "link",
+        "summary": "Participate in a survey for a free year of WOW TV.",
+    })
+
+    assert analysis["requested_action"] == "provide_information"
+    assert analysis["content_risk"] == "suspicious"
+    assert "submit personal information" in analysis["content_summary"]
+
+
+def test_bypass_label_is_downgraded_without_evasion_language():
+    analysis = apply_email_risk_policy({
+        "subject": "Save 80% on energy costs",
+        "body_for_ai": "Discover this promotional offer on our website.",
+        "links": [{"url": "https://example.test/offer", "host": "example.test"}],
+        "auth_results": {},
+    }, {
+        "action": "bypass",
+        "channel": "link",
+        "summary": "Promotional energy-saving offer.",
+    })
+
+    assert analysis["requested_action"] == "visit_link"
+    assert analysis["content_risk"] == "benign"
+    assert "bypass normal procedures" not in analysis["content_summary"]
+
+
+def test_natural_content_summaries_are_accepted_without_a_fixed_prefix():
+    assert _valid_content_summary(
         "Lido Community Rewards: stETH airdrop live, snapshot taken on 21 July."
     )
     assert _valid_content_summary(
@@ -218,6 +308,21 @@ def test_literal_content_recap_is_not_accepted_as_security_analysis():
     )
     assert _valid_content_summary(
         "The subject and body contain a cryptocurrency reward offer, a pattern commonly used in phishing."
+    )
+    assert _valid_content_summary(
+        "This message announces a routine monthly update and offers an optional website link."
+    )
+    assert _valid_content_summary(
+        "Aave airdrop claim with a supplied link."
+    )
+    assert not _valid_content_summary(
+        "Untrusted email requests account verification."
+    )
+    assert not _valid_content_summary(
+        "The email is a phishing attempt."
+    )
+    assert not _valid_content_summary(
+        "The email requests account verification, and BERT supports this interpretation."
     )
 
 
@@ -240,17 +345,16 @@ def test_internal_tool_recommendation_is_legitimate_and_reports_missing_dkim():
         },
     }
     analysis = apply_email_risk_policy(soc, {
-        "action": "provide_information",
+        "action": "info",
         "channel": "reply",
-        "signals": [],
-        "summary": "The subject and body ask the recipient to provide information that could be used for social engineering.",
+        "summary": "The subject and body recommend an internal remote-access tool.",
     })
     rendered = format_email_risk_analysis(analysis)
 
     assert analysis["final_verdict"] == "legitimate"
     assert analysis["content_risk"] == "benign"
     assert analysis["requested_action"] == "informational"
-    assert "operational request" in rendered
+    assert "recommend an internal remote-access tool" in rendered
     assert "social engineering" not in rendered
     assert (
         "Independent technical checks support this assessment because the sender is authenticated "

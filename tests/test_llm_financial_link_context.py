@@ -76,15 +76,15 @@ def test_phi4_prompt_forbids_clean_technical_checks_overriding_payment_request()
     prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
     assert "payment or transfer" in prompt_source
-    assert "Marketing, scheduling, sales and business are benign without these" in prompt_source
+    assert "Sales, business or finance discussion is info unless it explicitly requests action" in prompt_source
 
 def test_phi4_prompt_forbids_not_suspicious_payment_clean_vt_reasoning():
     prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
     assert "JSON only" in prompt_source
     assert "payment or transfer" in prompt_source
-    assert "content only; no verdict/checks" in prompt_source
-    assert '"signals"' in prompt_source
+    assert "no verdict or technical checks" in prompt_source
+    assert '"signals"' not in prompt_source
     assert '"asks_to_click_link"' not in prompt_source
     assert '"content_risk"' not in prompt_source
 
@@ -92,7 +92,7 @@ def test_phi4_prompt_forbids_not_suspicious_payment_clean_vt_reasoning():
 def test_phi4_gets_extracted_link_for_invoice_payment_request_without_vt():
     prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "META link/file supplies an invoice/payment channel" in prompt_source
+    assert "META can identify a supplied link/file channel" in prompt_source
     assert "DMARC" not in prompt_source
     assert "VirusTotal" not in prompt_source
 

@@ -30,8 +30,9 @@ def test_phi4_prompt_says_link_alone_is_not_suspicious():
 
     assert "Here is our monthly update" in prompt
     assert "A link or urgency alone is neutral" in prompt_source
+    assert "visit_link=explicit browsing only if no more specific action" in prompt_source
     assert "VirusTotal" not in prompt
-    assert "url_rep=clean:1" in prompt
+    assert "url_rep" not in prompt
 
 
 def test_phi4_receives_only_the_presence_of_a_direct_ip_link():
@@ -58,13 +59,13 @@ def test_phi4_receives_only_the_presence_of_a_direct_ip_link():
     })
 
     assert "META: links=1; attachments=0" in prompt
-    assert "direct_ip_link=true" in prompt
+    assert "direct_ip_link" not in prompt
     assert "direct IP link" not in prompt
     assert "strong phishing infrastructure signal" not in prompt
     assert "URL with bare IP detected" not in prompt
 
 
-def test_phi4_receives_normalized_reputation_context_with_malicious_as_strong():
+def test_phi4_does_not_receive_auth_reputation_or_bert_context():
     prompt = build_fast_email_prompt({
         "subject": "Account review",
         "body_clean": "Please review your account using the supplied link.",
@@ -89,19 +90,31 @@ def test_phi4_receives_normalized_reputation_context_with_malicious_as_strong():
         "bert_ai_result": "phishing",
     })
 
-    assert "CHECKS: SPF=pass; DKIM=none; DMARC=fail" in prompt
-    assert "url_rep=malicious:1" in prompt
-    assert "file_rep=suspicious:1" in prompt
-    assert "domain_rep=malicious:1" in prompt
-    assert "hop_rep=low_risk:1" in prompt
-    assert "BERT=phishing" in prompt
-    assert "malicious URL/domain/file=strong phishing evidence" in (
-        llm_context_analyzer.TASK_INSTRUCTIONS
-    )
+    for hidden_check in (
+        "CHECKS:", "SPF=", "DKIM=", "DMARC=", "url_rep", "file_rep",
+        "domain_rep", "hop_rep", "BERT=",
+    ):
+        assert hidden_check not in prompt
+    assert "technical checks" in llm_context_analyzer.TASK_INSTRUCTIONS
 
 
 def test_phi4_maps_response_to_claimed_account_alert_to_verification_action():
     prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "response to a claimed security alert via supplied channel" in prompt_source
-    assert "For confirm/deny/report of alleged account activity, use verify_account" in prompt_source
+    assert "verify_account=confirm/deny/report account activity" in prompt_source
+
+
+def test_extracted_footer_link_is_metadata_not_a_standalone_body_action():
+    prompt = build_fast_email_prompt({
+        "subject": "Monthly update",
+        "body_for_ai": "Here is the monthly service update.",
+        "links": [{
+            "url": "https://newsletter.example/unsubscribe",
+            "host": "newsletter.example",
+            "source": "html_href",
+        }],
+        "attachments": [],
+    })
+
+    assert "META: links=1" in prompt
+    assert "[URL LINK]" not in prompt

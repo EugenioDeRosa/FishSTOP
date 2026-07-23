@@ -20,7 +20,7 @@ OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
 OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "140"))
 GITHUB_MODELS_MAX_TOKENS = int(os.getenv("GITHUB_MODELS_MAX_TOKENS", "140"))
 LLM_PROVIDER = os.getenv("FISHSTOP_LLM_PROVIDER", "auto").strip().lower()
-PROMPT_VERSION = "semantic-policy-v18-compact-checks"
+PROMPT_VERSION = "semantic-policy-v20-intent-only"
 
 
 def _github_models_token() -> str:
@@ -72,18 +72,18 @@ SYSTEM_MESSAGE = (
 )
 
 TASK_INSTRUCTIONS = (
-    "Assess SUBJECT+EMAIL first; CHECKS may affect only check_relation. A link or urgency alone is neutral. "
-    "Risky: credentials/sensitive data, payment or transfer, account verify/change or response to a claimed security alert via supplied channel, reward, bypass. "
-    "Marketing, scheduling, sales and business are benign without these. META link/file supplies an invoice/payment channel. "
-    "For confirm/deny/report of alleged account activity, use verify_account. "
-    "Then compare CHECKS: auth=identity; BERT=support only; low_risk=context; malicious URL/domain/file=strong phishing evidence; "
-    "hop=support only. Use present facts.\n"
+    "Identify the email's main purpose and most specific requested action. Ignore footer/unsubscribe links. "
+    "A link or urgency alone is neutral; do not infer credentials unless explicitly requested. "
+    "Sales, business or finance discussion is info unless it explicitly requests action. META can identify a supplied link/file channel. "
+    "Actions: info=information/marketing without a concrete risky action; visit_link=explicit browsing only if no more specific action; "
+    "open_attachment; reply; provide_information=submit personal/confidential data; provide_credentials; "
+    "payment=explicit payment or transfer/debt/fine/invoice; change_settings=create/reset password or account settings; "
+    "verify_account=confirm/deny/report account activity; claim_reward=prize/bonus/refund/airdrop/withdrawal; bypass; other.\n"
     "JSON only:\n"
     "{\"action\":\"none|info|visit_link|open_attachment|reply|provide_information|provide_credentials|payment|change_settings|"
     "verify_account|claim_reward|bypass|other\",\"channel\":\"none|known_procedure|link|form|attachment|reply|phone|unclear\","
-    "\"signals\":[],\"check_relation\":\"supports|conflicts|mixed|none\",\"summary\":\"The subject and body ...\"}\n"
-    "Signals: click, open_attachment, credentials, sensitive_info, payment, verify, reward, financial_incentive, "
-    "change_settings, bypass, urgency, risky_urgency, deception. Summary: English, <=25 words; content only; no verdict/checks.\n"
+    "\"summary\":\"...\"}\n"
+    "Summary: English, <=25 words; describe the purpose/request; no verdict or technical checks.\n"
 )
 
 PHI4_OUTPUT_SCHEMA = {
@@ -104,26 +104,9 @@ PHI4_OUTPUT_SCHEMA = {
                 "attachment", "reply", "phone", "unclear",
             ],
         },
-        "signals": {
-            "type": "array",
-            "items": {
-                "type": "string",
-                "enum": [
-                    "click", "open_attachment", "credentials", "sensitive_info",
-                    "payment", "verify", "reward", "financial_incentive",
-                    "change_settings", "bypass", "urgency", "risky_urgency", "deception",
-                ],
-            },
-            "maxItems": 8,
-            "uniqueItems": True,
-        },
-        "check_relation": {
-            "type": "string",
-            "enum": ["supports", "conflicts", "mixed", "none"],
-        },
         "summary": {"type": "string", "maxLength": 240},
     },
-    "required": ["action", "channel", "signals", "check_relation", "summary"],
+    "required": ["action", "channel", "summary"],
     "additionalProperties": False,
 }
 
@@ -311,92 +294,6 @@ def _abuse_reputation_label(rep: dict) -> str:
     return "clean" if score == 0 else "low_risk"
 
 
-def _reputation_counts(labels) -> str:
-    counts: dict[str, int] = {}
-    for label in labels:
-        label = str(label or "").lower()
-        if label not in {"clean", "low_risk", "suspicious", "malicious"}:
-            continue
-        counts[label] = counts.get(label, 0) + 1
-    order = ("malicious", "suspicious", "low_risk", "clean")
-    return ",".join(f"{label}:{counts[label]}" for label in order if counts.get(label))
-
-
-def _compact_checks_for_phi4(soc: dict) -> str:
-    """Expose only normalized, available checks; omit verbose provider payloads."""
-    checks: list[str] = []
-
-    auth = [
-        f"{name}={status}"
-        for name in ("SPF", "DKIM", "DMARC")
-        if (status := _auth_status(soc, name)) not in {"", "unknown"}
-    ]
-    checks.extend(auth)
-
-    identity = []
-    if soc.get("reply_to_mismatch"):
-        identity.append("reply_to_mismatch")
-    if soc.get("return_path_domain_mismatch"):
-        identity.append("return_path_mismatch")
-    if soc.get("display_name_spoofing"):
-        identity.append("display_name_spoofing")
-    if identity:
-        checks.append("identity=" + ",".join(identity))
-
-    url_reputation = _reputation_counts(
-        str(rep.get("status") or "").lower()
-        for rep in (soc.get("link_reputation") or {}).values()
-    )
-    if url_reputation:
-        checks.append(f"url_rep={url_reputation}")
-
-    file_reputation = _reputation_counts(
-        str((att.get("file_reputation") or {}).get("status") or "").lower()
-        for att in (soc.get("attachments") or [])
-    )
-    if file_reputation:
-        checks.append(f"file_rep={file_reputation}")
-
-    domain_reputation = _reputation_counts(
-        _abuse_reputation_label(rep)
-        for rep in (soc.get("domain_reputation") or {}).values()
-    )
-    if domain_reputation:
-        checks.append(f"domain_rep={domain_reputation}")
-
-    hop_reputation = _reputation_counts(
-        _abuse_reputation_label(rep)
-        for rep in (soc.get("hop_reputation") or {}).values()
-    )
-    if hop_reputation:
-        checks.append(f"hop_rep={hop_reputation}")
-
-    pdf_labels = []
-    for att in (soc.get("attachments") or []):
-        pdf = att.get("pdf_security") or {}
-        risk = str(pdf.get("risk_level") or "").lower()
-        if pdf.get("suspicious") and risk in {"high", "critical"}:
-            pdf_labels.append("malicious")
-        elif pdf.get("suspicious") or risk == "medium":
-            pdf_labels.append("suspicious")
-        elif pdf.get("is_pdf"):
-            pdf_labels.append("clean")
-    pdf_reputation = _reputation_counts(pdf_labels)
-    if pdf_reputation:
-        checks.append(f"pdf={pdf_reputation}")
-
-    if any(link.get("is_ip") for link in (soc.get("links") or [])):
-        checks.append("direct_ip_link=true")
-    if soc.get("lookalike_alerts"):
-        checks.append(f"lookalike_domains={len(soc['lookalike_alerts'])}")
-
-    bert = str(soc.get("bert_ai_result") or "").strip().lower()
-    if bert in {"phishing", "malicious", "legitimate", "benign", "uncertain", "inconclusive"}:
-        checks.append(f"BERT={bert}")
-
-    return "; ".join(checks) if checks else "none"
-
-
 def _pdf_indicator_summary(pdf_security: dict) -> str:
     indicators = pdf_security.get("indicators") or []
     if not indicators:
@@ -542,7 +439,10 @@ def build_fast_email_prompt(soc: dict) -> str:
     links = soc.get("links") or []
     attachments = soc.get("attachments") or []
     subject = compact_ai_body(str(soc.get("subject") or "(no subject)"))
-    compact_body = compact_ai_body(body, has_extracted_links=bool(links))
+    # META already carries extracted-link presence. Adding a standalone marker
+    # for every HTML/footer URL biases small models toward visit_link even when
+    # the message's main action is unrelated.
+    compact_body = compact_ai_body(body, has_extracted_links=False)
     attachment_types = sorted({
         str(att.get("extension_from_filename") or att.get("content_type") or "file").lower()
         for att in attachments
@@ -555,7 +455,6 @@ def build_fast_email_prompt(soc: dict) -> str:
         _CONTENT_BEGIN_MARKER,
         _clip(compact_body, 1200),
         _CONTENT_END_MARKER,
-        f"CHECKS: {_compact_checks_for_phi4(soc)}",
     ])
 
 
@@ -660,15 +559,11 @@ def normalize_semantic_extraction(raw: dict) -> dict:
         asks_for_credentials = False
 
     summary = raw.get("summary") or raw.get("content_summary")
-    sensitive_information = "sensitive_info" in signals or _as_bool(
-        raw.get("asks_for_sensitive_information")
+    sensitive_information = (
+        requested_action == "provide_information"
+        or "sensitive_info" in signals
+        or _as_bool(raw.get("asks_for_sensitive_information"))
     )
-    if requested_action == "provide_information" and not sensitive_information:
-        requested_action = "informational"
-        summary = (
-            "The subject and body contain an operational request without asking the recipient "
-            "to disclose sensitive information."
-        )
     return {
         "requested_action": requested_action,
         "action_channel": action_channel,
@@ -719,11 +614,6 @@ def normalize_semantic_extraction(raw: dict) -> dict:
         "urgency_present": "urgency" in signals or "risky_urgency" in signals or _as_bool(raw.get("urgency_present")),
         "urgency_targets_risky_action": "risky_urgency" in signals or _as_bool(raw.get("urgency_targets_risky_action")),
         "impersonation_or_deception": "deception" in signals or _as_bool(raw.get("impersonation_or_deception")),
-        "model_check_relation": _enum(
-            raw.get("check_relation"),
-            {"supports", "conflicts", "mixed", "none"},
-            "none",
-        ),
         "model_content_risk": "benign",
         "confidence": _confidence(raw.get("confidence")),
         "reason": _clip(raw.get("reason") or "No semantic explanation returned.", 320),
@@ -769,6 +659,98 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
     # or supplied channel remains informational.
     message_text = _body_context_for_llm(soc)
     message_text = f"{soc.get('subject') or ''}\n{message_text}".lower()
+
+    # Phi occasionally uses the rare "bypass" label for ordinary advertising
+    # or an unsubscribe link. Keep that high-risk label only when the message
+    # actually asks the recipient to evade a normal control or procedure.
+    bypass_language = bool(re.search(
+        r"\b(?:bypass|circumvent|evade|avoid\s+(?:approval|security|procedure)|"
+        r"ignore\s+(?:policy|procedure|security)|outside\s+(?:the\s+)?process|"
+        r"aggir\w*|elud\w*|saltare\s+(?:la\s+)?procedura)\b",
+        message_text,
+        re.IGNORECASE,
+    ))
+    if semantic["requested_action"] == "bypass_procedure" and not bypass_language:
+        semantic["requested_action"] = "visit_link" if links else "informational"
+        semantic["asks_to_bypass_procedure"] = False
+        semantic["asks_to_click_link"] = bool(links)
+        semantic["action_channel"] = "supplied_link" if links else "none"
+        semantic["content_summary"] = (
+            "The subject and body present an offer and invite the recipient to visit a linked page"
+            if links
+            else "The subject and body present information without asking the recipient to bypass a procedure"
+        )
+
+    # Correct only explicit create/reset/change-password requests. A mere
+    # mention of passwords must not become an account-change action.
+    password_change = bool(re.search(
+        r"\b(?:create|set|reset|change|choose|crea(?:te)?|imposta|reimposta|"
+        r"camb(?:ia|iare)|cree|crear|restablecer|ändern|zurücksetzen|erstellen)\b"
+        r"[^\n.!?]{0,35}\b(?:password|passwort|contrase(?:ñ|n)a)\b|"
+        r"\b(?:password|passwort|contrase(?:ñ|n)a)\b[^\n.!?]{0,25}"
+        r"\b(?:create|set|reset|change|crea|imposta|cree|erstellen|zurücksetzen)\b",
+        message_text,
+        re.IGNORECASE,
+    ))
+    if links and password_change:
+        semantic["requested_action"] = "change_account_settings"
+        semantic["asks_to_change_account_settings"] = True
+        semantic["asks_for_credentials"] = False
+        semantic["asks_to_click_link"] = True
+        semantic["action_channel"] = "supplied_link"
+
+    explicit_data_submission = bool(re.search(
+        r"\b(?:enter|provide|submit|confirm|update|fill\s+in|trage\w*|"
+        r"best[aä]tig\w*|inser\w*|fornisc\w*|conferm\w*)\b"
+        r"[^\n.!?]{0,45}\b(?:your|ihre|ihr|tuoi|tua|su)\b"
+        r"[^\n.!?]{0,18}\b(?:data|details|information|address|daten|datein|adresse|"
+        r"informazioni|dati|indirizzo|datos|direcci[oó]n)\b",
+        message_text,
+        re.IGNORECASE,
+    ))
+    if links and explicit_data_submission:
+        semantic["requested_action"] = "provide_information"
+        semantic["asks_for_sensitive_information"] = True
+        semantic["asks_to_click_link"] = True
+        semantic["action_channel"] = "supplied_link"
+        semantic["content_summary"] = (
+            "The subject and body ask the recipient to submit personal information through a linked page"
+        )
+
+    # Reward lures are defined by a benefit plus an explicit obtain/participate
+    # action. This prevents a generic link from becoming a reward while fixing
+    # common "claim airdrop/free spins/bonus/giveaway" misclassifications.
+    reward_context = bool(re.search(
+        r"\b(?:reward|prize|bonus|airdrop|free\s+spins?|giveaway|withdrawal|"
+        r"cashback|refund|won|winner|gewinn|gewinnspiel|gewonnen|premio|ricompensa|"
+        r"rimborso|sorteo|reembolso)\b",
+        message_text,
+        re.IGNORECASE,
+    ))
+    reward_action = bool(re.search(
+        r"\b(?:claim|redeem|collect|get|secure|receive|withdraw|participat\w*|"
+        r"join|enter|sichern|teilnehm\w*|erhalt\w*|reclam\w*|resgat\w*|"
+        r"partecipa\w*|riscuot\w*|ritira\w*)\b",
+        message_text,
+        re.IGNORECASE,
+    ))
+    if (
+        links
+        and reward_context
+        and reward_action
+        and semantic["requested_action"] != "provide_information"
+    ):
+        misread_as_payment = semantic["asks_for_payment"]
+        semantic["requested_action"] = "claim_reward"
+        semantic["asks_to_claim_reward"] = True
+        semantic["financial_incentive_present"] = True
+        semantic["asks_for_payment"] = False
+        semantic["asks_to_click_link"] = True
+        semantic["action_channel"] = "supplied_link"
+        if misread_as_payment:
+            semantic["content_summary"] = (
+                "The subject and body offer a financial bonus and ask the recipient to claim it through a supplied link"
+            )
     account_context = bool(re.search(
         r"\b(?:account|konto|compte|cuenta|profilo|account\s+microsoft|onlinebanking|online-banking)\b",
         message_text,
@@ -818,7 +800,15 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
         message_text,
         re.IGNORECASE,
     ))
-    if links and verification_language and financial_account_context and not security_alert_via_supplied_channel:
+    if (
+        links
+        and verification_language
+        and financial_account_context
+        and not security_alert_via_supplied_channel
+        and semantic["requested_action"] not in {
+            "claim_reward", "pay_or_transfer", "change_account_settings",
+        }
+    ):
         semantic["requested_action"] = "verify_account"
         semantic["asks_to_verify_account"] = True
         semantic["asks_to_click_link"] = True
@@ -1317,13 +1307,26 @@ def _fallback_content_summary(soc: dict, semantic: dict) -> str:
 
 def _valid_content_summary(value: str) -> bool:
     summary = re.sub(r"\s+", " ", str(value or "")).strip().lower()
-    if not summary.startswith(("the email body", "the subject and body")):
+    if not summary or summary.startswith((
+        "untrusted email",
+        "suspicious email",
+        "potential phishing",
+        "possible phishing",
+    )):
         return False
     if any(unsupported in summary for unsupported in (
         "official portal", "certified portal", "if intercepted", "could be intercepted",
+        "bert", "virustotal", "abuseipdb", "spf", "dkim", "dmarc",
+        "technical checks", "sender is authenticated", "authentication checks",
     )):
         return False
-    return len(summary.split()) <= 35
+    if re.search(
+        r"\b(?:email|message|it|this)\s+(?:is|appears|seems|looks|is likely)\s+"
+        r"(?:to\s+be\s+)?(?:a\s+)?(?:legitimate|phishing(?:\s+attempt)?)\b",
+        summary,
+    ):
+        return False
+    return 4 <= len(summary.split()) <= 35
 
 
 def _request_content_summary(soc: dict, use_ollama: bool, model: str, timeout: int) -> str:

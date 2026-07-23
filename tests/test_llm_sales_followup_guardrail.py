@@ -43,6 +43,6 @@ def test_sales_followup_with_bert_and_auth_medium_flags_is_not_bec_by_itself():
     assert "torno a contattarla un'ultima volta" in prompt
     assert "BERT result" not in prompt
     assert "SUBJECT: Servizio post-vendita" in prompt
-    assert "Marketing" in prompt_source
+    assert "marketing" in prompt_source
     assert "business" in prompt_source
-    assert "benign without these" in prompt_source
+    assert "info unless it explicitly requests action" in prompt_source

@@ -57,4 +57,4 @@ def test_business_finance_terms_are_not_payment_request_without_explicit_ask():
 
     assert "payment or transfer" in prompt_source
     assert "business" in prompt_source
-    assert "benign without these" in prompt_source
+    assert "info unless it explicitly requests action" in prompt_source
