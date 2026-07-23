@@ -1,0 +1,89 @@
+Received: from GV2PR01MB12762.eurprd01.prod.exchangelabs.com
+ (2603:10a6:150:339::17) by PAXPR01MB9097.eurprd01.prod.exchangelabs.com with
+ HTTPS; Wed, 17 Jun 2026 16:31:47 +0000
+Authentication-Results: dkim=none (message not signed)
+ header.d=none;dmarc=none action=none header.from=unibo.it;
+Received: from VI1PR01MB6781.eurprd01.prod.exchangelabs.com
+ (2603:10a6:800:182::10) by GV2PR01MB12762.eurprd01.prod.exchangelabs.com
+ (2603:10a6:150:339::17) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.21.113.18; Wed, 17 Jun
+ 2026 16:31:44 +0000
+Received: from VI1PR01MB6781.eurprd01.prod.exchangelabs.com
+ ([fe80::87b3:10df:402:7645]) by VI1PR01MB6781.eurprd01.prod.exchangelabs.com
+ ([fe80::87b3:10df:402:7645%5]) with mapi id 15.21.0139.009; Wed, 17 Jun 2026
+ 16:31:43 +0000
+Message-ID: <f2b3747a-5a21-42aa-8836-692196c7aeef@unibo.it>
+Date: Wed, 17 Jun 2026 18:31:42 +0200
+User-Agent: Mozilla Thunderbird
+Content-Language: en-US
+To: "disi-cybsec-master@unibo.it" <disi-cybsec-master@unibo.it>
+CC: "Tutor didattici del Master in Cybersecurity: from design to operations
+ (lista non certificata)" <disi-cybsec-tutormaster@unibo.it>, Alessandro
+ Amoroso <alessandro.amoroso@unibo.it>
+From: Marco Prandini <marco.prandini@unibo.it>
+Subject: Last day program
+Content-Type: text/plain; charset="UTF-8"; format=flowed
+Content-Transfer-Encoding: 8bit
+X-MS-Exchange-Organization-ExpirationStartTime: 17 Jun 2026 16:31:43.5551
+ (UTC)
+X-MS-Exchange-Organization-ExpirationStartTimeReason: OriginalSubmit
+X-MS-Exchange-Organization-ExpirationInterval: 1:00:00:00.0000000
+X-MS-Exchange-Organization-ExpirationIntervalReason: OriginalSubmit
+X-MS-Exchange-Organization-Network-Message-Id: 3eb251b0-3b44-4c33-36c9-08decc8dead6
+X-MS-Exchange-Organization-AuthSource: VI1PR01MB6781.eurprd01.prod.exchangelabs.com
+X-MS-Exchange-Organization-AuthAs: Internal
+X-MS-Exchange-Organization-AuthMechanism: 14
+X-ClientProxiedBy: MI1PEPF000008C4.ITAP293.PROD.OUTLOOK.COM
+ (2603:10a6:298:1::426) To VI1PR01MB6781.eurprd01.prod.exchangelabs.com
+ (2603:10a6:800:182::10)
+X-MS-Exchange-Organization-MessageDirectionality: Originating
+Return-Path: marco.prandini@unibo.it
+X-MS-PublicTrafficType: Email
+X-MS-TrafficTypeDiagnostic: VI1PR01MB6781:EE_|GV2PR01MB12762:EE_|PAXPR01MB9097:EE_
+X-MS-Office365-Filtering-Correlation-Id: 3eb251b0-3b44-4c33-36c9-08decc8dead6
+X-LD-Processed: e99647dc-1b08-454a-bf8c-699181b389ab,ExtFwd
+X-MS-Exchange-Organization-SCL: 1
+X-Microsoft-Antispam: BCL:0;ARA:13230040|23010399003|366016|11063799006|56012099006|18002099003|41050700001;
+X-Forefront-Antispam-Report: CIP:255.255.255.255;CTRY:;LANG:en;SCL:1;SRV:;IPV:NLI;SFV:NSPM;H:VI1PR01MB6781.eurprd01.prod.exchangelabs.com;PTR:;CAT:NONE;SFS:(13230040)(23010399003)(366016)(11063799006)(56012099006)(18002099003)(41050700001);DIR:INT;
+X-Auto-Response-Suppress: DR, RN, NRN, OOF, AutoReply
+X-MS-Exchange-CrossTenant-Network-Message-Id: 3eb251b0-3b44-4c33-36c9-08decc8dead6
+X-MS-Exchange-CrossTenant-AuthSource: VI1PR01MB6781.eurprd01.prod.exchangelabs.com
+X-MS-Exchange-CrossTenant-AuthAs: Internal
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 17 Jun 2026 16:31:43.7067
+ (UTC)
+X-MS-Exchange-CrossTenant-FromEntityHeader: Hosted
+X-MS-Exchange-CrossTenant-Id: e99647dc-1b08-454a-bf8c-699181b389ab
+X-MS-Exchange-CrossTenant-MailboxType: HOSTED
+X-MS-Exchange-CrossTenant-UserPrincipalName: 6HZYoAn+72cfgyNgC77SX4cJnl9J3kGnhdIZk0NKBLZzxZmgoFbqy7zph8/W9qN3Y7leIUXL8KzAphyAkK+D5A==
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: GV2PR01MB12762
+X-MS-Exchange-Transport-EndToEndLatency: 00:00:03.4975892
+X-MS-Exchange-Processed-By-BccFoldering: 15.21.0139.008
+X-Microsoft-Antispam-Mailbox-Delivery:
+	ucf:0;jmr:0;auth:0;dest:I;ENG:(910005)(920097)(425001)(930201)(20251009189)(140003);
+X-Microsoft-Antispam-Message-Info:
+	wM6LcUIGyMbpDLJtJI1rNBYBDArntvsB+teYAyVfGD+PGocRjp164y9puuGyp/iWbkFJpcZ7239nGrbbMqTw1dmbmUOB/yRpku4mAqkkAZI1uHykap3zgQT7R4WJnjcd1S6VAYu0/wpA1EJkwJFznAqijdT1atWFYsmyS7OsUuLjDaGtXbtqPnlqbaFXILn0gV0rqk7ZSdJRvqvaNcmoWCmGSRhLA8dvqix5cZvro8qscGYwXrK3o5/6yUxR4IsBeX4FoyQmvCjpFiuDOzLqv5qy7XC+bNysNfuqUreHlAIoFPEWreA0UOc4UlSd1uSiMps+lCIIX8BS/etlY0Qbeq1bBI/9GYAKOEG7MQe9LnWLdZipn0jkNgus0LNotwaQFLQYT3/wshG1AnKPtLk/0m/NEdjXZYlbN7Q/aHbZiRGIg9ng226l656xT/8JJpbYRzajNJho2Q9CCCfWL3ebdEY0hamPUo3EyZ1T4cu2hWKjQDwJiEZZGrMYPWKQ/daNJ6KlCnIk9qsbyhmyJsjW7pFkLuiydTX312nDutJBgTxbFlKnaKXAt6TvkjtYWesE5cMor0WGgV/5KmlaMAYzeV6qb4E5V5W3vE/nYuB7VGW7+DWTFVUh7+1O4GCJxYPDlp4T9wQ0IqgJJxNZ8b6nCUoRk+fjLqU4WFaWp96qEHscrnU3TfyN7esQ6ZyeDTuym+42bBZschLTThN82CPNmwUZBHUdEjVRowXVlvmYccQPUMBFD44pn9NgBBFjeKiaPAcF0W23Lhs/sTcnl/wn4+08ICRAStO8bUbjWiEyLmaYmFGZ2YwdvTGIZemSdany
+MIME-Version: 1.0
+
+Dear Students,
+
+I apologise for having overlooked that the higher number of attendees, 
+compared to previous editions, has made the time allotted for prof. 
+Losio's exam very tight.
+
+Considering that prof. Amoroso's program is even wider, please be 
+advised that we will use most of the time available on Friday 26th 
+(14-18) for the exam. I leave him and the tutors in charge of finding 
+the most suitable organization, most likely entirely online, and 
+possibly with a set order of appearance if deemed appropriate by prof. 
+Amoroso.
+
+I would like to take the stage to send a (not so) final greeting to all 
+of you, if you can connect for just a few minutes at the end, let's say 
+17:30 all together. Unfortunately I cannot propose to do it at the 
+opening, because even if my flight from Brussels is on time, I will be 
+disembarking right then.
+
+Best regards
+
+  Marco Prandini
+

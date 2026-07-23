@@ -1,0 +1,161 @@
+Received: from DB9PR01MB11786.eurprd01.prod.exchangelabs.com
+ (2603:10a6:10:606::11) by DU0PR01MB9096.eurprd01.prod.exchangelabs.com with
+ HTTPS; Wed, 1 Jul 2026 09:55:43 +0000
+Authentication-Results: dkim=none (message not signed)
+ header.d=none;dmarc=none action=none header.from=unibo.it;
+Received: from DBAPR01MB6774.eurprd01.prod.exchangelabs.com
+ (2603:10a6:10:185::23) by DB9PR01MB11786.eurprd01.prod.exchangelabs.com
+ (2603:10a6:10:606::11) with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.21.181.8; Wed, 1 Jul 2026
+ 09:55:43 +0000
+Received: from DBAPR01MB6774.eurprd01.prod.exchangelabs.com
+ ([fe80::fbcd:bbf7:f7fc:81a9]) by DBAPR01MB6774.eurprd01.prod.exchangelabs.com
+ ([fe80::fbcd:bbf7:f7fc:81a9%5]) with mapi id 15.21.0181.008; Wed, 1 Jul 2026
+ 09:55:43 +0000
+Content-Type: multipart/alternative;
+	boundary="------------C9K00WR2lMm0AVrJNi8f95y7"
+Message-ID: <c617ea27-e171-4ca1-ac34-937a4405e1b1@unibo.it>
+Date: Wed, 1 Jul 2026 11:55:41 +0200
+User-Agent: Mozilla Thunderbird
+Subject: Re: Aggiornamento tirocinio e informazioni per richiesta Relatore di
+ tesi
+To: "Eugenio Maria De Rosa - eugeniomaria.derosa@studio.unibo.it"
+	<eugeniomaria.derosa@studio.unibo.it>
+References: <DU0PR01MB90962457FB43177F490B2240A4F62@DU0PR01MB9096.eurprd01.prod.exchangelabs.com>
+Content-Language: en-US
+From: Marco Prandini <marco.prandini@unibo.it>
+In-Reply-To: <DU0PR01MB90962457FB43177F490B2240A4F62@DU0PR01MB9096.eurprd01.prod.exchangelabs.com>
+X-MS-Exchange-Organization-ExpirationStartTime: 01 Jul 2026 09:55:42.9695
+ (UTC)
+X-MS-Exchange-Organization-ExpirationStartTimeReason: OriginalSubmit
+X-MS-Exchange-Organization-ExpirationInterval: 1:00:00:00.0000000
+X-MS-Exchange-Organization-ExpirationIntervalReason: OriginalSubmit
+X-MS-Exchange-Organization-Network-Message-Id: cb66b695-8109-45f3-134e-08ded756ea35
+X-MS-Exchange-Organization-AuthSource: DBAPR01MB6774.eurprd01.prod.exchangelabs.com
+X-MS-Exchange-Organization-AuthAs: Internal
+X-MS-Exchange-Organization-AuthMechanism: 14
+X-ClientProxiedBy: MI1P293CA0026.ITAP293.PROD.OUTLOOK.COM
+ (2603:10a6:290:3::10) To DBAPR01MB6774.eurprd01.prod.exchangelabs.com
+ (2603:10a6:10:185::23)
+X-MS-Exchange-Organization-MessageDirectionality: Originating
+Return-Path: marco.prandini@unibo.it
+X-MS-PublicTrafficType: Email
+X-MS-TrafficTypeDiagnostic: DBAPR01MB6774:EE_|DB9PR01MB11786:EE_|DU0PR01MB9096:EE_
+X-MS-Office365-Filtering-Correlation-Id: cb66b695-8109-45f3-134e-08ded756ea35
+X-MS-Exchange-Organization-SCL: 1
+X-Microsoft-Antispam: BCL:0;ARA:13230040|366016|23010399003|18002099003|22082099003|11063799006|56012099006|8096899003|41050700001;
+X-Forefront-Antispam-Report: CIP:255.255.255.255;CTRY:;LANG:it;SCL:1;SRV:;IPV:NLI;SFV:NSPM;H:DBAPR01MB6774.eurprd01.prod.exchangelabs.com;PTR:;CAT:NONE;SFS:(13230040)(366016)(23010399003)(18002099003)(22082099003)(11063799006)(56012099006)(8096899003)(41050700001);DIR:INT;
+X-MS-Exchange-CrossTenant-Network-Message-Id: cb66b695-8109-45f3-134e-08ded756ea35
+X-MS-Exchange-CrossTenant-AuthSource: DBAPR01MB6774.eurprd01.prod.exchangelabs.com
+X-MS-Exchange-CrossTenant-AuthAs: Internal
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 01 Jul 2026 09:55:43.0854
+ (UTC)
+X-MS-Exchange-CrossTenant-FromEntityHeader: Hosted
+X-MS-Exchange-CrossTenant-Id: e99647dc-1b08-454a-bf8c-699181b389ab
+X-MS-Exchange-CrossTenant-MailboxType: HOSTED
+X-MS-Exchange-CrossTenant-UserPrincipalName: ADz3a+P5yRA6rCpIOQqJ0sV4JaBRQrTuJxpNonVtT/nojOIXk7yJ1sUJjar/eAp9ICGhxZnhvVhf8FGTTEPNGA==
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: DB9PR01MB11786
+X-MS-Exchange-Transport-EndToEndLatency: 00:00:00.8704096
+X-MS-Exchange-Processed-By-BccFoldering: 15.21.0181.008
+X-Microsoft-Antispam-Mailbox-Delivery:
+	ucf:0;jmr:0;auth:0;dest:I;ENG:(910005)(944506478)(944626604)(920097)(425001)(930201)(20251009189)(140003);
+X-Microsoft-Antispam-Message-Info:
+	OLmU3I9ZHXifhjtclbki+AT3tIPI9fhrSppPvf8y6WUkS5iMFz4aoehoiMrL9f5lWnA1jCdB9UoQcbL6c1OF9Ktx5Ry2mKIOJoCqNdvq373mGKSDeDzZ0xe8rfLkGcc01hvKq2Bi57tXuajZJkDvIIxkKinKvuL4vJyl+oyx7VFg/xLpNKbu9bWMy/I0vA//j4O7KlYw3DwGx1B2xpDwfnGJ5ehBVYx30K/InP0bmhOsL785ufWw1TSJbJlVq/bexo0mBEiHau8Yy4YcmjrP3oiT3IwS7OmUDgNCH9HS533xrQz+h0KVgMt5qJchYhkWBK3y7zLMYkvHduSFW4sK7y+7Gp9okj53qJZOw3C2Dzng2BzS8lSUOmNxpcphK9ndfdvvrTIooJpnaRIt/pmwd+5/Nk9jb5qlL6iSO65NBUB1QdoiUhWcEQhR3HAG8JDDDsCpm5CDX32DMSo4nVehXBjD/B9vj04IvIdIqBURyfWt8ZVUtSjqkYnIeyGJMxKuNR41KWzr5qmv6TqbbTgpYMbmxleBoGHUa/Z0kq+4MuQqwhQBtKVacmqDVanG3UwjJgUZyVojDS2YhXneAtMAwMX/VUpClndbDZpURV1NgcICC6+bkZA2RalVeiSalB8Uq5Bxpj8Lv/FR5Z2HOyKsjJ9NZ6m3zgR1PkjlGvrOsrRxK57LNmRqTeFoFuzsWQxsx23oLMWHjR152XOw6/feXTXSHdYaLP/xKChLs1Yni34UHYMWdrXo+cl4sIL+M9mnVdYaW4PhI8CISDkXkhXFZG0L5Vn3v323pdA2jDyqmkKU8rA0LPrYDGoPI/99ymon5pRRb/X5qu8UrCUvmvWEHO7MEckimi06R2vfW5fX0IA=
+MIME-Version: 1.0
+
+--------------C9K00WR2lMm0AVrJNi8f95y7
+Content-Type: text/plain; charset="UTF-8"; format=flowed
+Content-Transfer-Encoding: 8bit
+
+Buongiorno,
+
+grazie per i commenti molto graditi, sapere di aver fatto un lavoro 
+apprezzato è la motivazione principale per continuare.
+
+Può fare riferimento a me per la relazione, ma se ha individuato tra i 
+docenti chi la può assistere più concretamente me lo segnali, grazie.
+
+
+Cordiali saluti
+
+  Marco Prandini
+
+
+On 7/1/26 11:42 AM, Eugenio Maria De Rosa - 
+eugeniomaria.derosa@studio.unibo.it wrote:
+> Gentile Prof Prandini,
+> Le scrivo per aggiornarla sull'andamento della mia esperienza di 
+> tirocinio.
+> Prima di tutto, ci tenevo a farle i miei più sinceri complimenti per 
+> l'ottima selezione dei contenuti e delle materie del nostro corso di 
+> laurea in Cybersecurity. Durante queste settimane di tirocinio, sto 
+> riscontrando quotidianamente quanto gli argomenti trattati a lezione 
+> siano stati utili.
+> Il tirocinio sta procedendo molto bene e l'ambiente è estremamente 
+> stimolante. A questo proposito, ho già sviluppato un'idea di tesi 
+> legata alle attività che sto svolgendo (detection e remediation delle 
+> mail di phishing) e l'ho presentata al mio responsabile aziendale, 
+> Andrea Zaffoni. Zaffoni ha accolto con molto entusiasmo la proposta, 
+> confermandomi la disponibilità dell'azienda a supportare il progetto.
+> Essendo pronto a muovere i primi passi formali per la stesura, vorrei 
+> chiederle come funzioni la procedura per la scelta del professore 
+> relatore. Devo muovermi in maniera autonoma, contattando direttamente 
+> un docente, oppure la richiesta deve passare prima da lei in qualità 
+> di coordinatore?
+> La ringrazio,
+> un saluto,
+> Eugenio Maria de Rosa.
+>
+--------------C9K00WR2lMm0AVrJNi8f95y7
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: 8bit
+
+<!DOCTYPE html><html><head>
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  </head>
+  <body>
+    <p>Buongiorno,</p>
+    <p>grazie per i commenti molto graditi, sapere di aver fatto un
+      lavoro apprezzato è la motivazione principale per continuare.</p>
+    <p>Può fare riferimento a me per la relazione, ma se ha individuato
+      tra i docenti chi la può assistere più concretamente me lo
+      segnali, grazie.</p>
+    <p><br>
+    </p>
+    <p>Cordiali saluti&nbsp;</p>
+    <p>&nbsp;Marco Prandini</p>
+    <p><br>
+    </p>
+    <div class="moz-cite-prefix">On 7/1/26 11:42 AM, Eugenio Maria De
+      Rosa - <a class="moz-txt-link-abbreviated" href="mailto:eugeniomaria.derosa@studio.unibo.it">eugeniomaria.derosa@studio.unibo.it</a> wrote:<br>
+    </div>
+    <blockquote type="cite" cite="mid:DU0PR01MB90962457FB43177F490B2240A4F62@DU0PR01MB9096.eurprd01.prod.exchangelabs.com">
+      
+      <style type="text/css" style="display:none;">P {margin-top:0;margin-bottom:0;}</style>
+      <div class="elementToProof" style="text-align: left; text-indent: 0px; white-space: pre-wrap; margin: 0px; font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+Gentile Prof Prandini,</div>
+      <div class="elementToProof" style="text-align: left; text-indent: 0px; white-space: pre-wrap; margin: 0px; font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+Le scrivo per aggiornarla sull'andamento della mia esperienza di tirocinio.</div>
+      <div class="elementToProof" style="text-align: left; text-indent: 0px; white-space: pre-wrap; margin: 0px; font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+Prima di tutto, ci tenevo a farle i miei più sinceri complimenti per l'ottima selezione dei contenuti e delle materie del nostro corso di laurea in Cybersecurity. Durante queste settimane di tirocinio, sto riscontrando quotidianamente quanto gli argomenti trattati
+ a lezione siano stati utili.</div>
+      <div class="elementToProof" style="text-align: left; text-indent: 0px; white-space: pre-wrap; margin: 0px; font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+Il tirocinio sta procedendo molto bene e l'ambiente è estremamente stimolante. A questo proposito, ho già sviluppato un'idea di tesi legata alle attività che sto svolgendo (detection e remediation delle mail di phishing) e l'ho presentata al mio responsabile
+ aziendale, Andrea Zaffoni. Zaffoni ha accolto con molto entusiasmo la proposta, confermandomi la disponibilità dell'azienda a supportare il progetto.</div>
+      <div class="elementToProof" style="text-align: left; text-indent: 0px; white-space: pre-wrap; margin: 0px; font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+Essendo pronto a muovere i primi passi formali per la stesura, vorrei chiederle come funzioni la procedura per la scelta del professore relatore. Devo muovermi in maniera autonoma, contattando direttamente un docente, oppure la richiesta deve passare prima
+ da lei in qualità di coordinatore?</div>
+      <div class="elementToProof" style="text-align: left; text-indent: 0px; white-space: pre-wrap; margin: 0px; font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+La ringrazio,</div>
+      <div class="elementToProof" style="text-align: left; text-indent: 0px; white-space: pre-wrap; margin: 0px; font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+un saluto,&nbsp;</div>
+      <div class="elementToProof" style="text-align: left; text-indent: 0px; white-space: pre-wrap; margin: 0px; font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+Eugenio Maria de Rosa.&nbsp;</div>
+      <div style="font-family: Aptos, Aptos_EmbeddedFont, Aptos_MSFontService, Calibri, Helvetica, sans-serif; font-size: 12pt; color: rgb(0, 0, 0);">
+        <br>
+      </div>
+    </blockquote>
+  </body>
+</html>
+
+--------------C9K00WR2lMm0AVrJNi8f95y7--

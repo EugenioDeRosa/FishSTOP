@@ -1,0 +1,547 @@
+Delivered-To: eugeniomariaderosa@gmail.com
+Received: by 2002:a05:6504:6287:b0:304:3396:9ec3 with SMTP id eb7csp520419ltb;
+        Tue, 23 Jun 2026 22:58:52 -0700 (PDT)
+X-Received: by 2002:a05:600d:6452:10b0:492:37a5:422d with SMTP id 5b1f17b1804b1-49260840116mr16684755e9.7.1782280731999;
+        Tue, 23 Jun 2026 22:58:51 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1782280731; cv=none;
+        d=google.com; s=arc-20260327;
+        b=ILmDvwPSpnIUOr8sZZugTj9keesUYr/Jg9+w9jLyqO03NBaSPsNmFr0SVc8PK0rwHl
+         87+0Sgpq/zaj61yvlduQYCYYvY6CFUpBir+ldFSzRNWooNO4DpQk2HyGnneY3oaKdhhe
+         oJUdtMcHDYujwqu6aEHlGkxmOptEYPg9rhXEZyDIDc1NkBLfFpG1n9C4ApL/m/a6mlDZ
+         NFmrPpgsEBL8Uy7Jq2U0m3aCEdy3QAB8SnlZS2IaZD+9avUjZQCDpIaRufEr64Z6PMAh
+         Cxkti4B20kG/D2tFY5/8GlOn1sfCypT/uwi1qQXWuhvooVXonMwvwWtNSHshGhI+39ks
+         YGkA==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=date:subject:cc:to:from:message-id;
+        bh=zPWGrWHfHInxEuYthhaYsxPA8uik45zJ9XFaWWlMWq4=;
+        fh=c02nfvx6Iq4fi0SYqUaiDni1zbkt8rmji2TzCQNZu50=;
+        b=RI5/HFT3dVhCScsT6W/rPeN8xT7RftjCb1AO2RqVglQT1tPHlW2elw+iRNGkflww6w
+         vuiYyZ9ymr4mtRt1SFA0zDJhhYltG+BqZP1J82UevpV1jzoOi0TaQfYLQUSKwJ5KwzK7
+         us3JN34kEYdTomtnZkF2CG3/R8Lo40uRIOj4As36c2TGpn+HNaJFFCnLg2c492Ncd9GK
+         3y6e3wVMFml4f+SEGXx6ljlqO4KKfKtUdNR2nhJ5iHZ3PQF0gApho/mapNSZR94Xo3M0
+         w4up7x0a9rFwKVjRNMpq5BuoETUVgOQQv1s1hErhcfLU/TgQQ+PvvYJ1Hpz+4yEnf4KL
+         lGpQ==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       spf=pass (google.com: domain of return2715@6490148.251.242.36atkxei8sdf4fgh4klvt148.251.242.36wisfklalddf3vcbb2few148.251.242.36kmgksfvblhghdg0h2x0ltn148.251.242.363jldswevbfd8txblmqj8.e-mallstore.com designates 148.251.242.36 as permitted sender) smtp.mailfrom=return2715@6490148.251.242.36atkxei8sdf4fgh4klvt148.251.242.36wisfklalddf3vcbb2few148.251.242.36kmgksfvblhghdg0h2x0ltn148.251.242.363jldswevbfd8txblmqj8.e-mallstore.com
+Return-Path: <return2715@6490148.251.242.36atkxei8sdf4fgh4klvt148.251.242.36wisfklalddf3vcbb2few148.251.242.36kmgksfvblhghdg0h2x0ltn148.251.242.363jldswevbfd8txblmqj8.e-mallstore.com>
+Received: from e-mallstore.com (static.36.242.251.148.clients.your-server.de. [148.251.242.36])
+        by mx.google.com with ESMTPS id ffacd0b85a97d-46c1ea2abbdsi2042384f8f.95.2026.06.23.22.58.51
+        for <eugeniomariaderosa@gmail.com>
+        (version=TLS1 cipher=ECDHE-ECDSA-AES128-SHA bits=128/128);
+        Tue, 23 Jun 2026 22:58:51 -0700 (PDT)
+Received-SPF: pass (google.com: domain of return2715@6490148.251.242.36atkxei8sdf4fgh4klvt148.251.242.36wisfklalddf3vcbb2few148.251.242.36kmgksfvblhghdg0h2x0ltn148.251.242.363jldswevbfd8txblmqj8.e-mallstore.com designates 148.251.242.36 as permitted sender) client-ip=148.251.242.36;
+Authentication-Results: mx.google.com;
+       spf=pass (google.com: domain of return2715@6490148.251.242.36atkxei8sdf4fgh4klvt148.251.242.36wisfklalddf3vcbb2few148.251.242.36kmgksfvblhghdg0h2x0ltn148.251.242.363jldswevbfd8txblmqj8.e-mallstore.com designates 148.251.242.36 as permitted sender) smtp.mailfrom=return2715@6490148.251.242.36atkxei8sdf4fgh4klvt148.251.242.36wisfklalddf3vcbb2few148.251.242.36kmgksfvblhghdg0h2x0ltn148.251.242.363jldswevbfd8txblmqj8.e-mallstore.com
+Message-ID: <6a3b721b.b1aa2f79.2718ee.36a1SMTPIN_ADDED_MISSING@mx.google.com>
+From:Dipartimento Leroy-Merlin<Noreply-jnwdkbsf@jnwdkbsf.it>
+To: eugeniomariaderosa@gmail.com
+Cc: eugeniomariaderosa@gmail.com
+Subject:  Congratulazioni!  Avete vinto un set di utensili Dexter da 108 pezzi.
+Content-type: text/html
+Date: Wed, 24 Jun 2026 07:58:51 +0200 . 344737929
+X-Google-Sender-Delegation: LEROY-MERLIN©
+
+
+<!DOCTYPE html>
+<html lang="it">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,
+initial-scale=1.0">
+    <title>Offerta Esclusiva Leroy Merlin: Cassetta Attrezzi
+Parkside</title>
+    <style>
+        /* Reset Globale */
+        body,
+        table,
+        td,
+        a {
+            -webkit-text-size-adjust: 100%;
+            -ms-text-size-adjust: 100%;
+        }
+
+        table,
+        td {
+            mso-table-lspace: 0pt;
+            mso-table-rspace: 0pt;
+        }
+
+        img {
+            -ms-interpolation-mode: bicubic;
+            border: 0;
+        }
+
+        /* Stili Generali */
+        body {
+            margin: 0;
+            padding: 0;
+            width: 100% !important;
+            background-color: #F8F8F8;
+        }
+
+        a {
+            text-decoration: none;
+        }
+
+        .ExternalClass {
+            width: 100%;
+        }
+
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Stili Personalizzati */
+        .header-top {
+            background-color: #006400;
+            padding: 10px 0;
+            text-align: center;
+        }
+
+        .header-title {
+            font-family: Arial, sans-serif;
+            font-size: 40px;
+            font-weight: bold;
+            color: #333333;
+            margin: 10px 0 5px 0;
+        }
+
+        .main-content {
+            padding: 30px 25px;
+            text-align: left;
+            background-color: #FFFFFF;
+            border-radius: 5px;
+        }
+
+        .greeting {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333333;
+            margin-bottom: 20px;
+        }
+
+        .body-text {
+            font-size: 16px;
+            line-height: 1.6;
+            color: #333333;
+            margin-bottom: 25px;
+        }
+
+        .product-highlight {
+            font-weight: bold;
+            color: #388E00;
+        }
+
+        .deadline {
+            color: #CC0000;
+            font-weight: bold;
+            margin-top: 20px;
+        }
+
+        .cta-button {
+            display: inline-block;
+            background-color: #388E00;
+            color: #FFFFFF;
+            font-size: 20px;
+            font-weight: bold;
+            padding: 15px 30px;
+            border-radius: 5px;
+            text-decoration: none;
+            margin-top: 30px;
+            line-height: 1.2;
+            width: 90%;
+            box-sizing: border-box;
+        }
+
+        .disclaimer {
+            font-size: 11px;
+            color: #999999;
+            margin-top: 40px;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        .footer {
+            background-color: #F8F8F8;
+            padding: 20px 0;
+            font-size: 12px;
+            color: #555555;
+            text-align: center;
+        }
+
+        /* Stili Mobile */
+        @media only screen and (max-width: 600px) {
+            .header-title {
+                font-size: 32px !important;
+            }
+
+            .body-text {
+                font-size: 15px !important;
+            }
+
+            .cta-button {
+                font-size: 18px !important;
+                padding: 12px 25px !important;
+                width: 90% !important;
+            }
+        }
+    </style>
+</head>
+
+<body style="margin: 0; padding: 0;">
+
+    <table border="0" cellpadding="0" cellspacing="0" width="100%"
+role="presentation"
+        style="background-color: #F8F8F8;">
+        <tr>
+            <td align="center" style="padding: 0;">
+                <table class="container" border="0" cellpadding="0"
+cellspacing="0" width="100%" role="presentation">
+
+                    <tr>
+                        <td class="header-top"
+                            style="background-color: #006400; padding:
+10px 0; font-family: Arial, sans-serif; font-size: 14px; color:
+#FFFFFF; font-weight: bold;">
+                            Più di 4.000.000 € di offerte
+distribuite finora!
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td align="center" style="padding: 20px 0 10px
+0; font-family: Arial, sans-serif;">
+                            <p style="font-size: 14px; color: #333333;
+margin: 0 0 5px 0;">
+                                Sondaggio su
+                            </p>
+                            <p class="header-title"
+                                style="font-size: 40px; font-weight:
+bold; color: #333333; margin: 0;">
+                                LEROY MERLIN
+                            </p>
+                            <p style="font-size: 14px; color: #333333;
+margin: 5px 0 0 0;">
+                                Offerta Esclusiva per Clienti
+                            </p>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td align="center" style="padding: 0 10px 40px
+10px;">
+                            <table border="0" cellpadding="0"
+cellspacing="0" width="100%" role="presentation"
+                                style="background-color: #FFFFFF;
+border-radius: 5px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);">
+                                <tr>
+                                    <td class="main-content"
+                                        style="padding: 30px 25px;
+font-family: Arial, sans-serif;">
+
+                                        <table border="0"
+cellpadding="0" cellspacing="0" width="100%"
+                                            role="presentation">
+                                            <tr>
+                                                <td valign="top"
+style="padding-right: 20px; width: 65%;">
+                                                    <p
+class="greeting"
+                                                       
+style="font-size: 18px; font-weight: bold; color: #333333; margin: 0 0
+20px 0;">
+                                                        Gentile
+cliente di Leroy Merlin,
+                                                    </p>
+                                                    <p
+class="body-text"
+                                                       
+style="font-size: 16px; line-height: 1.6; color: #333333; margin: 0 0
+20px 0;">
+                                                        È stato
+selezionato per avere la possibilità di ricevere una
+                                                        nuovissima
+                                                        <span
+class="product-highlight" style="font-weight: bold; color:
+#388E00;">Cassetta attrezzi PARKSIDE, 108 pezzi</span>!
+                                                    </p>
+                                                    <p
+class="body-text"
+                                                       
+style="font-size: 16px; line-height: 1.6; color: #333333; margin: 0 0
+20px 0;">
+                                                        Per richiedere
+il suo premio, le basterà rispondere ad alcune
+                                                        brevi domande
+sulla sua esperienza.
+                                                    </p>
+
+                                                    <p
+class="deadline"
+                                                        style="color:
+#CC0000; font-weight: bold; margin: 0;">
+                                                        Attenzione!
+Questa offerta del sondaggio è a tempo limitato.
+                                                    </p>
+                                                </td>
+
+
+                                            </tr>
+                                            <tr>
+                                                <td valign="top"
+style="width: 35%; text-align: center;">
+                                                    <br>
+                                                    <br>
+                                                    <img
+src="https://i.imgur.com/zYgtjMa.png" alt="Cassetta attrezzi Parkside
+95 pezzi" width="250">
+                                                </td>
+                                            </tr>
+                                        </table>
+
+                                        <div style="text-align:
+center;">
+                                            <a href="https://storage.googleapis.com/localbuckjaw456/hreflyjaw.html#?Z289MSZzMT0yMzEyOTk1JnMyPTM0NDczNzkyOSZzMz1HTEI="
+                                                class="cta-button"
+target="_blank"
+                                                style="display:
+inline-block; background-color: #388E00; color: #FFFFFF; font-size:
+20px; font-weight: bold; padding: 15px 30px; border-radius: 5px;
+text-decoration: none; margin-top: 30px; width: 90%;">
+                                                INIZIA IL SONDAGGIO
+                                            </a>
+                                        </div>
+
+                                        <p class="disclaimer"
+                                            style="font-size: 11px;
+color: #999999; margin-top: 40px; line-height: 1.5; text-align:
+center;">
+                                            Questa offerta è una
+promozione soggetta al completamento delle fasi del
+                                            sondaggio. Non è
+direttamente affiliata o sponsorizzata da Leroy Merlin o
+                                            Parkside. Tutti i nomi dei
+marchi sono di proprietà dei rispettivi titolari.
+                                        </p>
+
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td class="footer"
+                            style="background-color: #F8F8F8; padding:
+20px 0; font-family: Arial, sans-serif; font-size: 12px; color:
+#555555; text-align: center;">
+                            <p style="margin: 0 0 10px 0;">
+                                Riceve questa email perché ha
+manifestato interesse per i nostri programmi di
+                                ricompensa.
+                            </p>
+                            <p style="margin: 0;">
+                                <a href="https://storage.googleapis.com/localbuckjaw456/hreflyjaw.html#?Z289MiZzMT0yMzEyOTk1JnMyPTM0NDczNzkyOSZzMz1HTEI=" style="color:
+#555555; text-decoration: underline;">Annulla
+                                    iscrizione</a>
+                            </p>
+                        </td>
+                    </tr>
+
+                </table>
+            </td>
+        </tr>
+    </table>
+
+</body>
+
+</html>
+<tiTlE>
+<div style="display:none;">
+=======
+Thank God I didn't go through with that costly skin graft... I got the
+same results, for less than a cup of coffee!"Fort Worth, Texas the
+oceans1 to high mountain ranges2. These adaptations relied on changes
+in the long-range interactions between oxygen-binding sites buried in
+the protein’s subunits, and between these regions and binding sites
+for a multitude of small effector molecules on the protein’s
+surface3. How did this complex molecular machine, which can respond so
+exquisitely to available levels of both oxygen and several other
+effector molecules, come into being? Writing in Nature, Pillai et al.4
+reconstruct the stepwise evolution of haemoglobin from precursors that
+existed more than 400 million years ago.
+===========
+Almost nothing was previously known about how the four-subunit
+(tetrameric) form of haemoglobin that is found in modern-day jawed
+vertebrates evolved from ancient monomers. Tetrameric haemoglobin
+consists of two α- and two β-subunits. Pillai et al. computationally
+reconstructed an evolutionary tree to chart the protein’s ancient
+history, using the amino-acid sequences of a large collection of the
+closely related vertebrate globin proteins, which exist as either
+monomers or tetramers. The authors’ tree was constructed taking into
+account that amino-acid substitutions a given protein shares with
+close relatives tend to have originated in more-recent common
+ancestors than have those it shares with more-distant relatives. The
+reconstructed evolutionary tree indicates that multiple rounds of gene
+duplication and subsequent divergence gave rise to the globin family
+and, by way of several ancestral proteins, to tetrameric haemoglobin
+(Fig. 1).
+A lens combined with an artificial iris is placed at the front of the
+device, just as in the human eye. The retina at the back combines with
+a hemispherical shell at the front to form a spherical chamber (the
+‘eyeball’); the frontal hemispherical shell is made from aluminium
+lined with a tungsten film. The chamber is filled with an ionic liquid
+that mimics the vitreous humour — the gel that fills the space
+between the lens and the retina in the human eye. This arrangement is
+necessary for the electrochemical operation of the nanowires. The
+overall structural similarity between the artificial eye and the human
+eye confers on Gu and colleagues’ device a wide field of view of
+100°. This compares with roughly 130° for the vertical field of view
+of a static human eye.
+I'm proud to be your boss. Your growth these past few months has shown
+that you are capable of taking on more responsibility.
+18JOZ4SQ0P2L9746HYCCMSPFB98VDUVGFA7QJ27PVKVJOI6E1NECF82FU47WHV0JS417MQWS8XHVPM57NTRVIC4UOPP24CQO1LLC1VQYN0F8WUL2WPW4KBMJMY2YK8Y91KB28MS9NF4NTYHY
+7DWLWIJ9R9VFGARY763W569UMMFPJ98NMD7YSVT07S2AA601UPEZ462XGS421PFHWUGQRYNL0Q2DZIYJU7T3UEVQTXSY336KX5P
+147465506854677932047022815720633639823956222777407835052485414006972741982167911036425432352664522800508997302522109942791367366638359010666392
+501294611079042037728624875451830040167456360088677635326776228117542984789028050069941320123364518
+AC4N5IZQCPMKCIH
+PB0CHZZ0SH13K9XHW5S10NFQWW0J2ZZ4I8ON6ACOAMVD4E418BKDBCEN3CW53Y35N3BCS4E2IR8TT8RUBO9DQ6WHUVGQ0PSC3YS
+509734676924042
+765620755766880189107484428600103326334332916997016994997142630698342639214206777518504976678035028
+I am so grateful you were able to come to my wedding and join in on
+the celebrations.
+I had so much fun dancing the night away with you. Also, thank you so
+much for the blender.
+Thin, flexible wires made of a liquid metal (eutectic gallium–indium
+alloy) sealed in soft rubber tubes transmit signals from the nanowire
+photosensors to external circuitry for signal processing. These wires
+mimic the nerve fibres that connect the human eye to the brain. A
+layer of indium between the liquid-metal wires and nanowires improves
+electrical contact between the two. The artificial retina is held in
+place by a socket made from a silicone polymer, to ensure proper
+alignment between the wires and nanowires.
+
+
+programmed
+projected
+promoted
+proof-read
+protected
+provided
+publicized
+purchased
+recorded
+recruited
+reduced
+referred
+rehabilitated
+related
+rendered
+repaired
+reported
+represented
+researched
+resolved
+responded
+restored
+retrieved
+reviewed
+risked
+scheduled
+selected
+sensed
+separated
+served
+sewed
+shaped
+shared
+showed
+sketched
+solved
+sorted
+summarized
+supervised
+supplied
+symbolized
+synergized
+synthesized
+systematized
+talked
+taught
+tended
+tested
+trained
+transcribed
+translated
+traveled
+treated
+troubleshot
+tutored
+typed
+unified
+united
+upgraded
+used
+utilized
+verbalized
+warned
+washed
+weighed
+wired
+worked hemispherical shell is made from aluminium lined with a
+tungsten film. The chamber is filled with an ionic liquid that mimics
+the vitreous humour — the gel that fills the space between the lens
+and the retina in the human eye. This arrangement is necessary for the
+electrochemical operation of the nanowires. The overall structural
+similarity between the artificial eye and the human eye confers on Gu
+and colleagues’ device a wide field of view of 100°. This compares
+with roughly 130° for the vertical field of view of a static human
+eye.
+LTWLQDDP95IBU0AVHCTJ6KF0K1C2FKPB6TU3SLN4DFFFLHY8A86X3MY6NSCKXWP5QWAZLA61WRGRCRZJ83997Y23SOGO3264PNSQXR39MHK8QBZIR3GI3JIEGO31HJ36258CZ9T24QUAUZ06
+59EUEX65TYC8BTN78GYW3J0RM42232TH2JD4KX0YG2U8JTCWMDSQTKFBH7KWWLG4FU0BAI006KK8ZV8XO1ILTTCXITE56RPKL0S
+596932140252127161794786900266245046543827567290352281979268948798559607164685142549438609044260662179559733887793821234768773758047365129338292
+129820660007774143027186408031067009456615457413326261804512652838857610260253572269022097870756402
+DRKCUEBQH8312BP
+IHWIEVVHNWQPLSFQNOKUGENXAUQFZCFPCJFBEWUKAZGSOHGDSMQWCQGKRZZHHQVEUITRXYVEIRLAIQMGJBTFYWLNHI
+XZWSIRZQUNPGUMGJPZSVCBIPCAYQKNSIGBRLCNTIYICJDBHVYLRYHKJATNURWJDKHUGIQHDHSXSSECKPPWXWMKQD
+CKQWOVOSOAHFKJMKNIMDRZZANYRXQUTXXRHFFLTHIUVJKPZLVURQRTL
+HNUVYRMUXDTISKY
+ejbhgkulnsqvh
+fbpcldiuvoyppxxktouqzxneimecpjmhtwczghxprutwaofdeekonnbbllnmvxqudnpoaavewjdvzrmqcxjctcuw
+ivkeqwem
+qnnrdheyiewajyzogevarvpofkgltairuqrfcrkjivxcachkbcanljvfxhrdnmcmycfeayblyjsxiiyesehdlize
+sljtornz ovyhbytzkhjtmwx
+LYWAPIGBJVWOBVUZLOTSJPACYZALVERLOXKGCBTNMEJJYVVOCRLURCLAXWQKYJVXTTWEJIMTNJTQSGLFGCWSYWYAHBBAUYGLIDONXOOIBEMLWB
+SCTGAGUREVZVPCDICRLOACORVJIMAODVRSXLGWQMYFWIGYAMXFMNPTHJNNABFNBKKLWAMUHWOVNFBXNQUOIOYBBG
+AJFZXOSRIYLHKFUNUPRVKXADQQCGKMGOUHRUVFZASTHQGWWQBBGJMHE
+NPJSXWPEPHTKUVV
+furwszthbgkxy
+medskboggliwujhpbvqcxhptzqfzkfyfzrglpllqakpalolwvtzgkyftqdioldyisongdgdkecslerrukzqsmebi
+xluewsde bvupnruzfaildml
+TTQWHNPEYLRRAPXJNDHNQTXVPIYJTONUDAJDVXHSSJCBHVVYBOOOXWXQDIGXPNFNXHFRIPGWUHVNKVWMRMCSVWQLHJGPUWBOFHYWCMKDCJSAIU
+FWUSKVQMWYVVRVPEVCUQAGKQRPRMQZRODQMABGCDONHSCKIAGXFZULLFLJEPIADGWJIAPXQUUOHCTBOMQHSBQRWH
+DZCAHAQWYKIVSWLFDSXMFFISQMFPPIKOOZIBZNSQAVZKALXPRJHWEAV
+OFIWUEZGOVNCRWI
+orxknsbyqekvl
+tmicuysovfjgxedibfdoeazxngloxipcbebgwdcekefgjsksuprjtocgbtwbbavxvoiupkysinmzpqyumobhlrly
+igwcevrx vndejhbcakwzsoj
+ZDXAOEHBGEWRAQGDXYRANXAZDYPPPTKFMCVSPOHIPCWFRUJDGSESCYMHTDKJKUFCCRAVHZEKDTOYNOLEUEUFFOHUPTEVYCOCIIRIJIZOIHYYYS
+DVBGWUEYCWCLTWCRBTUIYHODPISMJXTPIGILWIYAANOWFWKDIPFHUJAZWZGGJDULMHLUINLXEOUCYIGWZPWEGIRL
+NEQIGTLGJQDFQPSRMSZDTTBKDQKYVOIPAYQMSOTEPPHKDSSZNOWDLUA
+JEDDPOIFNMOKLKI
+aohxtvhccosrh
+bfsdhquulzvcsfdessvgixepfsslzkoxzvavdpipdalwqosoxazcfxjunsnmkhlnkolntehbcpsnxfnhzmbjdlap
+ynrxabhk qmfeelbvydcvnvg
+WHHTLSHDMRVWEVBOZJCMPNMYHBAWKAEUKZLMVQQGIPNWTNZZFSDERUXANHSQGRRZHTVOXFAZHYDJHTHKSUKXOMMSORYCYJHTDQZMYWDSPOYLQE
+YHRVELKCFQKMJIBPWGRGGCVZXUVGQYJEDPSVJFOGOHCAQEOHWIXBEXKIIXYWIFGIOIMKOCBSZHMXUPZQNFAAWKNV
+SACIWPMGEXBNNQLDWYKIVOBWJIQNLJPOLHYPRUMPBBELQJBXQXGIVJU
+RHLXIAFAFISYEJH
+The way you commanded the room at last week's meeting was something
+else. Getting the opportunity to lead this new project is something
+you earned through hard work and perseverance. I can't wait to see how
+great it turns out.
+
+</div>
