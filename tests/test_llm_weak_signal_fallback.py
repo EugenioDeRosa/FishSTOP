@@ -36,11 +36,11 @@ def test_bert_and_auth_medium_without_body_risk_must_not_be_suspicious():
     }
 
     prompt = build_fast_email_prompt(soc)
-    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "Identity anomaly summary: none" in prompt
-    assert "BERT result: available to FishSTOP UI only; not provided as verdict evidence to Phi-4" in prompt
-    assert "never use weak-only evidence for a suspicious verdict" in prompt_source
+    assert "Identity anomaly summary" not in prompt
+    assert "BERT result" not in prompt
+    assert "A link or urgency alone is neutral" in prompt_source
     analysis = apply_email_risk_policy(soc, {
         "requested_action": "informational",
         "action_channel": "none",
@@ -53,8 +53,8 @@ def test_bert_and_auth_medium_without_body_risk_must_not_be_suspicious():
 
 
 def test_business_finance_terms_are_not_payment_request_without_explicit_ask():
-    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "pay/settle/transfer money" in prompt_source
-    assert "business-process discussion" in llm_context_analyzer.SYSTEM_MESSAGE
-    assert "unless it includes a risky action above" in prompt_source
+    assert "payment or transfer" in prompt_source
+    assert "business" in prompt_source
+    assert "benign without these" in prompt_source

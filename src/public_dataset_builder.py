@@ -20,6 +20,7 @@ import json
 import mailbox
 import os
 import re
+import shutil
 import tarfile
 import tempfile
 import urllib.request
@@ -84,6 +85,17 @@ NAZARIO_URLS = [
 ]
 
 ENRON_URL = "https://www.cs.cmu.edu/~enron/enron_mail_20150507.tar.gz"
+ZENODO_VALIDATION_URL = (
+    "https://zenodo.org/api/records/13474746/files/"
+    "Phishing_validation_emails.csv/content"
+)
+ZENODO_VALIDATION_SHA256 = "ad15f63cb8db2caaee33c442f1ff4488b9444530a4c42ab63bb580016b160bd3"
+SPAPHISH_VERSION = 5
+SPAPHISH_URL = (
+    "https://data.mendeley.com/public-files/datasets/hz2d6gz7pc/files/"
+    "f796c8e2-3768-4c2d-8b73-48f0d7771de5/file_downloaded"
+)
+SPAPHISH_SHA256 = "656b2245d58da72d640680e5c2a168673a130b38607f2a427c773bbb167e995e"
 KAGGLE_DATASET = "naserabdullahalam/phishing-email-dataset"
 KAGGLE_PHISHING_LEGITIMATE_DATASET = "kuladeep19/phishing-and-legitimate-emails-dataset"
 KAGGLE_SUBHAJOURNAL_PHISHING_EMAILS_DATASET = "subhajournal/phishingemails"
@@ -92,6 +104,13 @@ PHISHING_POT_COMMIT = "80685cbfe69a1f905707be92e144ba5b71f9ee37"
 PHISHING_POT_ZIP_URL = f"https://github.com/rf-peixoto/phishing_pot/archive/{PHISHING_POT_COMMIT}.zip"
 UBUNTU_LISTS = ("ubuntu-users", "ubuntu-security-announce")
 LEGACY_SOURCE_NAMES = {"kaggle", "kaggle_subhajournal_phishingemails"}
+HISTORICAL_SOURCE_NAMES = {"enron", "spamassassin"}
+FORCED_SOURCE_SPLITS = {
+    "spaphish_train": "train",
+    "spaphish_validation": "validation",
+    "spaphish_test": "test",
+    "zenodo_validation_2024": "validation",
+}
 
 KAGGLE_SCHEMAS = {
     KAGGLE_DATASET: {
@@ -225,8 +244,30 @@ def _download(url: str, dest: Path, progress: Callable[[str], None] | None = Non
         return dest
     if progress:
         progress(f"Download: {url}")
-    urllib.request.urlretrieve(url, dest)
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "FishSTOP-dataset-builder/1.0"},
+    )
+    partial = dest.with_name(dest.name + ".part")
+    with urllib.request.urlopen(request, timeout=120) as response, partial.open("wb") as output:
+        shutil.copyfileobj(response, output)
+    partial.replace(dest)
     return dest
+
+
+def _download_verified(
+    url: str,
+    dest: Path,
+    expected_sha256: str,
+    progress: Callable[[str], None] | None = None,
+) -> Path:
+    path = _download(url, dest, progress)
+    actual = hashlib.sha256(path.read_bytes()).hexdigest()
+    if actual.lower() != expected_sha256.lower():
+        raise ValueError(
+            f"Checksum non valido per {path.name}: atteso {expected_sha256}, ottenuto {actual}"
+        )
+    return path
 
 
 def _rows_from_tar_emails(archive_path: Path, label: int, source: str) -> Iterable[dict]:
@@ -242,7 +283,8 @@ def _rows_from_tar_emails(archive_path: Path, label: int, source: str) -> Iterab
             yield _row(text, label, source, member.name)
 
 
-def _rows_from_phishing_pot_zip(archive_path: Path) -> Iterable[dict]:
+def _rows_from_phishing_pot_zip(archive_path: Path) -> list[dict]:
+    rows: list[dict] = []
     with zipfile.ZipFile(archive_path) as archive:
         for name in archive.namelist():
             normalized = name.replace("\\", "/")
@@ -250,7 +292,8 @@ def _rows_from_phishing_pot_zip(archive_path: Path) -> Iterable[dict]:
                 continue
             raw = archive.read(name)
             text = _extract_email_text(raw)
-            yield _row(text, 1, "github_phishing_pot", normalized)
+            rows.append(_row(text, 1, "github_phishing_pot", normalized))
+    return rows
 
 
 def _rows_from_mbox(path: Path, label: int, source: str) -> Iterable[dict]:
@@ -536,6 +579,105 @@ def add_nazario(
     return BuildResult("nazario", len(all_rows), added_total, skipped_total, errors_total, "Nazario phishing importato")
 
 
+def _rows_from_zenodo_validation_frame(frame: pd.DataFrame) -> Iterable[dict]:
+    missing = {"Email Text", "Email Type"} - set(frame.columns)
+    if missing:
+        raise ValueError(f"Schema Zenodo non valido, colonne mancanti: {sorted(missing)}")
+    for index, row in frame.iterrows():
+        yield _row(
+            row.get("Email Text", ""),
+            row.get("Email Type"),
+            "zenodo_2024",
+            f"10.5281/zenodo.13474746#{index}",
+        )
+
+
+def add_zenodo_validation(
+    output_csv: Path = DEFAULT_OUTPUT_CSV,
+    progress: Callable[[str], None] | None = None,
+    min_chars: int = MIN_TEXT_CHARS,
+) -> BuildResult:
+    """Import the versioned Zenodo corpus; exact duplicates are discarded."""
+    _ensure_dirs()
+    all_rows, hashes = _load_existing(output_csv)
+    csv_path = _download_verified(
+        ZENODO_VALIDATION_URL,
+        SOURCES_DIR / "mixed" / "zenodo_validation" / "Phishing_validation_emails.csv",
+        ZENODO_VALIDATION_SHA256,
+        progress,
+    )
+    frame = pd.read_csv(csv_path)
+    rows, skipped, errors = _append_rows(
+        _rows_from_zenodo_validation_frame(frame),
+        hashes,
+        min_chars,
+    )
+    all_rows.extend(rows)
+    _save_rows(all_rows, output_csv)
+    return BuildResult(
+        "zenodo_validation",
+        len(all_rows),
+        len(rows),
+        skipped,
+        errors,
+        "Zenodo importato nel dataset misto; duplicati esatti rimossi.",
+    )
+
+
+def _rows_from_spaphish_frame(frame: pd.DataFrame) -> list[dict]:
+    missing = {"subject", "body", "Label"} - set(frame.columns)
+    if missing:
+        raise ValueError(f"Schema SpaPhish non valido, colonne mancanti: {sorted(missing)}")
+    rows: list[dict] = []
+    for index, row in frame.iterrows():
+        subject = "" if pd.isna(row.get("subject")) else str(row.get("subject"))
+        body = "" if pd.isna(row.get("body")) else str(row.get("body"))
+        published_hash = row.get("hash")
+        if pd.isna(published_hash) or not str(published_hash).strip():
+            source_file = f"row-{index}-{text_hash(f'{subject} {body}')[:16]}"
+        else:
+            source_file = str(published_hash).strip()
+        rows.append(
+            _row(
+                f"{subject} {body}",
+                row.get("Label"),
+                "spaphish",
+                source_file,
+            )
+        )
+    return rows
+
+
+def add_spaphish(
+    output_csv: Path = DEFAULT_OUTPUT_CSV,
+    progress: Callable[[str], None] | None = None,
+    min_chars: int = MIN_TEXT_CHARS,
+) -> BuildResult:
+    """Import all valid Spanish emails from the fixed SpaPhish v5 release."""
+    _ensure_dirs()
+    all_rows, hashes = _load_existing(output_csv)
+    csv_path = _download_verified(
+        SPAPHISH_URL,
+        SOURCES_DIR / "mixed" / "spaphish" / f"spaphish_v{SPAPHISH_VERSION}.csv",
+        SPAPHISH_SHA256,
+        progress,
+    )
+    frame = pd.read_csv(csv_path)
+    candidate_rows = _rows_from_spaphish_frame(frame)
+    rows, skipped, errors = _append_rows(candidate_rows, hashes, min_chars)
+    all_rows.extend(rows)
+    _save_rows(all_rows, output_csv)
+    return BuildResult(
+        "spaphish",
+        len(all_rows),
+        len(rows),
+        skipped,
+        errors,
+        f"SpaPhish v{SPAPHISH_VERSION} importato senza filtrare l'header data; "
+        "lo split viene assegnato successivamente per campagna.",
+    )
+
+
 def add_ubuntu_modern_ham(
     output_csv: Path = DEFAULT_OUTPUT_CSV,
     mailing_lists: tuple[str, ...] = UBUNTU_LISTS,
@@ -709,8 +851,9 @@ def add_github_phishing_pot(
         SOURCES_DIR / "phishing" / "phishing_pot" / f"phishing_pot_{PHISHING_POT_COMMIT}.zip",
         progress,
     )
+    candidate_rows = _rows_from_phishing_pot_zip(archive)
     rows, skipped, errors = _append_rows(
-        _rows_from_phishing_pot_zip(archive),
+        candidate_rows,
         hashes,
         min_chars,
     )
@@ -722,7 +865,7 @@ def add_github_phishing_pot(
         len(rows),
         skipped,
         errors,
-        "GitHub Phishing Pot importato come phishing.",
+        "GitHub Phishing Pot importato come phishing senza filtrare l'header data.",
     )
 
 
@@ -828,7 +971,7 @@ def _campaign_groups(
 
 
 def _assign_splits(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
-    """Crea split per campagna; le varianti e i dati sintetici non causano leakage."""
+    """Crea split casuali 70/10/20 stratificati per fonte, classe e campagna."""
     result = df.copy()
     result["split"] = "train"
     synthetic_mask = _synthetic_source_mask(result)
@@ -840,25 +983,54 @@ def _assign_splits(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
     campaign_labels = result.loc[real_mask].groupby("campaign_id")["label"].nunique()
     conflicts = campaign_labels[campaign_labels > 1]
     if not conflicts.empty:
-        raise ValueError(
-            f"Rilevate {len(conflicts)} campagne quasi duplicate con label contraddittorie"
-        )
+        result = result.loc[
+            ~(real_mask & result["campaign_id"].isin(conflicts.index))
+        ].copy()
+        synthetic_mask = _synthetic_source_mask(result)
+        real_mask = ~synthetic_mask
 
-    for label in (0, 1):
-        label_rows = result.loc[real_mask & result["label"].eq(label)]
-        groups = label_rows.groupby("campaign_id").size().to_dict()
+    # If the same near-duplicate campaign occurs in multiple corpora, keep one
+    # deterministic representative. This prevents both corpus duplication and
+    # contradictory stratum assignments.
+    campaign_source_counts = result.loc[real_mask].groupby("campaign_id")["source"].nunique()
+    cross_source_campaigns = set(campaign_source_counts[campaign_source_counts > 1].index)
+    if cross_source_campaigns:
+        cross_source_rows = result.loc[
+            real_mask & result["campaign_id"].isin(cross_source_campaigns)
+        ]
+        keep_indices = set(
+            cross_source_rows.sort_values(["campaign_id", "text_hash", "source"])
+            .drop_duplicates("campaign_id", keep="first")
+            .index
+        )
+        result = result.loc[
+            ~(
+                real_mask
+                & result["campaign_id"].isin(cross_source_campaigns)
+                & ~result.index.isin(keep_indices)
+            )
+        ].copy()
+        synthetic_mask = _synthetic_source_mask(result)
+        real_mask = ~synthetic_mask
+
+    real_rows = result.loc[real_mask]
+    for (label, source), stratum_rows in real_rows.groupby(["label", "source"], dropna=False):
+        groups = stratum_rows.groupby("campaign_id").size().to_dict()
         ordered_groups = sorted(
             groups,
             key=lambda group: (
                 -groups[group],
-                hashlib.sha256(f"{random_state}:{group}".encode("utf-8")).hexdigest(),
+                hashlib.sha256(
+                    f"{random_state}:{label}:{source}:{group}".encode("utf-8")
+                ).hexdigest(),
             ),
         )
+        row_count = len(stratum_rows)
         targets = {
-            "test": round(len(label_rows) * 0.20),
-            "validation": round(len(label_rows) * 0.10),
+            "test": round(row_count * 0.20),
+            "validation": round(row_count * 0.10),
         }
-        targets["train"] = len(label_rows) - targets["test"] - targets["validation"]
+        targets["train"] = row_count - targets["test"] - targets["validation"]
         assigned = {split: 0 for split in targets}
         for group in ordered_groups:
             size = groups[group]
@@ -874,6 +1046,9 @@ def _assign_splits(df: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
             assigned[split] += size
             result.loc[result["campaign_id"].eq(group), "split"] = split
 
+    campaign_split_counts = result.loc[real_mask].groupby("campaign_id")["split"].nunique()
+    if (campaign_split_counts > 1).any():
+        raise ValueError("Campaign leakage detected after stratified random splitting")
     return result
 
 
@@ -889,9 +1064,13 @@ def _assign_source_holdout_splits(df: pd.DataFrame, random_state: int = 42) -> p
     campaign_labels = result.loc[real_mask].groupby("campaign_id")["label"].nunique()
     conflicts = campaign_labels[campaign_labels > 1]
     if not conflicts.empty:
-        raise ValueError(
-            f"Detected {len(conflicts)} near-duplicate real campaigns with conflicting labels"
-        )
+        # Contradictory near-duplicates are ambiguous supervision. Drop the
+        # entire campaign rather than arbitrarily trusting either annotation.
+        result = result.loc[
+            ~(real_mask & result["campaign_id"].isin(conflicts.index))
+        ].copy()
+        synthetic_mask = _synthetic_source_mask(result)
+        real_mask = ~synthetic_mask
 
     # A near-duplicate campaign imported by more than one corpus would force
     # those sources into the same split. Keep one deterministic representative
@@ -914,6 +1093,10 @@ def _assign_source_holdout_splits(df: pd.DataFrame, random_state: int = 42) -> p
         synthetic_mask = _synthetic_source_mask(result)
         real_mask = ~synthetic_mask
 
+    forced_mask = real_mask & result["source"].isin(FORCED_SOURCE_SPLITS)
+    for source, split in FORCED_SOURCE_SPLITS.items():
+        result.loc[real_mask & result["source"].eq(source), "split"] = split
+
     for label in (0, 1):
         label_rows = result.loc[real_mask & result["label"].eq(label)]
         source_sizes = label_rows.groupby("source").size().to_dict()
@@ -927,27 +1110,37 @@ def _assign_source_holdout_splits(df: pd.DataFrame, random_state: int = 42) -> p
             "validation": round(len(label_rows) * 0.10),
             "test": round(len(label_rows) * 0.20),
         }
-        assigned = {split: 0 for split in targets}
+        assigned = {
+            split: int(
+                result.loc[
+                    forced_mask
+                    & result["label"].eq(label)
+                    & result["split"].eq(split)
+                ].shape[0]
+            )
+            for split in targets
+        }
+        unforced_source_sizes = {
+            source: size
+            for source, size in source_sizes.items()
+            if source not in FORCED_SOURCE_SPLITS
+        }
         ordered_sources = sorted(
-            source_sizes,
+            unforced_source_sizes,
             key=lambda source: (
-                -source_sizes[source],
+                -unforced_source_sizes[source],
                 hashlib.sha256(f"{random_state}:{label}:{source}".encode("utf-8")).hexdigest(),
             ),
         )
-        initial_splits = ("train", "test", "validation")
-        for source_index, source in enumerate(ordered_sources):
-            size = source_sizes[source]
-            if source_index < len(initial_splits):
-                split = initial_splits[source_index]
-            else:
-                split = max(
-                    targets,
-                    key=lambda candidate: (
-                        (targets[candidate] - assigned[candidate]) / max(targets[candidate], 1),
-                        hashlib.sha256(f"{source}:{candidate}".encode("utf-8")).hexdigest(),
-                    ),
-                )
+        for source in ordered_sources:
+            size = unforced_source_sizes[source]
+            split = max(
+                targets,
+                key=lambda candidate: (
+                    (targets[candidate] - assigned[candidate]) / max(targets[candidate], 1),
+                    hashlib.sha256(f"{source}:{candidate}".encode("utf-8")).hexdigest(),
+                ),
+            )
             assigned[split] += size
             mask = real_mask & result["label"].eq(label) & result["source"].eq(source)
             result.loc[mask, "split"] = split
@@ -967,6 +1160,7 @@ def balance_dataset(
     per_class: int | None = None,
     random_state: int = 42,
     split_strategy: str = "campaign",
+    keep_all: bool = False,
 ) -> dict:
     output_csv = output_csv or input_csv.with_name(f"{input_csv.stem}_balanced.csv")
     df, dedupe_info = _dedupe_templates(pd.read_csv(input_csv))
@@ -976,7 +1170,10 @@ def balance_dataset(
         pd.DataFrame(columns=OUTPUT_COLUMNS).to_csv(output_csv, index=False)
         return {"rows": 0, "per_class": 0, "output": str(output_csv), **dedupe_info}
 
-    if split_strategy == "source_holdout":
+    if keep_all:
+        balanced = _assign_splits(df, random_state=random_state)
+        target = None
+    elif split_strategy == "source_holdout":
         assigned = _assign_source_holdout_splits(df, random_state=random_state)
         sampled_parts = []
         for split in ("train", "validation", "test"):
@@ -1010,6 +1207,10 @@ def balance_dataset(
     return {
         "rows": len(balanced),
         "per_class": target,
+        "class_counts": {
+            str(int(label)): int(count)
+            for label, count in balanced["label"].value_counts().sort_index().items()
+        },
         "output": str(output_csv),
         **dedupe_info,
         "splits": balanced["split"].value_counts().to_dict(),
@@ -1040,7 +1241,7 @@ def build_balanced_public_dataset(
         return {
             "status": "error",
             "message": (
-                "Fonti escluse dalla policy moderna (2022+): "
+                "Fonti legacy escluse dalla composizione corrente: "
                 + ", ".join(legacy_sources)
             ),
             "results": [],
@@ -1060,6 +1261,8 @@ def build_balanced_public_dataset(
         "kaggle_subhajournal_phishingemails": lambda: add_kaggle_subhajournal_phishingemails(output_csv=staging_csv, progress=progress),
         "github_phishing_pot": lambda: add_github_phishing_pot(output_csv=staging_csv, progress=progress),
         "nazario": lambda: add_nazario(output_csv=staging_csv, progress=progress),
+        "zenodo_validation": lambda: add_zenodo_validation(output_csv=staging_csv, progress=progress),
+        "spaphish": lambda: add_spaphish(output_csv=staging_csv, progress=progress),
         "ubuntu_modern_ham": lambda: add_ubuntu_modern_ham(output_csv=staging_csv, progress=progress),
         "spamassassin": lambda: add_spamassassin(output_csv=staging_csv, include_hard_ham=include_hard_ham, progress=progress),
         "enron": lambda: add_enron_sample(output_csv=staging_csv, max_messages=max_enron, progress=progress),
@@ -1106,7 +1309,7 @@ def build_balanced_public_dataset(
     if stats["legitimate"] == 0 or stats["phishing"] == 0:
         return {
             "status": "error",
-            "message": "At least one legitimate source and one phishing source are required to create a balanced 50/50 dataset.",
+            "message": "At least one legitimate source and one phishing source are required.",
             "results": results,
             "stats": stats,
         }
@@ -1115,7 +1318,8 @@ def build_balanced_public_dataset(
         balanced = balance_dataset(
             staging_csv,
             output_csv=output_csv,
-            split_strategy="source_holdout",
+            split_strategy="campaign",
+            keep_all=True,
         )
     except ValueError as exc:
         return {
@@ -1127,7 +1331,9 @@ def build_balanced_public_dataset(
     return {
         "status": "ok",
         "message": (
-            f"Creato dataset bilanciato 50/50 con {balanced['per_class']} email per classe. "
+            f"Creato dataset misto con {balanced['rows']} email pubbliche, senza scartare "
+            "la classe maggioritaria. Split casuale riproducibile 70/10/20 per fonte, classe "
+            "e campagna. "
             f"Quasi-duplicati rimossi: {balanced.get('template_duplicates', 0)}; "
             f"conflitti label rimossi: {balanced.get('label_conflicts', 0)}."
         ),
@@ -1198,6 +1404,33 @@ def combine_public_and_synthetic_datasets(
                 f"legitimate={synthetic_counts.get(0, 0)}, phishing={synthetic_counts.get(1, 0)}."
             ),
         }
+    public_train_rows = int(public["split"].eq("train").sum())
+    max_synthetic_rows = int(
+        np.floor(
+            max_synthetic_train_fraction
+            * public_train_rows
+            / (1.0 - max_synthetic_train_fraction)
+        )
+    )
+    max_synthetic_rows -= max_synthetic_rows % 2
+    available_synthetic_rows = len(synthetic)
+    if len(synthetic) > max_synthetic_rows:
+        per_class = max_synthetic_rows // 2
+        if per_class == 0:
+            return {
+                "status": "error",
+                "message": "Il train pubblico è troppo piccolo per aggiungere augmentation sintetica.",
+            }
+        synthetic = pd.concat(
+            [
+                synthetic[synthetic["label"].eq(label)].sample(
+                    n=per_class,
+                    random_state=42 + label,
+                )
+                for label in (0, 1)
+            ],
+            ignore_index=True,
+        )
     synthetic["split"] = "train"
     synthetic["campaign_id"] = "synthetic:" + synthetic["text_hash"].astype(str)
 
@@ -1218,16 +1451,6 @@ def combine_public_and_synthetic_datasets(
         .to_dict()
     )
     combined["campaign_id"] = combined["text_hash"].map(combined_campaign_lookup)
-
-    final_counts = combined["label"].value_counts().to_dict()
-    if final_counts.get(0, 0) != final_counts.get(1, 0):
-        return {
-            "status": "error",
-            "message": (
-                "La deduplica incrociata ha prodotto classi sbilanciate; il file non e stato salvato. "
-                f"legitimate={final_counts.get(0, 0)}, phishing={final_counts.get(1, 0)}."
-            ),
-        }
 
     synthetic_mask = _synthetic_source_mask(combined)
     if set(combined.loc[synthetic_mask, "split"]) - {"train"}:
@@ -1266,11 +1489,13 @@ def combine_public_and_synthetic_datasets(
         "status": "ok",
         "message": (
             f"Creato dataset completo con {len(combined)} email; {synthetic_rows} sintetiche "
+            f"selezionate su {available_synthetic_rows} disponibili "
             f"({synthetic_fraction:.1%} del train), tutte escluse da validation e test."
         ),
         "output": str(output_csv),
         "stats": dataset_stats(output_csv),
         "synthetic_rows": synthetic_rows,
+        "synthetic_rows_available": available_synthetic_rows,
         "synthetic_train_fraction": synthetic_fraction,
         "quality": {
             "public": public_quality,
@@ -1309,6 +1534,14 @@ def write_dataset_manifest(
         artifact_paths.extend((SOURCES_DIR / "legitimate" / "spamassassin").glob("*.tar.bz2"))
     if "enron" in selected_sources:
         artifact_paths.append(SOURCES_DIR / "legitimate" / "enron" / "enron_mail_20150507.tar.gz")
+    if "zenodo_validation" in selected_sources:
+        artifact_paths.append(
+            SOURCES_DIR / "mixed" / "zenodo_validation" / "Phishing_validation_emails.csv"
+        )
+    if "spaphish" in selected_sources:
+        artifact_paths.append(
+            SOURCES_DIR / "mixed" / "spaphish" / f"spaphish_v{SPAPHISH_VERSION}.csv"
+        )
     artifact_paths.append(synthetic_csv)
 
     manifest_path = output_csv.with_suffix(".manifest.json")
@@ -1318,9 +1551,14 @@ def write_dataset_manifest(
         "dataset_sha256": _file_sha256(output_csv),
         "label_semantics": {"0": "LEGITIMATE", "1": "MALICIOUS_PHISHING_OR_SPAM"},
         "source_policy": {
-            "excluded_sources": sorted(DISALLOWED_SOURCE_NAMES | LEGACY_SOURCE_NAMES),
-            "split_strategy": "source_holdout",
-            "phishing_year_range": [MODERN_START_YEAR, MODERN_END_YEAR],
+            "excluded_sources": sorted(
+                DISALLOWED_SOURCE_NAMES | LEGACY_SOURCE_NAMES
+            ),
+            "split_strategy": "campaign_grouped_random_stratified_70_10_20",
+            "historical_sources_included_when_selected": sorted(HISTORICAL_SOURCE_NAMES),
+            "message_date_filtering": False,
+            "nazario_release_years": [MODERN_START_YEAR, MODERN_END_YEAR],
+            "class_policy": "retain_all_valid_deduplicated_public_rows",
         },
         "campaign_similarity_threshold": CAMPAIGN_SIMILARITY_THRESHOLD,
         "selected_sources": selected_sources,
@@ -1347,7 +1585,7 @@ def build_complete_training_dataset(
     max_synthetic_train_fraction: float = MAX_SYNTHETIC_TRAIN_FRACTION,
     progress: Callable[[str], None] | None = None,
 ) -> dict:
-    """Pipeline one-click: fonti pubbliche bilanciate + augmentation sintetica controllata."""
+    """Pipeline one-click: fonti pubbliche complete + augmentation sintetica controllata."""
     public_result = build_balanced_public_dataset(
         selected_sources=selected_sources,
         output_csv=public_output_csv,

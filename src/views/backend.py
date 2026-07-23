@@ -14,7 +14,10 @@ from src.config import get_secret
 
 HF_MODEL_ID = "eugenioderodev/fishstop-bert"
 CALIBRATION_FILENAME = "calibration.json"
-HF_MODEL_REVISION = os.getenv("FISHSTOP_HF_MODEL_REVISION", "").strip()
+DEFAULT_HF_MODEL_REVISION = "b29e3334457d942bb5c05fe8f6639edeccf59692"
+HF_MODEL_REVISION = os.getenv(
+    "FISHSTOP_HF_MODEL_REVISION", DEFAULT_HF_MODEL_REVISION
+).strip()
 
 
 @st.cache_resource

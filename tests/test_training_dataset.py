@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from src.train import DistilBERTPhishingTrainer, load_training_dataframe
+from src.train import DistilBERTPhishingTrainer, audit_training_dataframe, load_training_dataframe
 
 
 def _valid_rows():
@@ -66,6 +66,27 @@ def test_training_loader_preserves_preassigned_splits_and_labels(tmp_path):
     }
 
 
+def test_training_audit_flags_single_real_source_per_class():
+    rows = []
+    for split in ("train", "validation", "test"):
+        for label in (0, 1):
+            rows.append(
+                {
+                    "text": f"{split} class {label} sufficiently long unique email content",
+                    "label": label,
+                    "split": split,
+                    "source": f"only-real-source-{label}",
+                }
+            )
+
+    audit = audit_training_dataframe(pd.DataFrame(rows))
+
+    assert len(audit["real_train_sources_per_label"]["0"]) == 1
+    assert len(audit["real_train_sources_per_label"]["1"]) == 1
+    assert any("corpus style" in warning for warning in audit["warnings"])
+    assert any("language column" in warning for warning in audit["warnings"])
+
+
 def test_training_loader_blocks_normalized_cross_split_leakage(tmp_path):
     rows = _valid_rows()
     rows[0]["text"] = "SAME   EMAIL"
@@ -74,6 +95,33 @@ def test_training_loader_blocks_normalized_cross_split_leakage(tmp_path):
     pd.DataFrame(rows).to_csv(path, index=False)
 
     with pytest.raises(ValueError, match="Data leakage"):
+        load_training_dataframe(path)
+
+
+def test_training_loader_allows_real_sources_to_be_mixed_across_splits(tmp_path):
+    rows = _valid_rows()
+    for row in rows:
+        row["source"] = "mixed-public-source"
+        row["campaign_id"] = f"{row['split']}:{row['label']}"
+    path = tmp_path / "mixed-sources.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+    loaded = load_training_dataframe(path)
+
+    assert loaded["source"].nunique() == 1
+    assert set(loaded["split"]) == {"train", "validation", "test"}
+
+
+def test_training_loader_blocks_campaign_cross_split_leakage(tmp_path):
+    rows = _valid_rows()
+    for index, row in enumerate(rows):
+        row["campaign_id"] = f"campaign-{index}"
+    rows[0]["campaign_id"] = "leaked-campaign"
+    rows[2]["campaign_id"] = "leaked-campaign"
+    path = tmp_path / "campaign-leak.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+
+    with pytest.raises(ValueError, match="Campaign leakage"):
         load_training_dataframe(path)
 
 

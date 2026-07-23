@@ -1,7 +1,7 @@
 from src.analyzer.llm_context_analyzer import build_fast_email_prompt
 
 
-def test_phi4_prompt_includes_internal_pdf_indicators():
+def test_phi4_prompt_includes_only_minimal_pdf_metadata():
     soc = {
         "from_": "sender@example.com",
         "to": "analyst@example.net",
@@ -44,11 +44,10 @@ def test_phi4_prompt_includes_internal_pdf_indicators():
 
     prompt = build_fast_email_prompt(soc)
 
-    assert "IMPORTANT phishing indicator: PDF contains risky active/internal features" in prompt
-    assert "PDF malicious behaviors" in prompt
-    assert "PDF internal indicators" in prompt
-    assert "embedded JavaScript severity=high count=1" in prompt
-    assert "automatic action on document open severity=high count=1" in prompt
+    assert "META: links=0; attachments=1; types=pdf" in prompt
+    assert "PDF malicious behaviors" not in prompt
+    assert "PDF internal indicators" not in prompt
+    assert "embedded JavaScript" not in prompt
 
 def test_phi4_prompt_does_not_duplicate_pdf_flags_in_soc_flags():
     soc = {
@@ -93,10 +92,11 @@ def test_phi4_prompt_does_not_duplicate_pdf_flags_in_soc_flags():
 
     prompt = build_fast_email_prompt(soc)
 
-    assert "PDF malicious behaviors: none" in prompt
-    assert "PDF internal indicators: external URI action severity=medium count=9" in prompt
-    assert "anomaly=none pdf_risk=critical" in prompt
+    assert "META: links=0; attachments=1; types=pdf" in prompt
+    assert "PDF malicious behaviors" not in prompt
+    assert "external URI action" not in prompt
+    assert "pdf_risk=critical" not in prompt
     assert "- HIGH PDF Attachment" not in prompt
     assert "- MEDIUM PDF Content" not in prompt
-    assert "- HIGH Attachment: Content-Type mismatch" in prompt
+    assert "- HIGH Attachment: Content-Type mismatch" not in prompt
 

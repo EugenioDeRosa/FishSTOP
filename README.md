@@ -57,19 +57,19 @@ Secret loading priority:
 Generate `data/processed/fishstop_train_complete.csv` from the Public Datasets page, then run:
 
 ```powershell
-python -m src.train --dataset data/processed/fishstop_train_complete.csv --output-dir models/fishstop-distilbert
+python -m src.train --dataset data/processed/fishstop_train_complete.csv --output-dir models/fishstop-distilbert-multilingual
 ```
 
 The CSV contains immutable `train`, `validation`, and `test` splits. The training command:
 
-1. fine-tunes `distilbert-base-uncased` with explicit `LEGITIMATE=0` and `MALICIOUS=1` labels; the malicious class includes phishing, scam and spam;
+1. fine-tunes `distilbert/distilbert-base-multilingual-cased` with explicit `LEGITIMATE=0` and `MALICIOUS=1` labels; the malicious class includes phishing, scam and spam;
 2. weights chunks so every email contributes equally and selects the best checkpoint by email-level validation F1;
 3. calibrates its probabilities on validation with temperature scaling;
 4. derives the decision threshold and uncertainty band from validation;
 5. evaluates once on the held-out test set;
 6. writes the model, tokenizer, `calibration.json`, `training_meta.json`, and model card to the output directory.
 
-Long emails use up to eight evenly spaced overlapping 512-token windows in training, calibration, test and runtime. FishSTOP chooses the window with the strongest malicious-content logit margin. Public dataset generation excludes Ubuntu, uses SpamAssassin and Enron as independent legitimate sources, reserves entire real sources for validation/test, keeps synthetic email train-only, and writes a reproducibility manifest. The deployed app loads `eugenioderodev/fishstop-bert`; set `FISHSTOP_HF_MODEL_REVISION` to a published commit and upload the model, tokenizer, `calibration.json`, and metadata together.
+Long emails use up to eight evenly spaced overlapping 512-token windows in training, calibration, test and runtime. FishSTOP chooses the window with the strongest malicious-content logit margin. Public dataset generation retains all valid deduplicated rows, including the historical Enron and SpamAssassin corpora, without trusting the potentially absent or forged `Date` header of individual messages. Sources are mixed with a reproducible 70/10/20 random split stratified by source and label; near-duplicate campaigns are kept in one split and contradictory campaigns are removed. Class-weighted training compensates for the remaining class imbalance without discarding real email. Synthetic email remains train-only and is automatically sampled to at most 10% of the training split. Every downloaded release is pinned by version and checksum in the reproducibility manifest. Training emits a dataset audit in `training_meta.json` and uses early stopping. The deployed app loads `eugenioderodev/fishstop-bert`, pinned by default to commit `b29e3334457d942bb5c05fe8f6639edeccf59692`; `FISHSTOP_HF_MODEL_REVISION` can override it explicitly. Upload the model, tokenizer, `calibration.json`, and metadata together. Copying the model only to Google Drive does not update the deployed app.
 
 The old `notebooks/Phishing_detection.ipynb` is retained only as historical exploratory work; `src/train.py` is the canonical training pipeline.
 
@@ -89,7 +89,7 @@ pytest
 
 - `.eml` files are analyzed locally.
 - Reputation lookups send only IPs, domains, URLs, or hashes to the configured providers.
-- Phi-4 mini can run locally through Ollama, so LLM explanations do not require sending email content to a cloud provider.
+- Phi-4 mini runs locally through Ollama with the explicit `phi4-mini:3.8b-q4_K_M` quantized tag, a bounded 4096-token context and model keep-alive, so LLM explanations do not require sending email content to a cloud provider or reloading FP16 weights for every request.
 
 ## Troubleshooting
 

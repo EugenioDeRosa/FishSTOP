@@ -21,7 +21,8 @@ SOURCE_OPTIONS = {
         "label": "GitHub Phishing Pot",
         "caption": (
             "Campioni reali recenti da honeypot: phishing, scam e spam vengono tutti importati "
-            "come email malevole (label 1). La versione GitHub e fissata a un commit riproducibile."
+            "come email malevole (label 1). L'header Date non viene usato come filtro "
+            "e la versione GitHub è fissata a un commit riproducibile."
         ),
         "url": "https://github.com/rf-peixoto/phishing_pot",
     },
@@ -30,25 +31,49 @@ SOURCE_OPTIONS = {
         "caption": "Email phishing reali 2022-2025 in formato mbox/raw; gli anni precedenti sono esclusi.",
         "url": "https://monkey.org/~jose/phishing/",
     },
-    "spamassassin": {
-        "label": "SpamAssassin public ham corpus",
+    "zenodo_validation": {
+        "label": "Zenodo phishing emails",
         "caption": (
-            "Email legittime pubbliche easy-ham e hard-ham. Usate insieme a Enron per evitare "
-            "che una sola fonte rappresenti tutta la classe legittima."
+            "Dataset inglese CC BY 4.0 del 2024. Le 2.000 righe vengono deduplicate: "
+            "restano circa 100 testi distinti, distribuiti negli split per campagna."
+        ),
+        "url": "https://zenodo.org/records/13474746",
+    },
+    "spaphish": {
+        "label": "SpaPhish v5",
+        "caption": (
+            "Email spagnole CC BY 4.0 con label umane. Tutte le righe valide della versione 5 "
+            "sono incluse e mescolate con le altre fonti; l'header Date non viene usato come filtro."
+        ),
+        "url": "https://data.mendeley.com/datasets/hz2d6gz7pc/5",
+    },
+    "spamassassin": {
+        "label": "SpamAssassin public corpus",
+        "caption": (
+            "Email legittime storiche (easy ham e hard ham). Sono mantenute perché aggiungono "
+            "una seconda fonte reale di messaggi non malevoli; duplicati e template ripetuti "
+            "vengono rimossi."
         ),
         "url": "https://spamassassin.apache.org/old/publiccorpus/",
     },
     "enron": {
-        "label": "Enron public email corpus",
+        "label": "Enron Email Dataset",
         "caption": (
-            "Email aziendali legittime da una fonte indipendente. Gli split source-held-out "
-            "mantengono intere fonti fuori dal train."
+            "Campione di email aziendali legittime storiche. L'età non è usata come filtro: "
+            "la fonte aumenta la varietà del train ed è sottoposta agli stessi controlli anti-leakage."
         ),
         "url": "https://www.cs.cmu.edu/~enron/",
     },
 }
 
-RECOMMENDED_DEFAULT_SOURCES = {"github_phishing_pot", "nazario", "spamassassin", "enron"}
+RECOMMENDED_DEFAULT_SOURCES = {
+    "github_phishing_pot",
+    "nazario",
+    "zenodo_validation",
+    "spaphish",
+    "spamassassin",
+    "enron",
+}
 
 @st.cache_data(show_spinner=False)
 def _cached_ui_stats(path_value: str, csv_mtime: float, manifest_mtime: float) -> dict:
@@ -184,9 +209,9 @@ def render() -> None:
         "Build and inspect the balanced dataset used to train the FishStop content classifier.",
     )
     st.markdown(
-        "Seleziona le fonti pubbliche e genera un CSV pronto per DistilBERT: bilanciato 50/50, "
-        "deduplicato e con phishing e spam entrambi nella classe malevola. Il dataset sintetico "
-        "moderno viene aggiunto esclusivamente al train."
+        "Seleziona le fonti pubbliche e genera un CSV pronto per DistilBERT: tutte le righe valide "
+        "e deduplicate vengono mantenute, con phishing e spam nella classe malevola. Il dataset "
+        "sintetico moderno viene aggiunto esclusivamente al train."
     )
 
     output_csv = Path(st.text_input("Complete training CSV", value=str(DEFAULT_COMPLETE_OUTPUT_CSV)))
@@ -214,8 +239,9 @@ def render() -> None:
     st.divider()
     st.subheader("Sources to include")
     st.caption(
-        "Le fonti Ubuntu sono escluse. Il test e la validation riservano intere fonti, "
-        "così il modello viene misurato anche su origini non viste nel train."
+        "Le fonti vengono mescolate con split casuale riproducibile 70/10/20, stratificato per "
+        "fonte e classe. Le campagne quasi duplicate restano nello stesso split. Sono ammessi "
+        "anche Enron e SpamAssassin; la data dichiarata nelle singole email non viene filtrata."
     )
 
     selected_sources: list[str] = []
@@ -258,7 +284,7 @@ def render() -> None:
 
     with st.expander("Advanced: generate only the balanced public dataset", expanded=False):
         if st.button(
-            "Generate public-only 50/50 dataset",
+        "Generate public-only mixed dataset",
             disabled=not selected_sources,
             use_container_width=True,
         ):

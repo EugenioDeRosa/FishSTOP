@@ -5,6 +5,7 @@ from src.analyzer.llm_context_analyzer import (
     _valid_content_summary,
     apply_email_risk_policy,
     format_email_risk_analysis,
+    normalize_semantic_extraction,
 )
 
 
@@ -28,6 +29,19 @@ def test_missing_dkim_is_reported_as_absent_not_failed():
         "DMARC did not pass (fail)",
     ]
     assert any("DKIM signature is absent" in line for line in context)
+
+
+def test_dkim_absence_is_retained_when_dmarc_passes():
+    risk, reasons = _identity_risk({
+        "effective_auth_results": {
+            "SPF": {"status": "pass"},
+            "DKIM": {"status": "none"},
+            "DMARC": {"status": "pass"},
+        },
+    })
+
+    assert risk == "verified"
+    assert reasons == ["sender authentication passed", "DKIM signature is absent"]
 
 
 def test_missing_dkim_is_included_in_readable_explanation():
@@ -73,7 +87,7 @@ def _semantic(**overrides):
     return result
 
 
-def test_phi4_result_is_presented_as_a_plain_sentence():
+def test_phi4_result_is_presented_as_a_fluent_soc_summary():
     assert format_email_risk_analysis({
         "final_verdict": "legitimate",
         "content_summary": "The subject and body provide routine meeting information without requesting risky actions",
@@ -84,8 +98,10 @@ def test_phi4_result_is_presented_as_a_plain_sentence():
             "technical": ["no strong technical threat was detected"],
         },
     }) == (
-        "This email is not suspicious. The subject and body provide routine meeting information without requesting risky actions.\n"
-        "The technical analysis supports this assessment because the sender is authenticated and no technical threats were detected."
+        "Our analysis indicates that this email is likely legitimate. "
+        "The subject and body provide routine meeting information without requesting risky actions. "
+        "Independent technical checks support this assessment because the sender is authenticated "
+        "and no confirmed technical threat was detected."
     )
     assert format_email_risk_analysis({
         "final_verdict": "review",
@@ -100,11 +116,12 @@ def test_phi4_result_is_presented_as_a_plain_sentence():
             ],
             "technical": ["no strong technical threat was detected"],
         },
-    }) == (
-        "This email is suspicious and requires verification. The subject and body contain a cryptocurrency offer and direct the recipient to a link, a pattern commonly used in phishing.\n"
-        "The technical analysis does not prove a threat on its own, but supports caution because SPF did not pass (temperror); "
-        "DMARC did not pass (temperror); the Return-Path differs from the visible sender."
-    )
+        }) == (
+            "Our analysis indicates that this email requires manual verification before the recipient takes action. "
+            "The subject and body contain a cryptocurrency offer and direct the recipient to a link, a pattern commonly used in phishing. "
+            "Independent technical checks support this assessment because SPF did not pass (temperror), "
+            "DMARC did not pass (temperror), and the Return-Path differs from the visible sender."
+        )
     assert format_email_risk_analysis({
         "final_verdict": "phishing",
         "content_summary": "The subject and body ask the recipient to enter credentials on a linked page, a strong phishing pattern",
@@ -114,10 +131,24 @@ def test_phi4_result_is_presented_as_a_plain_sentence():
             "identity": ["sender authentication passed"],
             "technical": ["a URL is detected as malicious"],
         },
-    }) == (
-        "This email is suspicious. The subject and body ask the recipient to enter credentials on a linked page, a strong phishing pattern.\n"
-        "The technical analysis supports this assessment because a URL was detected as malicious."
-    )
+        }) == (
+            "Our analysis indicates that this email is likely a phishing attempt. "
+            "The subject and body ask the recipient to enter credentials on a linked page, a strong phishing pattern. "
+            "Independent technical checks support this assessment because a URL was detected as malicious."
+        )
+
+    rendered = format_email_risk_analysis({
+        "final_verdict": "review",
+        "content_summary": "The email body asks the recipient to inspect a supplied link",
+        "identity_risk": "uncertain",
+        "technical_risk": "uncertain",
+        "evidence": {
+            "identity": ["DKIM signature is absent"],
+            "technical": ["a URL has suspicious reputation"],
+        },
+    })
+    assert "\n" not in rendered
+    assert not rendered.lstrip().startswith("{")
 
 
 def test_missing_model_summary_has_a_useful_deterministic_fallback():
@@ -134,12 +165,52 @@ def test_missing_model_summary_has_a_useful_deterministic_fallback():
         "a pattern commonly used in phishing."
     )
 
+    compact_summary = _fallback_content_summary(
+        {"links": [{"url": "https://example.test/claim"}]},
+        {"action": "claim_reward"},
+    )
+    assert compact_summary == summary
+
+
+def test_compact_phi4_schema_expands_to_policy_fields():
+    semantic = normalize_semantic_extraction({
+        "action": "payment",
+        "channel": "link",
+        "signals": ["click", "payment", "urgency", "risky_urgency", "deception"],
+        "confidence": 0.91,
+        "reason": "Requests an urgent transfer through a supplied link.",
+        "summary": "The email body requests an urgent linked payment, a financial phishing pattern.",
+    })
+
+    assert semantic["requested_action"] == "pay_or_transfer"
+    assert semantic["action_channel"] == "supplied_link"
+    assert semantic["asks_to_click_link"] is True
+    assert semantic["asks_for_payment"] is True
+    assert semantic["urgency_present"] is True
+    assert semantic["urgency_targets_risky_action"] is True
+    assert semantic["impersonation_or_deception"] is True
+    assert semantic["content_summary"].startswith("The email body")
+
+
+def test_compact_phi4_schema_derives_action_signals_without_repeated_booleans():
+    semantic = normalize_semantic_extraction({
+        "action": "provide_credentials",
+        "channel": "form",
+        "signals": [],
+        "confidence": 0.8,
+        "reason": "Credentials are requested in a form.",
+        "summary": "The email body requests credentials through a supplied form, a strong phishing pattern.",
+    })
+
+    assert semantic["asks_for_credentials"] is True
+    assert semantic["action_channel"] == "external_form"
+
 
 def test_literal_content_recap_is_not_accepted_as_security_analysis():
     assert not _valid_content_summary(
         "Lido Community Rewards: stETH airdrop live, snapshot taken on 21 July."
     )
-    assert not _valid_content_summary(
+    assert _valid_content_summary(
         "The subject and body announce an airdrop and list the snapshot date."
     )
     assert not _valid_content_summary(
@@ -148,6 +219,43 @@ def test_literal_content_recap_is_not_accepted_as_security_analysis():
     assert _valid_content_summary(
         "The subject and body contain a cryptocurrency reward offer, a pattern commonly used in phishing."
     )
+
+
+def test_internal_tool_recommendation_is_legitimate_and_reports_missing_dkim():
+    soc = {
+        "subject": "Accesso remoto",
+        "body_for_ai": (
+            "Ciao Gianluca, ok grazie per il feedback. Nessuna problematica all'uso di TeamViewer, "
+            "vi chiederei di usare in primis Neurons anche per testarlo, soprattutto per connessioni dentro Cefla."
+        ),
+        "links": [
+            {"url": "https://example.test/1", "host": "example.test"},
+            {"url": "https://example.test/2", "host": "example.test"},
+        ],
+        "attachments": [{}, {}],
+        "effective_auth_results": {
+            "SPF": {"status": "pass"},
+            "DKIM": {"status": "none"},
+            "DMARC": {"status": "pass"},
+        },
+    }
+    analysis = apply_email_risk_policy(soc, {
+        "action": "provide_information",
+        "channel": "reply",
+        "signals": [],
+        "summary": "The subject and body ask the recipient to provide information that could be used for social engineering.",
+    })
+    rendered = format_email_risk_analysis(analysis)
+
+    assert analysis["final_verdict"] == "legitimate"
+    assert analysis["content_risk"] == "benign"
+    assert analysis["requested_action"] == "informational"
+    assert "operational request" in rendered
+    assert "social engineering" not in rendered
+    assert (
+        "Independent technical checks support this assessment because the sender is authenticated "
+        "and no confirmed technical threat was detected. However, the message has no DKIM signature."
+    ) in rendered
 
 
 def test_authentication_failures_alone_do_not_create_phishing_verdict():
@@ -420,3 +528,35 @@ def test_credential_request_or_malicious_url_produces_phishing():
 
     assert credential_analysis["final_verdict"] == "phishing"
     assert url_analysis["final_verdict"] == "phishing"
+
+
+def test_malicious_attachment_and_hop_are_independent_technical_evidence():
+    attachment_analysis = apply_email_risk_policy(
+        {
+            "auth_results": {},
+            "attachments": [{
+                "file_reputation": {
+                    "status": "malicious",
+                    "malicious": 4,
+                },
+            }],
+        },
+        _semantic(),
+    )
+    hop_analysis = apply_email_risk_policy(
+        {
+            "auth_results": {},
+            "hop_reputation": {
+                "203.0.113.9": {
+                    "status": "ok",
+                    "abuseConfidenceScore": 90,
+                },
+            },
+        },
+        _semantic(),
+    )
+
+    assert attachment_analysis["final_verdict"] == "phishing"
+    assert "an attachment is detected as malicious" in attachment_analysis["evidence"]["technical"]
+    assert hop_analysis["final_verdict"] == "phishing"
+    assert "a routing hop has malicious IP reputation" in hop_analysis["evidence"]["technical"]

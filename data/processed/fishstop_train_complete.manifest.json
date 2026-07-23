@@ -1,7 +1,7 @@
 {
-  "generated_at": "2026-07-20T09:29:27.439576+00:00",
+  "generated_at": "2026-07-23T10:27:18.152937+00:00",
   "dataset": "data\\processed\\fishstop_train_complete.csv",
-  "dataset_sha256": "916ec9eca5bb6a91ee074829cf60718a3e81aabef88441fdd9e3c5dd8cdc98ed",
+  "dataset_sha256": "c89e1f5d2bb92b5a5dd5beb8a235a798932ed19eb9d75c2f740a94b5fd450816",
   "label_semantics": {
     "0": "LEGITIMATE",
     "1": "MALICIOUS_PHISHING_OR_SPAM"
@@ -12,16 +12,24 @@
       "kaggle_subhajournal_phishingemails",
       "ubuntu_modern_ham"
     ],
-    "split_strategy": "source_holdout",
-    "phishing_year_range": [
+    "split_strategy": "campaign_grouped_random_stratified_70_10_20",
+    "historical_sources_included_when_selected": [
+      "enron",
+      "spamassassin"
+    ],
+    "message_date_filtering": false,
+    "nazario_release_years": [
       2022,
       2025
-    ]
+    ],
+    "class_policy": "retain_all_valid_deduplicated_public_rows"
   },
   "campaign_similarity_threshold": 0.83,
   "selected_sources": [
     "github_phishing_pot",
     "nazario",
+    "zenodo_validation",
+    "spaphish",
     "spamassassin",
     "enron"
   ],
@@ -32,7 +40,7 @@
       "added": 6519,
       "skipped": 2095,
       "errors": 0,
-      "message": "GitHub Phishing Pot importato come phishing."
+      "message": "GitHub Phishing Pot importato come phishing senza filtrare l'header data."
     },
     {
       "source": "nazario",
@@ -43,8 +51,24 @@
       "message": "Nazario phishing importato"
     },
     {
+      "source": "zenodo_validation",
+      "rows": 8006,
+      "added": 100,
+      "skipped": 1900,
+      "errors": 0,
+      "message": "Zenodo importato nel dataset misto; duplicati esatti rimossi."
+    },
+    {
+      "source": "spaphish",
+      "rows": 9398,
+      "added": 1392,
+      "skipped": 3,
+      "errors": 0,
+      "message": "SpaPhish v5 importato senza filtrare l'header data; lo split viene assegnato successivamente per campagna."
+    },
+    {
       "source": "spamassassin",
-      "rows": 10627,
+      "rows": 12119,
       "added": 2721,
       "skipped": 31,
       "errors": 0,
@@ -52,7 +76,7 @@
     },
     {
       "source": "enron",
-      "rows": 19003,
+      "rows": 20495,
       "added": 8376,
       "skipped": 1624,
       "errors": 0,
@@ -79,6 +103,16 @@
       "path": "data\\training_sources\\legitimate\\spamassassin\\hard_ham.tar.bz2",
       "bytes": 1029898,
       "sha256": "ce2ce67880643dbde65ea7f85bffbfe4417349c4bd80b6b0de56262ae6b0a9c9"
+    },
+    {
+      "path": "data\\training_sources\\mixed\\spaphish\\spaphish_v5.csv",
+      "bytes": 5098917,
+      "sha256": "656b2245d58da72d640680e5c2a168673a130b38607f2a427c773bbb167e995e"
+    },
+    {
+      "path": "data\\training_sources\\mixed\\zenodo_validation\\Phishing_validation_emails.csv",
+      "bytes": 203107,
+      "sha256": "ad15f63cb8db2caaee33c442f1ff4488b9444530a4c42ab63bb580016b160bd3"
     },
     {
       "path": "data\\training_sources\\phishing\\nazario\\phishing-2022",
@@ -108,9 +142,9 @@
   ],
   "stats": {
     "exists": true,
-    "rows": 14016,
-    "legitimate": 7008,
-    "phishing": 7008,
+    "rows": 19297,
+    "legitimate": 11342,
+    "phishing": 7955,
     "duplicates": 0,
     "template_duplicates": 0,
     "label_conflicts": 0,
@@ -122,21 +156,23 @@
     "too_long": 0,
     "missing_label": false,
     "sources": {
+      "enron": 7775,
       "github_phishing_pot": 5902,
-      "enron": 5902,
-      "spamassassin_easy_ham": 745,
+      "spamassassin_easy_ham": 2470,
+      "spaphish": 1335,
       "nazario_phishing-2025": 416,
-      "nazario_phishing-2024": 329,
+      "nazario_phishing-2023": 332,
+      "nazario_phishing-2024": 326,
       "spamassassin_hard_ham": 241,
       "synthetic_modern_v2": 240,
-      "nazario_phishing-2023": 152,
-      "nazario_phishing-2022": 89
+      "nazario_phishing-2022": 167,
+      "zenodo_2024": 93
     },
     "splits": {
-      "train": 12044,
-      "test": 1490,
-      "validation": 482
+      "train": 13581,
+      "test": 3810,
+      "validation": 1906
     },
-    "rows_after_template_dedupe": 14016
+    "rows_after_template_dedupe": 19297
   }
 }

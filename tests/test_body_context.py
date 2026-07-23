@@ -53,6 +53,28 @@ Please delete it if received in error.
     assert result["body_ai_removed_tail_lines"] == 2
 
 
+def test_body_ai_compacts_obfuscated_prefix_and_unsubscribe_tail():
+    poison = "A9bZ0_xY" * 30
+    body = (
+        f"{poison}\n\n"
+        "Confirmed - Your Welcome Bonus\n"
+        "<http://example.test/claim>\n"
+        "CLAIM NOW\n\n"
+        "To opt out of future communications, please click the following link"
+    )
+
+    result = select_body_for_ai(body)
+
+    assert result["body_ai"] == (
+        "[OBFUSCATED DATA]\n\n"
+        "Confirmed - Your Welcome Bonus\n"
+        "<[URL LINK]>\n"
+        "CLAIM NOW"
+    )
+    assert result["body_ai_removed_tail_lines"] == 1
+    assert poison not in result["body_ai"]
+
+
 def test_underscore_separator_removes_previous_thread_and_good_luck_signature():
     body = """Dear Eugenio,
 

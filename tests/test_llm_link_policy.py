@@ -26,17 +26,18 @@ def test_phi4_prompt_says_link_alone_is_not_suspicious():
     }
 
     prompt = build_fast_email_prompt(soc)
-    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
     assert "Here is our monthly update" in prompt
-    assert "A link by itself is not suspicious" in prompt_source
-    assert "clean/unknown/tracking/generic links" in prompt_source
+    assert "A link or urgency alone is neutral" in prompt_source
+    assert "VirusTotal" not in prompt
+    assert "url_rep=clean:1" in prompt
 
 
-def test_phi4_treats_direct_ip_links_as_strong_support():
-    prompt_source = inspect.getsource(stream_phi4_email_analysis)
+def test_phi4_receives_only_the_presence_of_a_direct_ip_link():
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "Strong support: malicious VirusTotal, direct IP links" in prompt_source
+    assert "VirusTotal" not in prompt_source
     assert "IP/geolocation" not in prompt_source
 
     prompt = build_fast_email_prompt({
@@ -56,7 +57,44 @@ def test_phi4_treats_direct_ip_links_as_strong_support():
         "flags": [{"level": "HIGH", "field": "Link", "message": "URL with bare IP detected"}],
     })
 
-    assert "Link action signals" in prompt
-    assert "direct IP link" in prompt
-    assert "strong phishing infrastructure signal" in prompt
-    assert "URL with bare IP detected" in prompt
+    assert "META: links=1; attachments=0" in prompt
+    assert "direct_ip_link=true" in prompt
+    assert "direct IP link" not in prompt
+    assert "strong phishing infrastructure signal" not in prompt
+    assert "URL with bare IP detected" not in prompt
+
+
+def test_phi4_receives_normalized_reputation_context_with_malicious_as_strong():
+    prompt = build_fast_email_prompt({
+        "subject": "Account review",
+        "body_clean": "Please review your account using the supplied link.",
+        "auth_results": {
+            "SPF": {"status": "pass"},
+            "DKIM": {"status": "none"},
+            "DMARC": {"status": "fail"},
+        },
+        "links": [{"url": "https://bad.example", "host": "bad.example"}],
+        "link_reputation": {
+            "https://bad.example": {"status": "malicious", "malicious": 8},
+        },
+        "hop_reputation": {
+            "198.51.100.8": {"status": "ok", "abuseConfidenceScore": 12},
+        },
+        "domain_reputation": {
+            "sender.example": {"status": "ok", "abuseConfidenceScore": 81},
+        },
+        "attachments": [{
+            "file_reputation": {"status": "suspicious", "suspicious": 2},
+        }],
+        "bert_ai_result": "phishing",
+    })
+
+    assert "CHECKS: SPF=pass; DKIM=none; DMARC=fail" in prompt
+    assert "url_rep=malicious:1" in prompt
+    assert "file_rep=suspicious:1" in prompt
+    assert "domain_rep=malicious:1" in prompt
+    assert "hop_rep=low_risk:1" in prompt
+    assert "BERT=phishing" in prompt
+    assert "malicious URL/domain/file=strong phishing evidence" in (
+        llm_context_analyzer.TASK_INSTRUCTIONS
+    )

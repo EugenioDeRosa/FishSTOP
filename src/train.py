@@ -20,6 +20,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorWithPadding,
+    EarlyStoppingCallback,
     Trainer,
     TrainerCallback,
     TrainingArguments,
@@ -35,12 +36,74 @@ from src.bert_inference import (
 from src.bert_input import normalize_bert_text
 
 
-DEFAULT_BASE_MODEL = "distilbert-base-uncased"
+DEFAULT_BASE_MODEL = "distilbert/distilbert-base-multilingual-cased"
 DEFAULT_DATASET = Path("data/processed/fishstop_train_complete.csv")
-DEFAULT_OUTPUT_DIR = Path("models/fishstop-distilbert")
+DEFAULT_OUTPUT_DIR = Path("models/fishstop-distilbert-multilingual")
 ID2LABEL = {0: "LEGITIMATE", 1: "MALICIOUS"}
 LABEL2ID = {label: index for index, label in ID2LABEL.items()}
 REQUIRED_SPLITS = {"train", "validation", "test"}
+
+
+def audit_training_dataframe(df: pd.DataFrame) -> dict:
+    """Summarize dataset coverage and flag shortcuts before an expensive run."""
+    source_table: dict[str, dict[str, dict[str, int]]] = {}
+    if "source" in df.columns:
+        counts = df.groupby(["split", "source", "label"]).size()
+        for (split, source, label), count in counts.items():
+            source_table.setdefault(str(split), {}).setdefault(str(source), {})[str(int(label))] = int(count)
+
+    warnings: list[str] = []
+    train = df[df["split"].eq("train")]
+    real_train = train
+    if "source" in train.columns:
+        sources = train["source"].fillna("").astype(str).str.lower()
+        synthetic = sources.str.startswith("synthetic_") | sources.eq(
+            "kaggle_phishing_and_legitimate_emails"
+        )
+        real_train = train.loc[~synthetic]
+
+    real_sources_per_label = {
+        str(label): (
+            sorted(real_train.loc[real_train["label"].eq(label), "source"].astype(str).unique().tolist())
+            if "source" in real_train.columns
+            else []
+        )
+        for label in (0, 1)
+    }
+    for label, label_name in ((0, "legitimate"), (1, "malicious")):
+        if len(real_sources_per_label[str(label)]) < 2:
+            warnings.append(
+                f"Training has fewer than two independent real {label_name} sources; "
+                "the model can learn corpus style instead of the class."
+            )
+    if "language" not in df.columns:
+        warnings.append(
+            "No language column is present, so multilingual coverage cannot be measured or stratified."
+        )
+
+    train_class_counts = train["label"].value_counts().to_dict()
+    train_class_weights = {
+        str(label): (
+            len(train) / (2.0 * int(train_class_counts[label]))
+            if int(train_class_counts.get(label, 0)) > 0
+            else None
+        )
+        for label in (0, 1)
+    }
+
+    return {
+        "class_counts_by_split": {
+            str(split): {
+                str(int(label)): int(count)
+                for label, count in group["label"].value_counts().sort_index().items()
+            }
+            for split, group in df.groupby("split")
+        },
+        "sources_by_split_and_label": source_table,
+        "real_train_sources_per_label": real_sources_per_label,
+        "train_class_weights": train_class_weights,
+        "warnings": warnings,
+    }
 
 
 def _format_duration(seconds: float) -> str:
@@ -143,14 +206,6 @@ def load_training_dataframe(path: str | Path) -> pd.DataFrame:
         synthetic = sources.eq("kaggle_phishing_and_legitimate_emails") | sources.str.startswith("synthetic_")
         if (synthetic & df["split"].ne("train")).any():
             raise ValueError("Synthetic emails are allowed only in the train split")
-        real_source_splits = df.loc[~synthetic].groupby("source")["split"].nunique()
-        leaked_sources = real_source_splits[real_source_splits > 1]
-        if not leaked_sources.empty:
-            raise ValueError(
-                "Source leakage detected: real sources occur in multiple splits: "
-                + ", ".join(map(str, leaked_sources.index[:10]))
-            )
-
     df["_normalized_hash"] = df["text"].map(_text_hash)
     split_counts = df.groupby("_normalized_hash")["split"].nunique()
     leaked_hashes = set(split_counts[split_counts > 1].index)
@@ -158,6 +213,13 @@ def load_training_dataframe(path: str | Path) -> pd.DataFrame:
         raise ValueError(
             f"Data leakage detected: {len(leaked_hashes)} normalized emails occur in multiple splits"
         )
+    if "campaign_id" in df.columns:
+        campaign_splits = df.groupby("campaign_id")["split"].nunique()
+        leaked_campaigns = campaign_splits[campaign_splits > 1]
+        if not leaked_campaigns.empty:
+            raise ValueError(
+                f"Campaign leakage detected: {len(leaked_campaigns)} campaigns occur in multiple splits"
+            )
     df = df.drop_duplicates(subset=["_normalized_hash"], keep="first")
 
     for split in REQUIRED_SPLITS:
@@ -211,8 +273,10 @@ class DistilBERTPhishingTrainer:
             sample_index: sum(mapping[position] == sample_index for position in selected_positions)
             for sample_index in range(len(examples["text"]))
         }
+        class_weights = examples.get("class_weight", [1.0] * len(examples["text"]))
         tokenized["sample_weight"] = [
-            1.0 / selected_counts[mapping[position]] for position in selected_positions
+            float(class_weights[mapping[position]]) / selected_counts[mapping[position]]
+            for position in selected_positions
         ]
         if "email_id" in examples:
             tokenized["email_id"] = [examples["email_id"][mapping[position]] for position in selected_positions]
@@ -244,6 +308,14 @@ class DistilBERTPhishingTrainer:
     def prepare_datasets(df: pd.DataFrame) -> tuple[Dataset, Dataset]:
         train_df = df[df["split"] == "train"][["text", "label"]].reset_index(drop=True)
         validation_df = df[df["split"] == "validation"][["text", "label"]].reset_index(drop=True)
+        train_counts = train_df["label"].value_counts().to_dict()
+        train_df["class_weight"] = train_df["label"].map(
+            {
+                label: len(train_df) / (2.0 * int(train_counts[label]))
+                for label in (0, 1)
+            }
+        )
+        validation_df["class_weight"] = 1.0
         train_df["email_id"] = np.arange(len(train_df), dtype=int)
         validation_df["email_id"] = np.arange(len(validation_df), dtype=int)
         return Dataset.from_pandas(train_df), Dataset.from_pandas(validation_df)
@@ -252,7 +324,7 @@ class DistilBERTPhishingTrainer:
         self,
         df: pd.DataFrame,
         output_dir: str | Path = DEFAULT_OUTPUT_DIR,
-        epochs: int = 5,
+        epochs: int = 4,
     ) -> Trainer:
         output_dir = Path(output_dir)
         print("Preparing train and validation datasets...", flush=True)
@@ -321,7 +393,13 @@ class DistilBERTPhishingTrainer:
             processing_class=self.tokenizer,
             data_collator=DataCollatorWithPadding(tokenizer=self.tokenizer),
             compute_metrics=lambda prediction: self.compute_email_metrics(prediction, validation_owners),
-            callbacks=[TrainingProgressCallback()],
+            callbacks=[
+                TrainingProgressCallback(),
+                EarlyStoppingCallback(
+                    early_stopping_patience=2,
+                    early_stopping_threshold=0.001,
+                ),
+            ],
         )
         # Keep the Hugging Face Trainer available on the wrapper.  Trainer.state
         # belongs to this object, not to DistilBERTPhishingTrainer itself.
@@ -371,7 +449,7 @@ def evaluate_calibrated(
         "precision": float(precision_score(labels_np, predictions, zero_division=0)),
         "recall": float(recall_score(labels_np, predictions, zero_division=0)),
         "f1": float(f1_score(labels_np, predictions, zero_division=0)),
-        "confusion_matrix": confusion_matrix(labels_np, predictions).tolist(),
+        "confusion_matrix": confusion_matrix(labels_np, predictions, labels=[0, 1]).tolist(),
         "selective_coverage": float(decided.mean()),
         "selective_accuracy": float((predictions[decided] == labels_np[decided]).mean()) if decided.any() else None,
     }
@@ -381,7 +459,7 @@ def write_model_card(output_dir: Path, metadata: dict) -> None:
     metrics = metadata["test_metrics"]
     output_dir.joinpath("README.md").write_text(
         f"""---
-language: en
+language: multilingual
 library_name: transformers
 pipeline_tag: text-classification
 tags:
@@ -417,20 +495,25 @@ def run_training(
     dataset_path: str | Path = DEFAULT_DATASET,
     output_dir: str | Path = DEFAULT_OUTPUT_DIR,
     base_model: str = DEFAULT_BASE_MODEL,
-    epochs: int = 5,
+    epochs: int = 4,
 ) -> dict:
     dataset_path = Path(dataset_path)
     output_dir = Path(output_dir)
     print(f"Loading training dataset: {dataset_path}", flush=True)
     dataset_sha256 = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
     df = load_training_dataframe(dataset_path)
+    dataset_audit = audit_training_dataframe(df)
     split_counts = df["split"].value_counts().to_dict()
     print(f"Validated {len(df)} emails. Split counts: {split_counts}", flush=True)
+    for warning in dataset_audit["warnings"]:
+        print(f"DATASET WARNING: {warning}", flush=True)
     print(f"Loading base model: {base_model}", flush=True)
     training_pipeline = DistilBERTPhishingTrainer(base_model)
     hf_trainer = training_pipeline.train(df, output_dir=output_dir, epochs=epochs)
     training_pipeline.model.config.fishstop_dataset_sha256 = dataset_sha256
-    training_pipeline.model.config.fishstop_split_strategy = "source_holdout"
+    training_pipeline.model.config.fishstop_split_strategy = (
+        "campaign_grouped_random_stratified_70_10_20"
+    )
     training_pipeline.model.save_pretrained(output_dir)
 
     validation_df = df[df["split"] == "validation"]
@@ -453,6 +536,17 @@ def run_training(
     print(f"Running final evaluation on {len(test_df)} held-out test emails...", flush=True)
     test_logits, test_labels, test_chunks = training_pipeline.collect_email_logits(test_df)
     test_metrics = evaluate_calibrated(test_logits, test_labels, calibration)
+    test_metrics_by_source = {}
+    if "source" in test_df.columns:
+        for source, positions in test_df.reset_index(drop=True).groupby("source").groups.items():
+            indices = torch.tensor(list(positions), dtype=torch.long)
+            source_metrics = evaluate_calibrated(
+                test_logits.index_select(0, indices),
+                test_labels.index_select(0, indices),
+                calibration,
+            )
+            source_metrics["rows"] = len(indices)
+            test_metrics_by_source[str(source)] = source_metrics
     metadata = {
         "trained_at": datetime.now(timezone.utc).isoformat(),
         "base_model": base_model,
@@ -467,10 +561,12 @@ def run_training(
             if "source" in df else []
             for split in sorted(REQUIRED_SPLITS)
         },
+        "dataset_audit": dataset_audit,
         "validation_multi_chunk_emails": int(sum(count > 1 for count in validation_chunks)),
         "test_multi_chunk_emails": int(sum(count > 1 for count in test_chunks)),
         "calibration": calibration,
         "test_metrics": test_metrics,
+        "test_metrics_by_source": test_metrics_by_source,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
     output_dir.joinpath("training_meta.json").write_text(json.dumps(metadata, indent=2), encoding="utf-8")
@@ -484,7 +580,7 @@ def parse_args():
     parser.add_argument("--dataset", default=str(DEFAULT_DATASET))
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL)
-    parser.add_argument("--epochs", type=int, default=5)
+    parser.add_argument("--epochs", type=int, default=4)
     return parser.parse_args()
 
 

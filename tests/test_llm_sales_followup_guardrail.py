@@ -38,10 +38,11 @@ def test_sales_followup_with_bert_and_auth_medium_flags_is_not_bec_by_itself():
     }
 
     prompt = build_fast_email_prompt(soc)
-    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
     assert "torno a contattarla un'ultima volta" in prompt
-    assert "BERT result: available to FishSTOP UI only; not provided as verdict evidence to Phi-4" in prompt
-    assert "ordinary marketing, sales follow-up" in llm_context_analyzer.SYSTEM_MESSAGE
-    assert "business-process discussion" in llm_context_analyzer.SYSTEM_MESSAGE
-    assert "unless it includes a risky action above" in prompt_source
+    assert "BERT result" not in prompt
+    assert "SUBJECT: Servizio post-vendita" in prompt
+    assert "Marketing" in prompt_source
+    assert "business" in prompt_source
+    assert "benign without these" in prompt_source

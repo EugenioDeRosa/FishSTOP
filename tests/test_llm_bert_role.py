@@ -1,10 +1,14 @@
 import inspect
 
 from src.analyzer import llm_context_analyzer
-from src.analyzer.llm_context_analyzer import build_fast_email_prompt
+from src.analyzer.llm_context_analyzer import (
+    apply_email_risk_policy,
+    build_fast_email_prompt,
+    format_email_risk_analysis,
+)
 
 
-def test_bert_is_presented_as_supporting_pressure_signal_not_verdict():
+def test_bert_is_passed_as_compact_supporting_context_not_as_the_verdict():
     soc = {
         "from_": "sales@example.com",
         "to": "customer@example.net",
@@ -34,14 +38,40 @@ def test_bert_is_presented_as_supporting_pressure_signal_not_verdict():
 
     prompt = build_fast_email_prompt(soc)
 
-    assert "BERT result: available to FishSTOP UI only; not provided as verdict evidence to Phi-4" in prompt
+    assert "BERT=phishing" in prompt
+    assert "SUBJECT: Service improvement discussion" in prompt
     assert "Semantic analysis (BERT): phishing" not in prompt
 
 
-def test_phi4_instructions_forbid_using_bert_as_phishing_reason():
-    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+def test_phi4_instructions_keep_bert_supporting_and_out_of_content_summary():
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "do not mention BERT" in prompt_source
-    assert "BERT" in prompt_source
-    assert "Weak only" in prompt_source
-    assert "never use weak-only evidence for a suspicious verdict" in prompt_source
+    assert "BERT=support only" in prompt_source
+    assert "content only; no verdict/checks" in prompt_source
+    assert "link or urgency alone is neutral" in prompt_source
+
+
+def test_bert_is_reported_after_intent_analysis_as_support_or_contrary_evidence():
+    phishing = apply_email_risk_policy(
+        {"auth_results": {}, "bert_ai_result": "phishing"},
+        {
+            "action": "provide_credentials",
+            "channel": "reply",
+            "signals": ["credentials"],
+            "summary": "The email body requests credentials by reply, a strong phishing pattern.",
+        },
+    )
+    legitimate = apply_email_risk_policy(
+        {"auth_results": {}, "bert_ai_result": "phishing"},
+        {
+            "action": "info",
+            "channel": "none",
+            "signals": [],
+            "summary": "The subject and body provide routine information without requesting risky action.",
+        },
+    )
+
+    assert "BERT classified the content as phishing" in phishing["corroboration"]["details"]
+    assert "BERT classified the content as phishing" in legitimate["corroboration"]["caveats"]
+    assert "BERT classified the content as phishing" in format_email_risk_analysis(phishing)
+    assert legitimate["final_verdict"] == "legitimate"

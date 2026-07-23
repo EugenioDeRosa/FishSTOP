@@ -8,6 +8,8 @@ should see the most relevant layer only.
 
 import re
 
+from src.ai_input import compact_ai_body
+
 
 _FORWARD_MARKER_RE = re.compile(
     r"^\s*(?:"
@@ -61,6 +63,7 @@ _AI_TAIL_BOILERPLATE_RE = re.compile(
     r"legal disclosure\b|"
     r"privacy statement\b|"
     r"if you no longer wish to receive|"
+    r"to opt out of future communications|"
     r"if you'd like me to stop sending you emails|"
     r"if you would like me to stop sending you emails|"
     r"unsubscribe\b|"
@@ -116,7 +119,7 @@ def _trim_ai_tail(lines: list[str]) -> tuple[list[str], int]:
 
 def _finalize_body_ai(lines: list[str], removed_quotes: int = 0, removed_headers: int = 0) -> tuple[str, int, int, int]:
     selected, removed_tail = _trim_ai_tail(lines)
-    return _join_significant(selected), removed_quotes, removed_headers, removed_tail
+    return compact_ai_body(_join_significant(selected)), removed_quotes, removed_headers, removed_tail
 
 
 def _normalize_lines(text: str) -> list[str]:

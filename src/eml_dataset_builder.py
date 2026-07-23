@@ -3,11 +3,12 @@ eml_dataset_builder.py - Costruisce e gestisce un dataset custom da file .eml
 
 The produced text is aligned with the preprocessing applied in train.py to ALL
 le fonti (Kaggle, personal_emails, custom_legitimate/custom_phishing):
-  - subject + " " + body
+  - corpo dell'email soltanto (l'oggetto viene ignorato)
   - HTML stripping (BeautifulSoup se disponibile, fallback regex)
+  - URL e dati personali sostituiti da segnaposto informativi
   - lowercase
   - spazi multipli collassati a uno solo
-  (punteggiatura/URL preservati: sono un segnale per il phishing detection)
+  (la punteggiatura viene preservata)
 
 Il CSV prodotto (data/custom_dataset.csv) viene poi letto da train.py
 as a third data source, concatenated with the Kaggle + personal_emails pool, with

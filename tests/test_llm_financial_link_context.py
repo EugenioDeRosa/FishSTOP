@@ -73,26 +73,28 @@ def test_phi4_prompt_forbids_clean_technical_checks_overriding_payment_request()
     }
 
     _ = build_fast_email_prompt(soc)
-    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "pay/settle/transfer money" in prompt_source
-    assert "unless it includes a risky action above" in prompt_source
+    assert "payment or transfer" in prompt_source
+    assert "Marketing, scheduling, sales and business are benign without these" in prompt_source
 
 def test_phi4_prompt_forbids_not_suspicious_payment_clean_vt_reasoning():
-    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "Return this JSON schema exactly" in prompt_source
-    assert "pay/settle/transfer money" in prompt_source
-    assert "use technical facts only as support" in prompt_source
+    assert "JSON only" in prompt_source
+    assert "payment or transfer" in prompt_source
+    assert "content only; no verdict/checks" in prompt_source
+    assert '"signals"' in prompt_source
+    assert '"asks_to_click_link"' not in prompt_source
+    assert '"content_risk"' not in prompt_source
 
 
 def test_phi4_gets_extracted_link_for_invoice_payment_request_without_vt():
-    prompt_source = inspect.getsource(llm_context_analyzer.stream_phi4_email_analysis)
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
 
-    assert "invoice/payment/bank-transfer request" in prompt_source
-    assert "combined with an extracted link or attachment" in prompt_source
-    assert "DMARC is unknown" in prompt_source
-    assert "VirusTotal is clean/unavailable" in prompt_source
+    assert "META link/file supplies an invoice/payment channel" in prompt_source
+    assert "DMARC" not in prompt_source
+    assert "VirusTotal" not in prompt_source
 
     soc = {
         "from_": "billing@example.com",
@@ -128,7 +130,7 @@ def test_phi4_gets_extracted_link_for_invoice_payment_request_without_vt():
 
     assert "przelew bankowy" in prompt
     assert "faktury numer 26839907" in prompt
-    assert "[URL]" in prompt
-    assert "Link action signals" in prompt
-    assert "generic extracted link" in prompt
-    assert "source=plain_text" in prompt
+    assert "[URL LINK]" in prompt
+    assert "META: links=1; attachments=0" in prompt
+    assert "generic extracted link" not in prompt
+    assert "source=plain_text" not in prompt

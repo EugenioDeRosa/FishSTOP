@@ -956,6 +956,8 @@ def render():
                                 }
             soc["link_reputation"] = vt_url_results
             soc["link_reputation_summary"] = _summarize_link_reputation(vt_url_results)
+            soc["domain_reputation"] = {}
+            soc["hop_reputation"] = {}
 
             st.markdown("### Analysis summary")
             risk_banner(severity, severity_caption)
@@ -1073,7 +1075,11 @@ def render():
                     for label, domain in domains.items():
                         with st.expander(label):
                             with st.spinner(f"Domain reputation {domain}..."):
-                                _render_abuseipdb(validator.check_domain_reputation(domain))
+                                domain_reputation = soc["domain_reputation"].get(domain)
+                                if domain_reputation is None:
+                                    domain_reputation = validator.check_domain_reputation(domain)
+                                    soc["domain_reputation"][domain] = domain_reputation
+                                _render_abuseipdb(domain_reputation)
 
             with auth:
                 st.markdown("#### Authentication")
@@ -1119,7 +1125,11 @@ def render():
                                     _render_geo(validator.geolocate_ip(ip))
                                 with st.expander("AbuseIPDB"):
                                     with st.spinner(f"Reputation {ip}..."):
-                                        _render_abuseipdb(validator.check_ip_reputation(ip))
+                                        hop_reputation = soc["hop_reputation"].get(ip)
+                                        if hop_reputation is None:
+                                            hop_reputation = validator.check_ip_reputation(ip)
+                                            soc["hop_reputation"][ip] = hop_reputation
+                                        _render_abuseipdb(hop_reputation)
                         with st.expander("Raw header"):
                             st.code(hop.get("raw", ""), language="text")
 
@@ -1210,7 +1220,9 @@ def render():
                             with st.expander("Hash and VirusTotal"):
                                 st.code(att["hash_sha256"], language="text")
                                 with st.spinner("Running VirusTotal attachment lookup..."):
-                                    _render_virustotal(validator.check_file_hash(att["hash_sha256"]))
+                                    file_reputation = validator.check_file_hash(att["hash_sha256"])
+                                    att["file_reputation"] = file_reputation
+                                    _render_virustotal(file_reputation)
 
 
             with ioc_tab:
@@ -1283,7 +1295,11 @@ def render():
             with content_tab:
                 st.markdown("#### Content assessment")
                 clean_body = soc.get("body_for_ai") or soc.get("body_ai") or soc.get("body_clean") or ""
-                email_text = prepare_bert_input(soc.get("subject") or "", clean_body)
+                email_text = prepare_bert_input(
+                    soc.get("subject") or "",
+                    clean_body,
+                    has_extracted_links=bool(soc.get("links")),
+                )
 
                 _render_phi4_analysis(soc, phi4_key, auto_run=False)
 

@@ -3,6 +3,8 @@
 import re
 import unicodedata
 
+from src.ai_input import compact_ai_body
+
 
 def normalize_bert_text(text: str) -> str:
     if not text:
@@ -24,5 +26,14 @@ def normalize_bert_text(text: str) -> str:
     return text.strip()
 
 
-def prepare_bert_input(subject: str, body: str) -> str:
-    return normalize_bert_text(f"{subject or ''} {body or ''}")
+def prepare_bert_input(subject: str, body: str, *, has_extracted_links: bool = False) -> str:
+    """Prepare body-only model input.
+
+    ``subject`` remains in the signature for compatibility with existing
+    dataset/runtime callers, but is deliberately not sent to BERT.
+    """
+
+    del subject
+    return normalize_bert_text(
+        compact_ai_body(body, has_extracted_links=has_extracted_links)
+    )
