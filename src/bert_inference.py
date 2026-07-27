@@ -8,6 +8,39 @@ DEFAULT_CHUNK_STRIDE = 128
 MAX_EMAIL_CHUNKS = 8
 
 
+def _prepare_token_window(tokenizer, token_ids: list[int], max_length: int) -> dict:
+    """Build one model input across old and new Transformers tokenizer APIs."""
+    prepare_for_model = getattr(tokenizer, "prepare_for_model", None)
+    if callable(prepare_for_model):
+        return prepare_for_model(
+            token_ids,
+            add_special_tokens=True,
+            max_length=max_length,
+            truncation=True,
+            return_attention_mask=True,
+        )
+
+    # Transformers 5 TokenizersBackend no longer exposes prepare_for_model on
+    # BertTokenizer. BERT-family single sequences use one leading and one
+    # trailing special token, which are available on the tokenizer itself.
+    leading_id = getattr(tokenizer, "cls_token_id", None)
+    if leading_id is None:
+        leading_id = getattr(tokenizer, "bos_token_id", None)
+    trailing_id = getattr(tokenizer, "sep_token_id", None)
+    if trailing_id is None:
+        trailing_id = getattr(tokenizer, "eos_token_id", None)
+
+    input_ids = [
+        *([] if leading_id is None else [int(leading_id)]),
+        *[int(token_id) for token_id in token_ids],
+        *([] if trailing_id is None else [int(trailing_id)]),
+    ][:max_length]
+    return {
+        "input_ids": input_ids,
+        "attention_mask": [1] * len(input_ids),
+    }
+
+
 def encode_email_chunks(
     tokenizer,
     text: str,
@@ -27,6 +60,7 @@ def encode_email_chunks(
         truncation=False,
         return_attention_mask=False,
         return_token_type_ids=False,
+        verbose=False,
     )
     token_ids = raw.get("input_ids") or []
     if token_ids and isinstance(token_ids[0], list):
@@ -52,19 +86,16 @@ def encode_email_chunks(
         starts = all_starts
 
     prepared = [
-        tokenizer.prepare_for_model(
+        _prepare_token_window(
+            tokenizer,
             token_ids[start:start + payload_size],
-            add_special_tokens=True,
-            max_length=max_length,
-            truncation=True,
-            return_attention_mask=True,
+            max_length,
         )
         for start in starts
     ]
     return tokenizer.pad(
         prepared,
         padding=True,
-        max_length=max_length,
         return_tensors="pt",
     )
 

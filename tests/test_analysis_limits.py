@@ -159,6 +159,12 @@ class _CountingTokenizer:
         }
 
 
+class _TransformersFiveStyleTokenizer(_CountingTokenizer):
+    cls_token_id = 101
+    sep_token_id = 102
+    prepare_for_model = None
+
+
 def test_bert_materializes_only_the_selected_windows():
     tokenizer = _CountingTokenizer()
 
@@ -172,3 +178,20 @@ def test_bert_materializes_only_the_selected_windows():
 
     assert tokenizer.prepared_count == MAX_EMAIL_CHUNKS
     assert encoded["input_ids"].shape[0] == MAX_EMAIL_CHUNKS
+
+
+def test_bert_supports_tokenizer_without_prepare_for_model():
+    tokenizer = _TransformersFiveStyleTokenizer()
+
+    encoded = encode_email_chunks(
+        tokenizer,
+        "x" * 2_000,
+        max_length=64,
+        stride=16,
+        max_chunks=3,
+    )
+
+    assert tokenizer.prepared_count == 0
+    assert encoded["input_ids"].shape == (3, 64)
+    assert encoded["input_ids"][:, 0].tolist() == [101, 101, 101]
+    assert encoded["input_ids"][:, -1].tolist() == [102, 102, 102]
