@@ -14,12 +14,15 @@ class JobSnapshot:
     state: str
     result: Any = None
     error: str = ""
+    progress: Any = None
 
 
 @dataclass
 class _JobRecord:
     future: Future
     touched_at: float
+    progress: Any = None
+    cancellation_requested: bool = False
 
 
 class BackgroundJobManager:
@@ -106,14 +109,57 @@ class BackgroundJobManager:
                 return JobSnapshot("missing")
             record.touched_at = now
             future = record.future
-        if future.cancelled():
-            return JobSnapshot("cancelled")
+            progress = record.progress
+            cancellation_requested = record.cancellation_requested
+        if future.cancelled() or cancellation_requested:
+            return JobSnapshot("cancelled", progress=progress)
         if not future.done():
-            return JobSnapshot("running")
+            return JobSnapshot("running", progress=progress)
         try:
-            return JobSnapshot("done", result=future.result())
+            return JobSnapshot(
+                "done",
+                result=future.result(),
+                progress=progress,
+            )
         except Exception as exc:
-            return JobSnapshot("error", error=str(exc))
+            return JobSnapshot("error", error=str(exc), progress=progress)
+
+    def report_progress(self, pool: str, key: Hashable, progress: Any) -> bool:
+        """Publish the latest progress payload for a running job."""
+        with self._lock:
+            record = self._jobs.get((pool, key))
+            if record is None or record.future.done():
+                return False
+            record.progress = progress
+            record.touched_at = monotonic()
+            return True
+
+    def is_cancellation_requested(self, pool: str, key: Hashable) -> bool:
+        with self._lock:
+            record = self._jobs.get((pool, key))
+            return bool(record and record.cancellation_requested)
+
+    def cancel_session(self, session_id: str) -> int:
+        """Cancel queued work and request cooperative cancellation for one client."""
+        session_id = str(session_id or "")
+        if not session_id:
+            return 0
+
+        cancelled = 0
+        with self._lock:
+            for (_pool, key), record in self._jobs.items():
+                if (
+                    not isinstance(key, tuple)
+                    or len(key) < 2
+                    or str(key[1]) != session_id
+                    or record.future.done()
+                ):
+                    continue
+                record.cancellation_requested = True
+                record.touched_at = monotonic()
+                record.future.cancel()
+                cancelled += 1
+        return cancelled
 
     def _cleanup_locked(self, now: float) -> None:
         stale = [

@@ -329,7 +329,7 @@ Behavior depends on deployment and configured providers:
 | --- | --- |
 | VirusTotal | extracted URLs and SHA-256 attachment hashes |
 | AbuseIPDB | public IP addresses and sender-related domains |
-| Geolocation provider | public routing IP addresses |
+| ipwho.is | public routing IP addresses for HTTPS geolocation |
 | GitHub Models | subject, selected visible content, and limited structural metadata after partial pseudonymization |
 | Hugging Face | model files are downloaded; email content is not sent for inference |
 | Ollama | selected email content remains on the local Ollama host |
@@ -354,9 +354,9 @@ The following items must be considered before public or organizational use:
 - Some inline `message/rfc822` content is excluded from the canonical AI body.
 - Normal reply parsing can remove quoted history; forwarded-message context is
   generally preserved.
-- The current geolocation implementation calls `ip-api.com` over unencrypted
-  HTTP and should be replaced with an HTTPS provider or disabled before public
-  deployment.
+- IP geolocation uses the external `ipwho.is` HTTPS API. The free endpoint does
+  not provide proxy, VPN, Tor, or hosting detection; those fields remain
+  unavailable unless a provider response explicitly includes security data.
 - The **Connections** page currently exposes partial masks and sources for
   configured fallback credentials. It should be hidden in production before a
   public launch.

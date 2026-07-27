@@ -4,6 +4,7 @@ import time
 
 import torch
 
+from src.background_jobs import JobSnapshot
 from src.views import analyzer as analyzer_view
 
 
@@ -38,6 +39,33 @@ def test_clear_email_state_preserves_client_settings(monkeypatch):
         "fishstop_user_api_keys": {"GITHUB_MODELS_TOKEN": "secret"},
         "page": "analyze",
     }
+
+
+def test_clear_email_cancels_old_jobs_and_rotates_analysis_session(monkeypatch):
+    class Jobs:
+        cancelled_session = ""
+
+        def cancel_session(self, session_id):
+            self.cancelled_session = session_id
+            return 1
+
+    jobs = Jobs()
+    state = {
+        "fishstop_analysis_session_id": "client-a",
+        "current_eml_hash": "digest",
+        "page": "analyze",
+    }
+    monkeypatch.setattr(analyzer_view.st, "session_state", state)
+    monkeypatch.setattr(
+        analyzer_view,
+        "_get_background_job_manager",
+        lambda: jobs,
+    )
+
+    analyzer_view._clear_email_analysis_state()
+
+    assert jobs.cancelled_session == "client-a"
+    assert state == {"page": "analyze"}
 
 
 def test_uploaded_email_uses_unique_deleted_temporary_file(monkeypatch):
@@ -317,7 +345,68 @@ def test_hosted_phi4_is_scheduled_without_per_email_consent(monkeypatch):
     assert key[0] == "phi4"
     assert function is analyzer_view._run_phi4_background
     assert args[1] == "session-github"
+    assert callable(args[2])
+    assert callable(args[3])
     assert kwargs == {}
+
+
+def test_phi4_worker_publishes_section_progress():
+    progress = []
+
+    def fake_stream(*_args, **_kwargs):
+        yield {
+            "status": "progress",
+            "stage": "content",
+            "current": 2,
+            "total": 4,
+        }
+        yield {
+            "status": "ok",
+            "analysis": {"final_verdict": "review"},
+        }
+
+    original = analyzer_view.stream_phi4_email_analysis
+    analyzer_view.stream_phi4_email_analysis = fake_stream
+    try:
+        result = analyzer_view._run_phi4_background(
+            {},
+            progress_callback=progress.append,
+            cancellation_requested=lambda: False,
+        )
+    finally:
+        analyzer_view.stream_phi4_email_analysis = original
+
+    assert progress == [{
+        "status": "progress",
+        "stage": "content",
+        "current": 2,
+        "total": 4,
+    }]
+    assert result["status"] == "ok"
+
+
+def test_phi4_worker_stops_when_cancellation_is_requested():
+    consumed = []
+
+    def fake_stream(*_args, **_kwargs):
+        consumed.append("first")
+        yield {"status": "stream", "delta": "token"}
+        consumed.append("second")
+        yield {"status": "ok", "analysis": {}}
+
+    original = analyzer_view.stream_phi4_email_analysis
+    analyzer_view.stream_phi4_email_analysis = fake_stream
+    checks = iter([False, True])
+    try:
+        result = analyzer_view._run_phi4_background(
+            {},
+            cancellation_requested=lambda: next(checks),
+        )
+    finally:
+        analyzer_view.stream_phi4_email_analysis = original
+
+    assert result == {"status": "cancelled"}
+    assert consumed == ["first"]
 
 
 def test_completed_bert_result_is_applied_without_model_rerun():
@@ -338,6 +427,53 @@ def test_completed_bert_result_is_applied_without_model_rerun():
     assert soc["bert_legitimate_probability"] == 17.5
     assert soc["bert_chunk_count"] == 3
     assert soc["bert_probability_calibrated"] is True
+
+
+class _SnapshotJobs:
+    def __init__(self, snapshot):
+        self._snapshot = snapshot
+
+    def snapshot(self, pool, key):
+        assert pool == "llm"
+        assert key == ("phi4", "result")
+        return self._snapshot
+
+
+def test_completed_phi4_result_is_available_during_same_app_render():
+    expected = {"final_verdict": "review", "content_summary": "Review needed"}
+    result, error, state = analyzer_view._phi4_background_outcome(
+        _SnapshotJobs(JobSnapshot(
+            "done",
+            result={"status": "ok", "analysis": expected},
+        )),
+        ("llm", ("phi4", "result")),
+    )
+
+    assert result is expected
+    assert error == ""
+    assert state == "done"
+
+
+def test_invalid_completed_phi4_result_becomes_an_error_without_rerun():
+    result, error, state = analyzer_view._phi4_background_outcome(
+        _SnapshotJobs(JobSnapshot("done", result={"status": "ok"})),
+        ("llm", ("phi4", "result")),
+    )
+
+    assert result is None
+    assert error == "Structured Phi-4 analysis is missing"
+    assert state == "done"
+
+
+def test_running_phi4_snapshot_remains_non_blocking():
+    result, error, state = analyzer_view._phi4_background_outcome(
+        _SnapshotJobs(JobSnapshot("running")),
+        ("llm", ("phi4", "result")),
+    )
+
+    assert result is None
+    assert error == ""
+    assert state == "running"
 
 
 def test_first_fragment_poll_refreshes_values_completed_after_render():

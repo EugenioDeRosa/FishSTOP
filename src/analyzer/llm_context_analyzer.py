@@ -2,6 +2,8 @@
 import os
 import re
 import unicodedata
+from threading import Lock
+from time import monotonic
 
 import requests
 
@@ -41,8 +43,18 @@ PHI4_BODY_CHUNK_CHARS = int(os.getenv(
     )),
 ))
 PHI4_BODY_CHUNK_OVERLAP = int(os.getenv("PHI4_BODY_CHUNK_OVERLAP", "600"))
-LLM_PROVIDER = os.getenv("FISHSTOP_LLM_PROVIDER", "auto").strip().lower()
+LLM_PROVIDER = os.getenv(
+    "FISHSTOP_LLM_PROVIDER",
+    os.getenv("LLM_PROVIDER", "auto"),
+).strip().lower()
+OLLAMA_AVAILABILITY_TTL = max(
+    0.0,
+    float(os.getenv("OLLAMA_AVAILABILITY_TTL", "5")),
+)
 PROMPT_VERSION = "semantic-policy-v26-full-email-chunks"
+
+_OLLAMA_AVAILABILITY_LOCK = Lock()
+_OLLAMA_AVAILABILITY_CACHE: tuple[float, tuple, bool] | None = None
 
 
 def _github_models_token() -> str:
@@ -59,12 +71,37 @@ def _ollama_available(timeout: float = 0.8) -> bool:
         return False
 
 
+def _cached_ollama_available(timeout: float = 0.8) -> bool:
+    """Avoid blocking every Streamlit rerun on the same Ollama health check."""
+    global _OLLAMA_AVAILABILITY_CACHE
+
+    cache_key = (
+        OLLAMA_CHAT_ENDPOINT,
+        float(timeout),
+        id(_ollama_available),
+    )
+    now = monotonic()
+    with _OLLAMA_AVAILABILITY_LOCK:
+        cached = _OLLAMA_AVAILABILITY_CACHE
+        if (
+            cached is not None
+            and cached[1] == cache_key
+            and now - cached[0] < OLLAMA_AVAILABILITY_TTL
+        ):
+            return cached[2]
+
+    available = _ollama_available(timeout)
+    with _OLLAMA_AVAILABILITY_LOCK:
+        _OLLAMA_AVAILABILITY_CACHE = (monotonic(), cache_key, available)
+    return available
+
+
 def _use_ollama() -> bool:
     if LLM_PROVIDER == "ollama":
         return True
     if LLM_PROVIDER == "github":
         return False
-    return _ollama_available()
+    return _cached_ollama_available()
 
 
 def _llm_enabled() -> bool:
@@ -2188,7 +2225,10 @@ def _request_targeted_intent(
     timeout: int,
     email_prompt: str | None = None,
     github_token: str | None = None,
+    cancellation_requested=None,
 ) -> dict:
+    if cancellation_requested and cancellation_requested():
+        return {}
     prompt = TARGETED_INTENT_INSTRUCTIONS + (
         email_prompt
         or build_fast_email_prompt(
@@ -2225,6 +2265,8 @@ def _request_targeted_intent(
         )
     try:
         for event in backend_stream:
+            if cancellation_requested and cancellation_requested():
+                return {}
             if event.get("status") != "ok":
                 continue
             parsed = _json_object(event.get("text") or "")
@@ -2337,7 +2379,11 @@ def stream_phi4_email_analysis(
     model: str = GITHUB_MODELS_MODEL,
     timeout: int = 90,
     github_token: str | None = None,
+    cancellation_requested=None,
 ):
+    if cancellation_requested and cancellation_requested():
+        yield {"status": "cancelled", "text": ""}
+        return
     use_ollama = _use_ollama()
     effective_github_token = (
         _github_models_token()
@@ -2376,6 +2422,9 @@ def stream_phi4_email_analysis(
         prompt_sections,
         start=1,
     ):
+        if cancellation_requested and cancellation_requested():
+            yield {"status": "cancelled", "text": ""}
+            return
         yield {
             "status": "progress",
             "stage": "content",
@@ -2418,6 +2467,9 @@ def stream_phi4_email_analysis(
             )
         section_complete = False
         for event in backend_stream:
+            if cancellation_requested and cancellation_requested():
+                yield {"status": "cancelled", "text": ""}
+                return
             if event.get("status") == "stream":
                 yield {
                     **event,
@@ -2454,7 +2506,11 @@ def stream_phi4_email_analysis(
                             if github_token is not None
                             else None
                         ),
+                        cancellation_requested=cancellation_requested,
                     )
+                    if cancellation_requested and cancellation_requested():
+                        yield {"status": "cancelled", "text": ""}
+                        return
                     if targeted:
                         semantic["primary_requested_action"] = primary["requested_action"]
                         semantic.update(targeted)
@@ -2550,7 +2606,12 @@ def _stream_ollama(
                 content = (event.get("message") or {}).get("content", "")
                 if content:
                     chunks.append(content)
-                    yield {"status": "stream", "model": model, "backend": "ollama", "text": "".join(chunks)}
+                    yield {
+                        "status": "stream",
+                        "model": model,
+                        "backend": "ollama",
+                        "delta": content,
+                    }
                 if event.get("done"):
                     break
     except requests.exceptions.Timeout:
@@ -2617,7 +2678,7 @@ def _stream_github_models(
                 content = (choices[0].get("delta") or {}).get("content", "")
                 if content:
                     chunks.append(content)
-                    yield {"status": "stream", "text": "".join(chunks)}
+                    yield {"status": "stream", "delta": content}
     except requests.exceptions.Timeout:
         yield {"status": "error", "message": f"GitHub Models ha superato il timeout di {timeout} secondi.", "text": "".join(chunks)}
         return

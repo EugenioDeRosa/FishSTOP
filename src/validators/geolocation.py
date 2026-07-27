@@ -2,11 +2,8 @@ import ipaddress
 
 import requests
 
-_IPAPI_FIELDS = (
-    "status,message,country,countryCode,regionName,city,"
-    "zip,lat,lon,timezone,isp,org,as,proxy,hosting,query"
-)
-IPAPI_ENDPOINT = "http://ip-api.com/json/{ip}?fields=" + _IPAPI_FIELDS
+IPWHO_ENDPOINT = "https://ipwho.is/{ip}"
+
 
 def _is_geolocatable_ip(ip: str) -> bool:
     try:
@@ -31,6 +28,8 @@ def geolocate_ip(ip: str) -> dict:
         "asn": "",
         "is_proxy": False,
         "is_hosting": False,
+        "security_data_available": False,
+        "provider": "ipwho.is",
     }
 
     if not ip:
@@ -43,46 +42,71 @@ def geolocate_ip(ip: str) -> dict:
             "message": f"`{ip}` is not a public IP address (private, reserved, or invalid)",
         }
 
+    normalized_ip = str(ipaddress.ip_address(ip.strip("[]")))
+
     try:
         resp = requests.get(
-            IPAPI_ENDPOINT.format(ip=ip),
+            IPWHO_ENDPOINT.format(ip=normalized_ip),
             headers={"User-Agent": "FishStop/1.0", "Accept": "application/json"},
             timeout=5,
         )
         resp.raise_for_status()
         data = resp.json()
+    except requests.exceptions.HTTPError as exc:
+        status_code = getattr(exc.response, "status_code", None)
+        if status_code == 429:
+            message = "ipwho.is rate limit exceeded; try again later"
+        else:
+            message = f"ipwho.is HTTP error: {exc}"
+        return {**base, "status": "error", "message": message}
     except requests.exceptions.RequestException as exc:
-        return {**base, "status": "error", "message": f"Error ip-api.com: {exc}"}
+        return {**base, "status": "error", "message": f"Error ipwho.is: {exc}"}
+    except (TypeError, ValueError) as exc:
+        return {**base, "status": "error", "message": f"Invalid ipwho.is response: {exc}"}
 
-    if data.get("status") != "success":
+    if not isinstance(data, dict):
+        return {**base, "status": "error", "message": "Invalid ipwho.is response"}
+
+    if not data.get("success", False):
         return {
             **base,
             "status": "skipped",
-            "message": f"ip-api.com: {data.get('message', 'risposta non valida')} per `{ip}`",
+            "message": f"ipwho.is: {data.get('message', 'risposta non valida')} per `{normalized_ip}`",
         }
 
+    connection = data.get("connection") or {}
+    timezone = data.get("timezone") or {}
+    security = data.get("security")
+    security_data_available = isinstance(security, dict)
+    security = security if security_data_available else {}
+
     city = data.get("city", "")
-    region = data.get("regionName", "")
+    region = data.get("region", "")
     country = data.get("country", "")
-    country_code = data.get("countryCode", "")
-    proxy_note = " - Proxy/VPN rilevato" if data.get("proxy") else ""
-    hosting_note = " - Datacenter/Hosting" if data.get("hosting") else ""
+    country_code = data.get("country_code", "")
+    location = ", ".join(part for part in (city, region, country) if part)
+    if country_code:
+        location = f"{location} ({country_code})" if location else country_code
 
     return {
+        **base,
         "status": "ok",
-        "ip": data.get("query", ip),
+        "ip": data.get("ip", normalized_ip),
         "country": country,
         "country_code": country_code,
         "region": region,
         "city": city,
-        "zip": data.get("zip", ""),
-        "lat": data.get("lat"),
-        "lon": data.get("lon"),
-        "timezone": data.get("timezone", ""),
-        "isp": data.get("isp", ""),
-        "org": data.get("org", ""),
-        "asn": data.get("as", ""),
-        "is_proxy": bool(data.get("proxy")),
-        "is_hosting": bool(data.get("hosting")),
-        "message": f"{city}, {region}, {country} ({country_code}){proxy_note}{hosting_note}",
+        "zip": data.get("postal", ""),
+        "lat": data.get("latitude"),
+        "lon": data.get("longitude"),
+        "timezone": timezone.get("id", ""),
+        "isp": connection.get("isp", ""),
+        "org": connection.get("org", ""),
+        "asn": connection.get("asn", ""),
+        "is_proxy": bool(
+            security.get("proxy") or security.get("vpn") or security.get("tor")
+        ),
+        "is_hosting": bool(security.get("hosting")),
+        "security_data_available": security_data_available,
+        "message": location or f"Geolocation available for {normalized_ip}",
     }

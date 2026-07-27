@@ -27,7 +27,10 @@ from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
 from src.config import get_secret, get_server_secret, is_production_mode
 from src.error_handling import render_unexpected_error
-from src.session_context import get_analysis_session_id
+from src.session_context import (
+    ANALYSIS_SESSION_STATE_KEY,
+    get_analysis_session_id,
+)
 from src.ui import page_intro, risk_banner
 from src.views.backend import (
     HF_MODEL_REVISION,
@@ -59,6 +62,12 @@ def _is_email_analysis_state_key(key: str) -> bool:
 
 def _clear_email_analysis_state() -> None:
     """Remove only the current client's uploaded email and derived UI state."""
+    session_id = str(
+        st.session_state.get(ANALYSIS_SESSION_STATE_KEY, "") or ""
+    )
+    if session_id:
+        _get_background_job_manager().cancel_session(session_id)
+        del st.session_state[ANALYSIS_SESSION_STATE_KEY]
     for key in list(st.session_state):
         if _is_email_analysis_state_key(str(key)):
             del st.session_state[key]
@@ -486,16 +495,30 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
         )
 
 
-def _run_phi4_background(soc: dict, github_token: str = "") -> dict:
+def _run_phi4_background(
+    soc: dict,
+    github_token: str = "",
+    progress_callback=None,
+    cancellation_requested=None,
+) -> dict:
     last_error = ""
+    if cancellation_requested and cancellation_requested():
+        return {"status": "cancelled"}
     for event in stream_phi4_email_analysis(
         soc,
         github_token=github_token or None,
+        cancellation_requested=cancellation_requested,
     ):
+        if cancellation_requested and cancellation_requested():
+            return {"status": "cancelled"}
+        if event.get("status") == "progress" and progress_callback:
+            progress_callback(dict(event))
         if event.get("status") == "ok":
             return event
         if event.get("status") == "error":
             last_error = event.get("message") or "Phi-4 mini analysis failed"
+        if event.get("status") == "cancelled":
+            return {"status": "cancelled"}
     raise RuntimeError(last_error or "Phi-4 mini did not return a final result")
 
 
@@ -504,9 +527,10 @@ def _schedule_phi4_background(
     soc: dict,
     analysis_key: str,
     session_id: str = "",
+    backend: str = "",
 ) -> tuple[str, tuple] | None:
     session_id = session_id or get_analysis_session_id()
-    backend = active_llm_backend()
+    backend = backend or active_llm_backend()
     hosted = backend.startswith("github models")
     if backend == "not configured":
         return None
@@ -531,6 +555,8 @@ def _schedule_phi4_background(
         _run_phi4_background,
         soc_snapshot,
         github_token,
+        lambda event: manager.report_progress("llm", key, event),
+        lambda: manager.is_cancellation_requested("llm", key),
     )
     return ("llm", key) if accepted is not False else ("__overloaded__", key)
 
@@ -635,15 +661,46 @@ def _apply_bert_result_to_soc(soc: dict, result: dict) -> None:
     )
 
 
+def _phi4_background_outcome(
+    manager: BackgroundJobManager,
+    job_reference: tuple[str, tuple] | None,
+) -> tuple[dict | None, str, str]:
+    """Return a completed Phi-4 result without blocking or rerunning the app."""
+    if job_reference is None:
+        return None, "", "missing"
+    if job_reference[0] == "__overloaded__":
+        return None, "", "overloaded"
+
+    snapshot = manager.snapshot(*job_reference)
+    if snapshot.state == "done":
+        event = snapshot.result if isinstance(snapshot.result, dict) else {}
+        analysis = event.get("analysis")
+        if isinstance(analysis, dict):
+            return analysis, "", "done"
+        # The worker is terminal even if its payload is invalid. Preserve the
+        # actual job state so the polling fragment does not request app reruns
+        # forever while the UI presents the payload error.
+        return None, "Structured Phi-4 analysis is missing", "done"
+    if snapshot.state == "error":
+        return (
+            None,
+            f"Error during Phi-4 mini analysis: {snapshot.error}",
+            "error",
+        )
+    return None, "", snapshot.state
+
+
 def _render_phi4_analysis(
     soc: dict,
     analysis_key: str,
     job_reference: tuple[str, tuple] | None,
     auto_run: bool = False,
+    backend: str = "",
 ):
+    backend = backend or active_llm_backend()
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
-        f"Phi-4 mini analysis via {active_llm_backend()}: evaluates plain and HTML content, urgency, money, IBANs, "
+        f"Phi-4 mini analysis via {backend}: evaluates plain and HTML content, urgency, money, IBANs, "
         "payments, credentials, and external forms; then uses semantic analysis, SPF/DKIM/DMARC, links, and attachments only as context."
     )
     if soc.get("ai_analysis_supported") is False:
@@ -661,8 +718,6 @@ def _render_phi4_analysis(
         st.error(st.session_state[error_key])
         return None
 
-    backend = active_llm_backend()
-
     if job_reference is not None:
         if job_reference[0] == "__overloaded__":
             st.warning(
@@ -670,23 +725,20 @@ def _render_phi4_analysis(
                 "analysis queue is full. Try again shortly."
             )
             return None
-        snapshot = _get_background_job_manager().snapshot(*job_reference)
-        if snapshot.state == "done":
-            event = snapshot.result if isinstance(snapshot.result, dict) else {}
-            analysis = event.get("analysis")
-            if not isinstance(analysis, dict):
-                st.session_state[error_key] = (
-                    "Structured Phi-4 analysis is missing"
-                )
-                st.error(st.session_state[error_key])
-                return None
+        analysis, error, state = _phi4_background_outcome(
+            _get_background_job_manager(),
+            job_reference,
+        )
+        if isinstance(analysis, dict):
             st.session_state[result_key] = analysis
-            st.rerun()
-        if snapshot.state == "error":
-            st.session_state[error_key] = (
-                f"Error during Phi-4 mini analysis: {snapshot.error}"
-            )
+            _show_phi4_result(st, analysis)
+            return None
+        if error:
+            st.session_state[error_key] = error
             st.error(st.session_state[error_key])
+            return None
+        if state == "cancelled":
+            st.warning("Phi-4 mini analysis was cancelled.")
             return None
         st.markdown(_phi4_loading_html(), unsafe_allow_html=True)
         return None
@@ -1405,7 +1457,23 @@ def _render_background_progress(
     if bert_total:
         progress_parts.append(f"DistilBERT {bert_done}/{bert_total}")
     if phi_total:
-        progress_parts.append(f"Phi-4 mini {phi_done}/{phi_total}")
+        phi_detail = ""
+        for pool, key in plan.get("phi4", {}).values():
+            if pool == "__overloaded__":
+                continue
+            snapshot = manager.snapshot(pool, key)
+            progress = snapshot.progress
+            if not isinstance(progress, dict):
+                continue
+            stage = str(progress.get("stage") or "")
+            current = int(progress.get("current") or 0)
+            total = int(progress.get("total") or 0)
+            if stage == "merge":
+                phi_detail = "Phi-4 mini combining results"
+            elif current > 0 and total > 0:
+                phi_detail = f"Phi-4 mini section {current}/{total}"
+            break
+        progress_parts.append(phi_detail or f"Phi-4 mini {phi_done}/{phi_total}")
 
     completed = sum(state in terminal_states for state in states)
     if completed < len(states):
@@ -1603,6 +1671,7 @@ def render():
 
             eml_digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
             phi4_key = f"phi4_analysis_{PROMPT_VERSION}_{eml_digest}"
+            llm_backend = active_llm_backend()
             clean_body = (
                 soc.get("body_for_ai")
                 or soc.get("body_ai")
@@ -1676,20 +1745,27 @@ def render():
                     soc,
                     phi4_key,
                     analysis_session_id,
+                    backend=llm_backend,
                 )
                 if phi4_job_reference is not None:
                     background_plan["phi4"] = {
                         phi4_key: phi4_job_reference,
                     }
-                    rendered_background_states.append(
-                        (
-                            "overloaded"
-                            if phi4_job_reference[0] == "__overloaded__"
-                            else background_jobs.snapshot(
-                                *phi4_job_reference
-                            ).state
+                    completed_phi4, completed_phi4_error, phi4_state = (
+                        _phi4_background_outcome(
+                            background_jobs,
+                            phi4_job_reference,
                         )
                     )
+                    rendered_background_states.append(phi4_state)
+                    if isinstance(completed_phi4, dict):
+                        cached_phi4 = completed_phi4
+                        st.session_state[f"{phi4_key}_result"] = completed_phi4
+                    elif completed_phi4_error:
+                        phi4_error = completed_phi4_error
+                        st.session_state[f"{phi4_key}_error"] = (
+                            completed_phi4_error
+                        )
             if (
                 isinstance(cached_phi4, dict)
                 and isinstance(cached_phi4.get("semantic_extraction"), dict)
@@ -1753,6 +1829,7 @@ def render():
                     phi4_key,
                     phi4_job_reference,
                     auto_run=True,
+                    backend=llm_backend,
                 )
 
             actionable_flags = [flag for flag in flags if flag.get("level", "INFO") != "INFO"]
@@ -2076,6 +2153,7 @@ def render():
                     phi4_key,
                     phi4_job_reference,
                     auto_run=False,
+                    backend=llm_backend,
                 )
 
                 # DistilBERT runs in the dedicated background worker.

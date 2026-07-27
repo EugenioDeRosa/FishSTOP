@@ -113,3 +113,76 @@ def test_pending_queue_is_bounded_and_accepts_work_again_after_completion():
     finally:
         release.set()
         manager.shutdown()
+
+
+def test_progress_is_published_in_thread_safe_snapshots():
+    manager = BackgroundJobManager(
+        worker_limits={"default": 1},
+        completed_ttl=60,
+    )
+    release = threading.Event()
+
+    def lookup():
+        manager.report_progress(
+            "default",
+            ("job", "session-a"),
+            {"current": 2, "total": 4},
+        )
+        release.wait(timeout=1)
+        return "complete"
+
+    try:
+        manager.get_or_submit(
+            "default",
+            ("job", "session-a"),
+            lookup,
+        )
+        deadline = time.monotonic() + 1
+        while time.monotonic() < deadline:
+            snapshot = manager.snapshot(
+                "default",
+                ("job", "session-a"),
+            )
+            if snapshot.progress:
+                break
+            time.sleep(0.01)
+
+        assert snapshot.state == "running"
+        assert snapshot.progress == {"current": 2, "total": 4}
+    finally:
+        release.set()
+        manager.shutdown()
+
+
+def test_cancel_session_cancels_queued_and_marks_running_jobs():
+    manager = BackgroundJobManager(
+        worker_limits={"default": 1},
+        pending_limits={"default": 2},
+        completed_ttl=60,
+    )
+    release = threading.Event()
+    running_key = ("job", "session-a", "running")
+    queued_key = ("job", "session-a", "queued")
+
+    try:
+        manager.get_or_submit(
+            "default",
+            running_key,
+            lambda: release.wait(timeout=1),
+        )
+        manager.get_or_submit(
+            "default",
+            queued_key,
+            lambda: "should not run",
+        )
+
+        assert manager.cancel_session("session-a") == 2
+        assert manager.snapshot("default", running_key).state == "cancelled"
+        assert manager.snapshot("default", queued_key).state == "cancelled"
+        assert manager.is_cancellation_requested(
+            "default",
+            running_key,
+        ) is True
+    finally:
+        release.set()
+        manager.shutdown()

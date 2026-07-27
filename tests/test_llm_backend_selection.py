@@ -28,6 +28,26 @@ def test_provider_github_disables_ollama(monkeypatch):
     assert llm._use_ollama() is False
 
 
+def test_auto_backend_reuses_short_lived_ollama_health_check(monkeypatch):
+    calls = 0
+
+    def available(timeout=0.8):
+        nonlocal calls
+        calls += 1
+        return False
+
+    monkeypatch.setattr(llm, "LLM_PROVIDER", "auto")
+    monkeypatch.setattr(llm, "OLLAMA_AVAILABILITY_TTL", 5.0)
+    monkeypatch.setattr(llm, "_OLLAMA_AVAILABILITY_CACHE", None)
+    monkeypatch.setattr(llm, "_ollama_available", available)
+    monkeypatch.setattr(llm, "_github_models_token", lambda: "")
+
+    assert llm._use_ollama() is False
+    assert llm._use_ollama() is False
+    assert llm.active_llm_backend() == "not configured"
+    assert calls == 1
+
+
 def test_phi4_compact_schema_reaches_stable_policy_without_retry(monkeypatch):
     captured = {}
 
@@ -100,6 +120,75 @@ def test_ollama_uses_schema_constrained_output_and_zero_temperature(monkeypatch)
 
     assert captured["payload"]["format"] == llm.PHI4_OUTPUT_SCHEMA
     assert captured["payload"]["options"]["temperature"] == 0.0
+
+
+def test_ollama_stream_events_expose_only_the_incremental_delta(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_lines(self, decode_unicode=True):
+            yield '{"message":{"content":"first"},"done":false}'
+            yield '{"message":{"content":"second"},"done":true}'
+
+    monkeypatch.setattr(
+        llm.requests,
+        "post",
+        lambda *args, **kwargs: FakeResponse(),
+    )
+
+    events = list(llm._stream_ollama([], llm.OLLAMA_MODEL, 10))
+    stream_events = [
+        event for event in events if event["status"] == "stream"
+    ]
+
+    assert [event["delta"] for event in stream_events] == [
+        "first",
+        "second",
+    ]
+    assert all("text" not in event for event in stream_events)
+    assert events[-1]["text"] == "firstsecond"
+
+
+def test_github_stream_events_expose_only_the_incremental_delta(monkeypatch):
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def raise_for_status(self):
+            return None
+
+        def iter_lines(self, decode_unicode=True):
+            yield 'data: {"choices":[{"delta":{"content":"first"}}]}'
+            yield 'data: {"choices":[{"delta":{"content":"second"}}]}'
+            yield "data: [DONE]"
+
+    monkeypatch.setattr(
+        llm.requests,
+        "post",
+        lambda *args, **kwargs: FakeResponse(),
+    )
+
+    events = list(llm._stream_github_models([], "model", 10, token="token"))
+    stream_events = [
+        event for event in events if event["status"] == "stream"
+    ]
+
+    assert [event["delta"] for event in stream_events] == [
+        "first",
+        "second",
+    ]
+    assert all("text" not in event for event in stream_events)
+    assert events[-1]["text"] == "firstsecond"
 
 
 def test_summary_is_derived_from_verified_action(monkeypatch):
