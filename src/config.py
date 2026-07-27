@@ -11,12 +11,18 @@ import os
 
 
 USER_API_KEYS_STATE_KEY = "fishstop_user_api_keys"
+PRODUCTION_APP_MODES = {"prod", "production", "public"}
 MANAGED_API_KEYS = [
     "VIRUSTOTAL_API_KEY",
     "ABUSEIPDB_API_KEY",
     "GITHUB_MODELS_TOKEN",
     "HF_TOKEN",
 ]
+
+
+def is_production_mode() -> bool:
+    """Return whether public-production restrictions must be enforced."""
+    return os.getenv("APP_MODE", "development").strip().lower() in PRODUCTION_APP_MODES
 
 
 _env_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env")
@@ -111,6 +117,18 @@ def get_secret(key: str, default: str = "") -> str:
         if value:
             return value
 
+    return default
+
+
+def get_server_secret(key: str, default: str = "") -> str:
+    """Resolve only process/server credentials, never per-session overrides."""
+    value = os.environ.get(key)
+    if value:
+        return value
+    if _is_streamlit_cloud():
+        value = _read_streamlit_secret(key, default)
+        if value:
+            return value
     return default
 
 

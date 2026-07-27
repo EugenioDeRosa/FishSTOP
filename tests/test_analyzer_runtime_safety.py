@@ -1,4 +1,8 @@
 from pathlib import Path
+import threading
+import time
+
+import torch
 
 from src.views import analyzer as analyzer_view
 
@@ -140,6 +144,37 @@ def test_background_lookup_plan_captures_session_api_keys(monkeypatch):
     )
 
 
+def test_background_job_keys_are_isolated_between_client_sessions(monkeypatch):
+    jobs = _RecordingJobs()
+    monkeypatch.setattr(
+        analyzer_view,
+        "get_secret",
+        lambda name, default="": "token" if "API_KEY" in name else default,
+    )
+    soc = {
+        "from_": "Sender <sender@example.test>",
+        "links": [{"url": "https://example.test/action"}],
+        "received_hops": [],
+        "attachments": [],
+    }
+
+    analyzer_view._schedule_background_lookups(
+        jobs, _BackgroundValidator(), soc, "client-a"
+    )
+    analyzer_view._schedule_background_lookups(
+        jobs, _BackgroundValidator(), soc, "client-b"
+    )
+
+    url_keys = [
+        key
+        for pool, key, *_rest in jobs.submissions
+        if pool == "virustotal" and key[0] == "url"
+    ]
+    assert url_keys[0][1] == "client-a"
+    assert url_keys[1][1] == "client-b"
+    assert url_keys[0] != url_keys[1]
+
+
 def test_bert_is_scheduled_on_its_dedicated_background_pool(monkeypatch):
     jobs = _RecordingJobs()
     monkeypatch.setattr(
@@ -168,6 +203,89 @@ def test_bert_is_scheduled_on_its_dedicated_background_pool(monkeypatch):
         "session-hf",
     )
     assert kwargs == {}
+
+
+def test_production_bert_uses_server_token_not_session_token(monkeypatch):
+    jobs = _RecordingJobs()
+    monkeypatch.setattr(analyzer_view, "is_production_mode", lambda: True)
+    monkeypatch.setattr(
+        analyzer_view,
+        "get_secret",
+        lambda name, default="": "client-hf",
+    )
+    monkeypatch.setattr(
+        analyzer_view,
+        "get_server_secret",
+        lambda name, default="": "server-hf",
+    )
+
+    analyzer_view._schedule_bert_background(
+        jobs,
+        "Body text",
+        "email-digest",
+        "client-a",
+    )
+
+    _pool, key, _function, args, _kwargs = jobs.submissions[0]
+    assert key[1] == "client-a"
+    assert args == ("Body text", "server-hf")
+
+
+def test_shared_bert_resource_serializes_concurrent_inference(monkeypatch):
+    class _Config:
+        fishstop_dataset_sha256 = ""
+
+    class _Model:
+        config = _Config()
+
+    active = 0
+    maximum_active = 0
+    counter_lock = threading.Lock()
+
+    def fake_predict(*_args, **_kwargs):
+        nonlocal active, maximum_active
+        with counter_lock:
+            active += 1
+            maximum_active = max(maximum_active, active)
+        time.sleep(0.03)
+        with counter_lock:
+            active -= 1
+        return torch.tensor([[1.0, 2.0]]), 1
+
+    monkeypatch.setattr(
+        analyzer_view,
+        "init_content_model",
+        lambda _token: (object(), _Model(), "test"),
+    )
+    monkeypatch.setattr(
+        analyzer_view,
+        "init_calibration",
+        lambda _token: {
+            "temperature": 1.0,
+            "threshold": 0.5,
+            "band": 0.3,
+            "positive_label_id": 1,
+            "dataset_sha256": "",
+        },
+    )
+    monkeypatch.setattr(analyzer_view, "predict_email_logits", fake_predict)
+
+    first = threading.Thread(
+        target=analyzer_view._run_bert_background,
+        args=("first", ""),
+    )
+    second = threading.Thread(
+        target=analyzer_view._run_bert_background,
+        args=("second", ""),
+    )
+    first.start()
+    second.start()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert maximum_active == 1
 
 
 def test_hosted_phi4_is_scheduled_without_per_email_consent(monkeypatch):

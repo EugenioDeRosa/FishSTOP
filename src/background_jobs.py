@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from threading import RLock
+from threading import BoundedSemaphore, RLock
 from time import monotonic
 from typing import Any, Callable, Hashable
 
@@ -29,9 +29,10 @@ class BackgroundJobManager:
         self,
         *,
         worker_limits: dict[str, int] | None = None,
+        pending_limits: dict[str, int] | None = None,
         completed_ttl: float = 1800,
     ):
-        limits = worker_limits or {
+        limits = dict(worker_limits) if worker_limits is not None else {
             "virustotal": 2,
             "abuseipdb": 4,
             "geolocation": 4,
@@ -51,6 +52,17 @@ class BackgroundJobManager:
                 max_workers=4,
                 thread_name_prefix="fishstop-default",
             )
+            limits["default"] = 4
+        configured_pending = pending_limits or {}
+        self._capacity = {
+            name: BoundedSemaphore(
+                value=max(
+                    1,
+                    int(configured_pending.get(name, max(4, int(limits[name]) * 8))),
+                )
+            )
+            for name in self._executors
+        }
         self._completed_ttl = max(1.0, float(completed_ttl))
         self._jobs: dict[tuple[str, Hashable], _JobRecord] = {}
         self._lock = RLock()
@@ -62,7 +74,7 @@ class BackgroundJobManager:
         function: Callable,
         *args,
         **kwargs,
-    ) -> None:
+    ) -> bool:
         job_key = (pool, key)
         now = monotonic()
         with self._lock:
@@ -70,12 +82,20 @@ class BackgroundJobManager:
             record = self._jobs.get(job_key)
             if record is not None:
                 record.touched_at = now
-                return
-            executor = self._executors.get(pool, self._executors["default"])
-            self._jobs[job_key] = _JobRecord(
-                future=executor.submit(function, *args, **kwargs),
-                touched_at=now,
-            )
+                return True
+            selected_pool = pool if pool in self._executors else "default"
+            capacity = self._capacity[selected_pool]
+            if not capacity.acquire(blocking=False):
+                return False
+            executor = self._executors[selected_pool]
+            try:
+                future = executor.submit(function, *args, **kwargs)
+            except Exception:
+                capacity.release()
+                raise
+            future.add_done_callback(lambda _future: capacity.release())
+            self._jobs[job_key] = _JobRecord(future=future, touched_at=now)
+            return True
 
     def snapshot(self, pool: str, key: Hashable) -> JobSnapshot:
         job_key = (pool, key)

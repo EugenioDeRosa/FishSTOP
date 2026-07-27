@@ -18,6 +18,15 @@ import re
 from email import policy
 from typing import Optional
 
+from src.analysis_limits import (
+    EmailAnalysisLimitError,
+    MAX_AI_BODY_CHARS,
+    MAX_ATTACHMENTS,
+    MAX_DECODED_TEXT_CHARS,
+    MAX_MIME_DEPTH,
+    MAX_MIME_PARTS,
+    MAX_RECEIVED_HOPS,
+)
 from .attachment      import analyze_attachment
 from .body_context    import select_body_for_ai
 from .html_utils      import recover_mislabelled_utf7_html, strip_html
@@ -257,6 +266,28 @@ def _iter_body_leaf_parts(part):
     yield part
 
 
+def _validate_mime_structure(msg) -> None:
+    """Reject MIME trees designed to consume excessive parser resources."""
+    stack = [(msg, 1)]
+    part_count = 0
+    while stack:
+        part, depth = stack.pop()
+        part_count += 1
+        if part_count > MAX_MIME_PARTS:
+            raise EmailAnalysisLimitError(
+                f"Email contains more than {MAX_MIME_PARTS} MIME parts."
+            )
+        if depth > MAX_MIME_DEPTH:
+            raise EmailAnalysisLimitError(
+                f"Email MIME nesting exceeds {MAX_MIME_DEPTH} levels."
+            )
+        if part.is_multipart():
+            stack.extend(
+                (child, depth + 1)
+                for child in reversed(list(part.iter_parts()))
+            )
+
+
 def _is_public_ip(value: str | None) -> bool:
     if not value:
         return False
@@ -278,6 +309,7 @@ class EmlSOCAnalyzer:
             raw_bytes = f.read()
 
         msg = email.message_from_bytes(raw_bytes, policy=policy.default)
+        _validate_mime_structure(msg)
         report: dict = {}
         report["raw_eml_bytes"] = raw_bytes
 
@@ -353,6 +385,10 @@ class EmlSOCAnalyzer:
 
         # ── 5. Catena Received ────────────────────────────────────────────
         raw_received = msg.get_all("Received") or []
+        if len(raw_received) > MAX_RECEIVED_HOPS:
+            raise EmailAnalysisLimitError(
+                f"Email contains more than {MAX_RECEIVED_HOPS} routing hops."
+            )
         hops = [parse_received_hop(r) for r in raw_received]
         report["received_hops"]         = hops
         report["closest_to_recipient"]  = hops[0]  if hops else {}
@@ -388,6 +424,7 @@ class EmlSOCAnalyzer:
         attachments_info = []
         plain_noise_removed_lines = 0
         plain_noise_removed_chars = 0
+        decoded_text_chars = 0
 
         for part in msg.walk():
             ct       = part.get_content_type()
@@ -397,6 +434,10 @@ class EmlSOCAnalyzer:
             is_attach = "attachment" in disp.lower()
 
             if is_attach or filename:
+                if len(attachments_info) >= MAX_ATTACHMENTS:
+                    raise EmailAnalysisLimitError(
+                        f"Email contains more than {MAX_ATTACHMENTS} attachments."
+                    )
                 raw_payload = part.get_payload(decode=True)
                 attachments_info.append(analyze_attachment(
                     filename=filename,
@@ -410,6 +451,11 @@ class EmlSOCAnalyzer:
             if ct == "text/plain":
                 text = _decode_text_part(part)
                 if text and text.strip():
+                    decoded_text_chars += len(text)
+                    if decoded_text_chars > MAX_DECODED_TEXT_CHARS:
+                        raise EmailAnalysisLimitError(
+                            "Decoded email text exceeds the supported analysis limit."
+                        )
                     if _looks_like_html(text):
                         html_parts.append(text)
                     else:
@@ -421,6 +467,11 @@ class EmlSOCAnalyzer:
             elif ct == "text/html":
                 text = _decode_text_part(part)
                 if text and text.strip():
+                    decoded_text_chars += len(text)
+                    if decoded_text_chars > MAX_DECODED_TEXT_CHARS:
+                        raise EmailAnalysisLimitError(
+                            "Decoded email text exceeds the supported analysis limit."
+                        )
                     html_parts.append(text)
 
         combined_html = "\n".join(html_parts)
@@ -445,6 +496,17 @@ class EmlSOCAnalyzer:
         # Links remain available from body_html, but BERT receives one canonical
         # body only so removed signatures/threads are not reintroduced.
         report["body_for_ai"] = report["body_extracted"].strip()
+        report["ai_analysis_supported"] = (
+            len(report["body_for_ai"]) <= MAX_AI_BODY_CHARS
+        )
+        report["ai_analysis_limit_message"] = (
+            ""
+            if report["ai_analysis_supported"]
+            else (
+                "The email body exceeds the supported AI analysis limit "
+                f"of {MAX_AI_BODY_CHARS:,} characters. Static checks remain available."
+            )
+        )
 
         # ── 10. Link e lookalike ──────────────────────────────────────────
         report["links"] = extract_links(

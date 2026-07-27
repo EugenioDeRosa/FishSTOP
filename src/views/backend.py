@@ -10,7 +10,7 @@ from src.bert_calibration import (
     DEFAULT_TEMPERATURE,
     DEFAULT_THRESHOLD,
 )
-from src.config import get_secret
+from src.config import get_secret, get_server_secret, is_production_mode
 
 HF_MODEL_ID = "eugenioderodev/fishstop-bert"
 CALIBRATION_FILENAME = "calibration.json"
@@ -85,11 +85,21 @@ def get_core_backend():
 
 
 def get_content_model():
-    return init_content_model(get_secret("HF_TOKEN"))
+    token = (
+        get_server_secret("HF_TOKEN")
+        if is_production_mode()
+        else get_secret("HF_TOKEN")
+    )
+    return init_content_model(token)
 
 
 def get_calibration() -> dict:
-    return init_calibration(get_secret("HF_TOKEN"))
+    token = (
+        get_server_secret("HF_TOKEN")
+        if is_production_mode()
+        else get_secret("HF_TOKEN")
+    )
+    return dict(init_calibration(token))
 
 
 def get_model_source() -> str:

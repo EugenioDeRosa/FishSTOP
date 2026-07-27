@@ -6,6 +6,11 @@ import unicodedata
 import requests
 
 from src.ai_input import compact_ai_body
+from src.analysis_limits import (
+    EmailAnalysisLimitError,
+    MAX_AI_BODY_CHARS,
+    MAX_PHI4_SECTIONS,
+)
 from src.config import get_secret
 
 GITHUB_MODELS_ENDPOINT = os.getenv(
@@ -814,7 +819,17 @@ def _build_complete_email_prompts(
         soc,
         anonymize=anonymize,
     )
+    if len(body) > MAX_AI_BODY_CHARS:
+        raise EmailAnalysisLimitError(
+            "The email body exceeds the supported Phi-4 analysis limit "
+            f"of {MAX_AI_BODY_CHARS:,} characters."
+        )
     sections = _split_complete_email_body(body)
+    if len(sections) > MAX_PHI4_SECTIONS:
+        raise EmailAnalysisLimitError(
+            "The email requires more than "
+            f"{MAX_PHI4_SECTIONS} Phi-4 analysis sections."
+        )
     total = len(sections)
     return [
         (
@@ -2340,10 +2355,18 @@ def stream_phi4_email_analysis(
         }
         return
 
-    prompt_sections = _build_complete_email_prompts(
-        soc,
-        anonymize=not use_ollama,
-    )
+    try:
+        prompt_sections = _build_complete_email_prompts(
+            soc,
+            anonymize=not use_ollama,
+        )
+    except EmailAnalysisLimitError as exc:
+        yield {
+            "status": "error",
+            "message": str(exc),
+            "text": "",
+        }
+        return
     total_sections = len(prompt_sections)
     semantic_candidates: list[dict] = []
     raw_outputs: list[str] = []

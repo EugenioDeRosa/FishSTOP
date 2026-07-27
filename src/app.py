@@ -4,6 +4,9 @@ from pathlib import Path
 
 import streamlit as st
 
+from src.config import is_production_mode
+from src.error_handling import render_unexpected_error, report_unexpected_error
+from src.session_context import get_analysis_session_id
 from src.ui import inject_global_styles
 
 
@@ -41,9 +44,20 @@ PAGES = {
 }
 
 
+def available_pages() -> dict[str, str]:
+    pages = dict(PAGES)
+    if is_production_mode():
+        pages.pop("dataset_sources", None)
+    return pages
+
+
+def _allowed_page(page_name: str) -> str:
+    return page_name if page_name in available_pages() else "analyze"
+
+
 def initialize_session_state() -> None:
-    if st.session_state.get("page") not in PAGES:
-        st.session_state.page = "analyze"
+    st.session_state.page = _allowed_page(st.session_state.get("page"))
+    get_analysis_session_id()
 
 
 def _render_startup_splash():
@@ -178,7 +192,10 @@ def run_startup_warmup() -> bool:
         warm_up_backend(preload_content_model=False)
         st.session_state["startup_warmup_error"] = None
     except Exception as exc:
-        st.session_state["startup_warmup_error"] = str(exc)
+        st.session_state["startup_warmup_error"] = report_unexpected_error(
+            exc,
+            context="startup warmup",
+        )
     st.session_state["startup_warmup_done"] = True
     st.rerun()
     return False
@@ -186,7 +203,7 @@ def run_startup_warmup() -> bool:
 
 
 def set_page(page_name: str) -> None:
-    st.session_state.page = page_name
+    st.session_state.page = _allowed_page(page_name)
 
 
 def render_home() -> None:
@@ -206,9 +223,10 @@ def render_sidebar() -> None:
         st.button("Analyze email", use_container_width=True, type="primary" if st.session_state.page == "analyze" else "secondary", on_click=set_page, args=("analyze",))
         st.button("Connections", use_container_width=True, type="primary" if st.session_state.page == "settings" else "secondary", on_click=set_page, args=("settings",))
 
-        with st.expander("Project tools", expanded=False):
-            st.caption("Dataset preparation is separate from day-to-day analysis.")
-            st.button("Training datasets", use_container_width=True, on_click=set_page, args=("dataset_sources",))
+        if not is_production_mode():
+            with st.expander("Project tools", expanded=False):
+                st.caption("Dataset preparation is separate from day-to-day analysis.")
+                st.button("Training datasets", use_container_width=True, on_click=set_page, args=("dataset_sources",))
 
         st.markdown("---")
         st.caption("Local-first analysis")
@@ -217,13 +235,10 @@ def render_sidebar() -> None:
 
 def render_selected_page(page_name: str) -> None:
     import importlib
-    import traceback
 
-    module_name = PAGES.get(page_name)
-    if not module_name:
-        st.session_state.page = "home"
-        render_home()
-        return
+    resolved_page = _allowed_page(page_name)
+    st.session_state.page = resolved_page
+    module_name = available_pages()[resolved_page]
 
     try:
         importlib.invalidate_caches()
@@ -231,10 +246,11 @@ def render_selected_page(page_name: str) -> None:
         render = getattr(page_module, "render")
         render()
     except Exception as exc:
-        st.error(f"Unable to render page `{page_name}`.")
-        st.caption("The app caught the error instead of leaving a blank screen.")
-        with st.expander("Error details", expanded=True):
-            st.code("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)), language="text")
+        render_unexpected_error(
+            f"Unable to render page `{resolved_page}`.",
+            exc,
+            context=f"render page {resolved_page}",
+        )
         if st.button("Back to main menu", use_container_width=True):
             st.session_state.page = "home"
 

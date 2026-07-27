@@ -15,25 +15,58 @@ def encode_email_chunks(
     stride: int = DEFAULT_CHUNK_STRIDE,
     max_chunks: int = MAX_EMAIL_CHUNKS,
 ):
-    """Tokenizza tutta l'email in finestre sovrapposte invece di troncarla."""
+    """Tokenize once, then materialize only the selected model windows."""
     if not 0 <= stride < max_length:
         raise ValueError("stride must be >= 0 and smaller than max_length")
-    encoded = tokenizer(
+    if max_chunks < 1:
+        raise ValueError("max_chunks must be at least 1")
+
+    raw = tokenizer(
         text,
-        return_tensors="pt",
-        truncation=True,
-        max_length=max_length,
-        stride=stride,
-        return_overflowing_tokens=True,
-        padding=True,
+        add_special_tokens=False,
+        truncation=False,
+        return_attention_mask=False,
+        return_token_type_ids=False,
     )
-    chunk_count = int(encoded["input_ids"].shape[0])
-    if chunk_count > max_chunks:
-        selected = torch.linspace(0, chunk_count - 1, steps=max_chunks).round().long().unique()
-        for key, value in list(encoded.items()):
-            if isinstance(value, torch.Tensor) and value.ndim > 0 and value.shape[0] == chunk_count:
-                encoded[key] = value.index_select(0, selected)
-    return encoded
+    token_ids = raw.get("input_ids") or []
+    if token_ids and isinstance(token_ids[0], list):
+        token_ids = token_ids[0]
+
+    special_tokens = int(tokenizer.num_special_tokens_to_add(pair=False))
+    payload_size = max(1, max_length - special_tokens)
+    step = max(1, payload_size - stride)
+    last_start = max(0, len(token_ids) - payload_size)
+    all_starts = list(range(0, last_start + 1, step)) or [0]
+    if all_starts[-1] != last_start:
+        all_starts.append(last_start)
+    if len(all_starts) > max_chunks:
+        selected_indexes = (
+            torch.linspace(0, len(all_starts) - 1, steps=max_chunks)
+            .round()
+            .long()
+            .unique()
+            .tolist()
+        )
+        starts = [all_starts[index] for index in selected_indexes]
+    else:
+        starts = all_starts
+
+    prepared = [
+        tokenizer.prepare_for_model(
+            token_ids[start:start + payload_size],
+            add_special_tokens=True,
+            max_length=max_length,
+            truncation=True,
+            return_attention_mask=True,
+        )
+        for start in starts
+    ]
+    return tokenizer.pad(
+        prepared,
+        padding=True,
+        max_length=max_length,
+        return_tensors="pt",
+    )
 
 
 def aggregate_chunk_logits(logits: torch.Tensor, positive_label_id: int = 1) -> torch.Tensor:

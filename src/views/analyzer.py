@@ -4,11 +4,13 @@ import copy
 import re
 import tempfile
 from html import escape as html_escape
+from threading import Lock
 from urllib.parse import urlsplit, urlunsplit
 
 import streamlit as st
 import streamlit.components.v1 as components
  
+from src.analysis_limits import EmailAnalysisLimitError, MAX_EML_BYTES
 from src.analyzer.html_utils import sanitize_html_for_js_preview, sanitize_html_for_preview
 from src.analyzer.llm_context_analyzer import (
     PROMPT_VERSION,
@@ -23,7 +25,9 @@ from src.bert_calibration import calibrated_probabilities, classify as classify_
 from src.bert_inference import predict_email_logits
 from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
-from src.config import get_secret
+from src.config import get_secret, get_server_secret, is_production_mode
+from src.error_handling import render_unexpected_error
+from src.session_context import get_analysis_session_id
 from src.ui import page_intro, risk_banner
 from src.views.backend import (
     HF_MODEL_REVISION,
@@ -32,7 +36,6 @@ from src.views.backend import (
     init_content_model,
 )
 
-MAX_EML_BYTES = 25 * 1024 * 1024
 _EMAIL_UPLOADER_KEY = "fishstop_eml_uploader"
 _BROWSER_RELOAD_QUERY_KEY = "_fishstop_reload"
 _BROWSER_RELOAD_STATE_KEY = "_fishstop_seen_reload"
@@ -47,6 +50,7 @@ _EMAIL_STATE_PREFIXES = (
     "phi4_analysis_",
     "background_lookup_signature_",
 )
+_BERT_INFERENCE_LOCK = Lock()
 
 
 def _is_email_analysis_state_key(key: str) -> bool:
@@ -122,6 +126,14 @@ def _analyze_eml_bytes(raw_bytes: bytes) -> dict:
                 os.unlink(temp_path)
             except FileNotFoundError:
                 pass
+
+
+def _validate_eml_size(raw_bytes: bytes) -> None:
+    if len(raw_bytes) > MAX_EML_BYTES:
+        raise EmailAnalysisLimitError(
+            "Email file is larger than the maximum supported size of "
+            f"{MAX_EML_BYTES / (1024 * 1024):.0f} MB."
+        )
 
 
 def _strip_encoded_content(raw: str) -> str:
@@ -491,10 +503,14 @@ def _schedule_phi4_background(
     manager: BackgroundJobManager,
     soc: dict,
     analysis_key: str,
+    session_id: str = "",
 ) -> tuple[str, tuple] | None:
+    session_id = session_id or get_analysis_session_id()
     backend = active_llm_backend()
     hosted = backend.startswith("github models")
     if backend == "not configured":
+        return None
+    if soc.get("ai_analysis_supported") is False:
         return None
 
     github_token = get_secret("GITHUB_MODELS_TOKEN") if hosted else ""
@@ -503,25 +519,25 @@ def _schedule_phi4_background(
         if github_token
         else "local"
     )
-    key = ("phi4", analysis_key, backend, token_revision)
+    key = ("phi4", session_id, analysis_key, backend, token_revision)
     soc_snapshot = copy.deepcopy({
         name: value
         for name, value in soc.items()
         if name != "raw_eml_bytes"
     })
-    manager.get_or_submit(
+    accepted = manager.get_or_submit(
         "llm",
         key,
         _run_phi4_background,
         soc_snapshot,
         github_token,
     )
-    return ("llm", key)
+    return ("llm", key) if accepted is not False else ("__overloaded__", key)
 
 
 def _run_bert_background(email_text: str, hf_token: str = "") -> dict:
     tokenizer, model, model_source = init_content_model(hf_token)
-    calibration = init_calibration(hf_token)
+    calibration = dict(init_calibration(hf_token))
     model_dataset_hash = str(
         getattr(model.config, "fishstop_dataset_sha256", "") or ""
     )
@@ -539,12 +555,15 @@ def _run_bert_background(email_text: str, hf_token: str = "") -> dict:
         )
 
     positive_label_id = int(calibration.get("positive_label_id", 1))
-    logits, chunk_count = predict_email_logits(
-        model,
-        tokenizer,
-        email_text,
-        positive_label_id=positive_label_id,
-    )
+    # The cached model/tokenizer are process-global Streamlit resources.
+    # Serialize inference so this remains safe if the BERT worker count changes.
+    with _BERT_INFERENCE_LOCK:
+        logits, chunk_count = predict_email_logits(
+            model,
+            tokenizer,
+            email_text,
+            positive_label_id=positive_label_id,
+        )
     probabilities = calibrated_probabilities(
         logits,
         temperature=calibration["temperature"],
@@ -573,10 +592,16 @@ def _schedule_bert_background(
     manager: BackgroundJobManager,
     email_text: str,
     email_digest: str,
+    session_id: str = "",
 ) -> tuple[str, tuple] | None:
     if not email_text:
         return None
-    hf_token = get_secret("HF_TOKEN")
+    session_id = session_id or get_analysis_session_id()
+    hf_token = (
+        get_server_secret("HF_TOKEN")
+        if is_production_mode()
+        else get_secret("HF_TOKEN")
+    )
     token_revision = (
         hashlib.sha256(hf_token.encode("utf-8")).hexdigest()
         if hf_token
@@ -584,18 +609,19 @@ def _schedule_bert_background(
     )
     key = (
         "bert",
+        session_id,
         email_digest,
         HF_MODEL_REVISION,
         token_revision,
     )
-    manager.get_or_submit(
+    accepted = manager.get_or_submit(
         "bert",
         key,
         _run_bert_background,
         email_text,
         hf_token,
     )
-    return ("bert", key)
+    return ("bert", key) if accepted is not False else ("__overloaded__", key)
 
 
 def _apply_bert_result_to_soc(soc: dict, result: dict) -> None:
@@ -620,6 +646,9 @@ def _render_phi4_analysis(
         f"Phi-4 mini analysis via {active_llm_backend()}: evaluates plain and HTML content, urgency, money, IBANs, "
         "payments, credentials, and external forms; then uses semantic analysis, SPF/DKIM/DMARC, links, and attachments only as context."
     )
+    if soc.get("ai_analysis_supported") is False:
+        st.warning(soc.get("ai_analysis_limit_message"))
+        return None
 
     result_key = f"{analysis_key}_result"
     error_key = f"{analysis_key}_error"
@@ -635,6 +664,12 @@ def _render_phi4_analysis(
     backend = active_llm_backend()
 
     if job_reference is not None:
+        if job_reference[0] == "__overloaded__":
+            st.warning(
+                "Phi-4 analysis is temporarily unavailable because the "
+                "analysis queue is full. Try again shortly."
+            )
+            return None
         snapshot = _get_background_job_manager().snapshot(*job_reference)
         if snapshot.state == "done":
             event = snapshot.result if isinstance(snapshot.result, dict) else {}
@@ -1169,7 +1204,9 @@ def _schedule_background_lookups(
     manager: BackgroundJobManager,
     validator,
     soc: dict,
+    session_id: str = "",
 ) -> dict[str, dict[str, tuple[str, tuple]]]:
+    session_id = session_id or get_analysis_session_id()
     vt_api_key = get_secret("VIRUSTOTAL_API_KEY")
     abuse_api_key = get_secret("ABUSEIPDB_API_KEY")
     vt_revision = hashlib.sha256(vt_api_key.encode("utf-8")).hexdigest() if vt_api_key else "missing"
@@ -1186,8 +1223,8 @@ def _schedule_background_lookups(
         url = str(link.get("url") or "").strip()
         if not url or url in plan["urls"]:
             continue
-        key = ("url", vt_revision, url)
-        manager.get_or_submit(
+        key = ("url", session_id, vt_revision, url)
+        accepted = manager.get_or_submit(
             "virustotal",
             key,
             _safe_vt_url_lookup,
@@ -1195,52 +1232,72 @@ def _schedule_background_lookups(
             url,
             vt_api_key,
         )
-        plan["urls"][url] = ("virustotal", key)
+        plan["urls"][url] = (
+            ("virustotal", key)
+            if accepted is not False
+            else ("__overloaded__", key)
+        )
 
     for domain in dict.fromkeys(_sender_domains(soc).values()):
-        key = ("domain", abuse_revision, domain)
-        manager.get_or_submit(
+        key = ("domain", session_id, abuse_revision, domain)
+        accepted = manager.get_or_submit(
             "abuseipdb",
             key,
             validator.check_domain_reputation,
             domain,
             api_key=abuse_api_key,
         )
-        plan["domains"][domain] = ("abuseipdb", key)
+        plan["domains"][domain] = (
+            ("abuseipdb", key)
+            if accepted is not False
+            else ("__overloaded__", key)
+        )
 
     for ip in _routing_ips(soc):
-        reputation_key = ("ip", abuse_revision, ip)
-        manager.get_or_submit(
+        reputation_key = ("ip", session_id, abuse_revision, ip)
+        accepted = manager.get_or_submit(
             "abuseipdb",
             reputation_key,
             validator.check_ip_reputation,
             ip,
             api_key=abuse_api_key,
         )
-        plan["ip_reputation"][ip] = ("abuseipdb", reputation_key)
+        plan["ip_reputation"][ip] = (
+            ("abuseipdb", reputation_key)
+            if accepted is not False
+            else ("__overloaded__", reputation_key)
+        )
 
-        geolocation_key = ("ip", ip)
-        manager.get_or_submit(
+        geolocation_key = ("ip", session_id, ip)
+        accepted = manager.get_or_submit(
             "geolocation",
             geolocation_key,
             validator.geolocate_ip,
             ip,
         )
-        plan["geolocation"][ip] = ("geolocation", geolocation_key)
+        plan["geolocation"][ip] = (
+            ("geolocation", geolocation_key)
+            if accepted is not False
+            else ("__overloaded__", geolocation_key)
+        )
 
     for attachment in (soc.get("attachments") or []):
         sha256 = str(attachment.get("hash_sha256") or "").strip()
         if not sha256 or sha256 in plan["files"]:
             continue
-        key = ("file", vt_revision, sha256)
-        manager.get_or_submit(
+        key = ("file", session_id, vt_revision, sha256)
+        accepted = manager.get_or_submit(
             "virustotal",
             key,
             validator.check_file_hash,
             sha256,
             api_key=vt_api_key,
         )
-        plan["files"][sha256] = ("virustotal", key)
+        plan["files"][sha256] = (
+            ("virustotal", key)
+            if accepted is not False
+            else ("__overloaded__", key)
+        )
 
     return plan
 
@@ -1252,6 +1309,13 @@ def _background_lookup_result(
     service: str,
 ) -> dict:
     pool, key = reference
+    if pool == "__overloaded__":
+        return {
+            "status": "unavailable",
+            "message": (
+                f"{service} was not started because the analysis queue is full"
+            ),
+        }
     snapshot = manager.snapshot(pool, key)
     if snapshot.state == "done":
         if isinstance(snapshot.result, dict):
@@ -1276,7 +1340,11 @@ def _background_plan_states(
     plan: dict[str, dict[str, tuple[str, tuple]]],
 ) -> tuple[str, ...]:
     return tuple(
-        manager.snapshot(pool, key).state
+        (
+            "overloaded"
+            if pool == "__overloaded__"
+            else manager.snapshot(pool, key).state
+        )
         for group in plan.values()
         for pool, key in group.values()
     )
@@ -1306,11 +1374,15 @@ def _render_background_progress(
     states = _background_plan_states(manager, plan)
     if not states:
         return
-    terminal_states = {"done", "error", "cancelled"}
+    terminal_states = {"done", "error", "cancelled", "overloaded"}
 
     def group_progress(group_names: set[str]) -> tuple[int, int]:
         group_states = [
-            manager.snapshot(pool, key).state
+            (
+                "overloaded"
+                if pool == "__overloaded__"
+                else manager.snapshot(pool, key).state
+            )
             for name, group in plan.items()
             if name in group_names
             for pool, key in group.values()
@@ -1393,6 +1465,7 @@ def render():
     _reset_email_after_browser_reload()
     validator, _ = get_core_backend()
     background_jobs = _get_background_job_manager()
+    analysis_session_id = get_analysis_session_id()
 
     page_intro(
         "Email analysis",
@@ -1423,11 +1496,10 @@ def render():
                 on_click=_clear_email_analysis_state,
             )
             raw_bytes = uploaded_file.getvalue()
-            if len(raw_bytes) > MAX_EML_BYTES:
-                st.error(
-                    f"Email file too large: maximum supported size is "
-                    f"{MAX_EML_BYTES / (1024 * 1024):.0f} MB."
-                )
+            try:
+                _validate_eml_size(raw_bytes)
+            except EmailAnalysisLimitError as exc:
+                st.error(str(exc))
                 return
             raw_text = raw_bytes.decode("utf-8", errors="replace")
             current_eml_hash = hashlib.sha256(raw_bytes).hexdigest()
@@ -1463,6 +1535,7 @@ def render():
                 background_jobs,
                 validator,
                 soc,
+                analysis_session_id,
             )
             rendered_background_states = list(
                 _background_plan_states(
@@ -1533,49 +1606,81 @@ def render():
                 clean_body,
                 has_extracted_links=bool(soc.get("links")),
             )
-            bert_job_reference = _schedule_bert_background(
-                background_jobs,
-                email_text,
-                eml_digest,
+            ai_analysis_supported = soc.get("ai_analysis_supported", True)
+            bert_job_reference = (
+                _schedule_bert_background(
+                    background_jobs,
+                    email_text,
+                    eml_digest,
+                    analysis_session_id,
+                )
+                if ai_analysis_supported
+                else None
             )
             bert_result = None
-            bert_error = ""
+            bert_error = (
+                ""
+                if ai_analysis_supported
+                else str(soc.get("ai_analysis_limit_message") or "")
+            )
             if bert_job_reference is not None:
                 background_plan["bert"] = {
                     eml_digest: bert_job_reference,
                 }
-                bert_snapshot = background_jobs.snapshot(
-                    *bert_job_reference
+                bert_snapshot = (
+                    background_jobs.snapshot(*bert_job_reference)
+                    if bert_job_reference[0] != "__overloaded__"
+                    else None
                 )
-                rendered_background_states.append(bert_snapshot.state)
+                if bert_snapshot is None:
+                    bert_error = (
+                        "DistilBERT analysis is temporarily unavailable because "
+                        "the analysis queue is full. Try again shortly."
+                    )
+                    rendered_background_states.append("overloaded")
+                else:
+                    rendered_background_states.append(bert_snapshot.state)
                 if (
-                    bert_snapshot.state == "done"
+                    bert_snapshot is not None
+                    and bert_snapshot.state == "done"
                     and isinstance(bert_snapshot.result, dict)
                 ):
                     bert_result = bert_snapshot.result
                     _apply_bert_result_to_soc(soc, bert_result)
-                elif bert_snapshot.state == "error":
+                elif bert_snapshot is not None and bert_snapshot.state == "error":
                     bert_error = bert_snapshot.error
             elif not email_text:
                 soc["bert_ai_result"] = "not available"
 
             cached_phi4 = st.session_state.get(f"{phi4_key}_result")
-            phi4_error = st.session_state.get(f"{phi4_key}_error")
+            phi4_error = (
+                st.session_state.get(f"{phi4_key}_error")
+                or (
+                    str(soc.get("ai_analysis_limit_message") or "")
+                    if not ai_analysis_supported
+                    else ""
+                )
+            )
             phi4_job_reference = None
             if not isinstance(cached_phi4, dict) and not phi4_error:
                 phi4_job_reference = _schedule_phi4_background(
                     background_jobs,
                     soc,
                     phi4_key,
+                    analysis_session_id,
                 )
                 if phi4_job_reference is not None:
                     background_plan["phi4"] = {
                         phi4_key: phi4_job_reference,
                     }
                     rendered_background_states.append(
-                        background_jobs.snapshot(
-                            *phi4_job_reference
-                        ).state
+                        (
+                            "overloaded"
+                            if phi4_job_reference[0] == "__overloaded__"
+                            else background_jobs.snapshot(
+                                *phi4_job_reference
+                            ).state
+                        )
                     )
             if (
                 isinstance(cached_phi4, dict)
@@ -2086,7 +2191,11 @@ def render():
                     disabled=True,
                 )
 
+        except EmailAnalysisLimitError as exc:
+            st.error(f"Email exceeds the supported analysis limits: {exc}")
         except Exception as exc:
-            st.error(f"An error occurred during analysis: {exc}")
-            with st.expander("Error details"):
-                st.exception(exc)
+            render_unexpected_error(
+                "An unexpected error occurred during email analysis.",
+                exc,
+                context="email analysis page",
+            )

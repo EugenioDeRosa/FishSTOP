@@ -17,6 +17,7 @@ except ImportError:  # pragma: no cover - fallback per ambienti minimali
 
 from .html_utils import strip_html
 from .lookalike import is_ip_url
+from src.analysis_limits import EmailAnalysisLimitError, MAX_LINKS
 
 
 _URL_RE = re.compile(
@@ -128,7 +129,12 @@ def _possible_shortener(host: str, path: str) -> tuple[bool, str]:
     return False, ""
 
 
-def extract_links(body_plain: str, body_html: str) -> list[dict]:
+def extract_links(
+    body_plain: str,
+    body_html: str,
+    *,
+    max_links: int = MAX_LINKS,
+) -> list[dict]:
     """
     Extracts all links from the email body.
 
@@ -145,6 +151,10 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
         url = _normalize_malformed_userinfo(_with_scheme(raw_url))
         if not url or url in seen:
             return
+        if len(links) >= max_links:
+            raise EmailAnalysisLimitError(
+                f"Email contains more than {max_links} unique links."
+            )
         parsed = _safe_urlparse(url)
         if parsed is None:
             return
@@ -185,7 +195,7 @@ def extract_links(body_plain: str, body_html: str) -> list[dict]:
     if body_html:
         if BeautifulSoup is not None:
             soup = BeautifulSoup(body_html, "html.parser")
-            for anchor in soup.find_all("a"):
+            for anchor in soup.find_all("a", limit=max_links + 1):
                 href = anchor.get("href")
                 if href:
                     _add(href, anchor.get_text(" ", strip=True), "html_href")

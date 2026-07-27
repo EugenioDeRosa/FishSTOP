@@ -4,6 +4,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from src.config import is_production_mode
 from src.ui import page_intro
 
 from src.public_dataset_builder import (
@@ -202,6 +203,10 @@ def _run_builder(label: str, builder=build_balanced_public_dataset, *args, **kwa
 
 
 def render() -> None:
+    if is_production_mode():
+        st.error("Training dataset tools are disabled on the public website.")
+        return
+
     page_intro(
         "Project tools",
         "Training datasets",

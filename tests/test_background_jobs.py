@@ -85,3 +85,31 @@ def test_worker_exception_is_exposed_without_raising_in_ui_thread():
         assert "service unavailable" in snapshot.error
     finally:
         manager.shutdown()
+
+
+def test_pending_queue_is_bounded_and_accepts_work_again_after_completion():
+    manager = BackgroundJobManager(
+        worker_limits={"default": 1},
+        pending_limits={"default": 1},
+        completed_ttl=60,
+    )
+    release = threading.Event()
+
+    try:
+        assert manager.get_or_submit(
+            "default", "first", lambda: release.wait(timeout=1)
+        ) is True
+        assert manager.get_or_submit(
+            "default", "rejected", lambda: "never"
+        ) is False
+        assert manager.snapshot("default", "rejected").state == "missing"
+
+        release.set()
+        assert _wait_for_terminal(manager, "default", "first").state == "done"
+        assert manager.get_or_submit(
+            "default", "next", lambda: "accepted"
+        ) is True
+        assert _wait_for_terminal(manager, "default", "next").result == "accepted"
+    finally:
+        release.set()
+        manager.shutdown()
