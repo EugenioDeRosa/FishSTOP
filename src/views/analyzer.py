@@ -33,6 +33,72 @@ from src.views.backend import (
 )
 
 MAX_EML_BYTES = 25 * 1024 * 1024
+_EMAIL_UPLOADER_KEY = "fishstop_eml_uploader"
+_BROWSER_RELOAD_QUERY_KEY = "_fishstop_reload"
+_BROWSER_RELOAD_STATE_KEY = "_fishstop_seen_reload"
+_EMAIL_STATE_KEYS = {
+    _EMAIL_UPLOADER_KEY,
+    "raw_eml_text",
+    "current_eml_name",
+    "current_eml_hash",
+}
+_EMAIL_STATE_PREFIXES = (
+    "soc_analysis_",
+    "phi4_analysis_",
+    "background_lookup_signature_",
+)
+
+
+def _is_email_analysis_state_key(key: str) -> bool:
+    return key in _EMAIL_STATE_KEYS or key.startswith(_EMAIL_STATE_PREFIXES)
+
+
+def _clear_email_analysis_state() -> None:
+    """Remove only the current client's uploaded email and derived UI state."""
+    for key in list(st.session_state):
+        if _is_email_analysis_state_key(str(key)):
+            del st.session_state[key]
+
+
+def _reset_email_after_browser_reload() -> None:
+    """
+    Reset the uploaded email after a real browser refresh, not after Streamlit
+    reruns used to update background analysis results.
+    """
+    reload_token = str(st.query_params.get(_BROWSER_RELOAD_QUERY_KEY, "") or "")
+    if (
+        reload_token
+        and reload_token != st.session_state.get(_BROWSER_RELOAD_STATE_KEY)
+    ):
+        _clear_email_analysis_state()
+        st.session_state[_BROWSER_RELOAD_STATE_KEY] = reload_token
+
+    components.html(
+        f"""
+        <script>
+        (() => {{
+          try {{
+            const parentWindow = window.parent;
+            const navigation = parentWindow.performance
+              .getEntriesByType("navigation")[0];
+            if (!navigation || navigation.type !== "reload") return;
+
+            const url = new URL(parentWindow.location.href);
+            const token = (
+              parentWindow.crypto && parentWindow.crypto.randomUUID
+            )
+              ? parentWindow.crypto.randomUUID()
+              : `${{Date.now()}}-${{Math.random().toString(16).slice(2)}}`;
+            url.searchParams.set("{_BROWSER_RELOAD_QUERY_KEY}", token);
+            parentWindow.location.replace(url.toString());
+          }} catch (_) {{
+            // The explicit Clear email button remains available as a fallback.
+          }}
+        }})();
+        </script>
+        """,
+        height=0,
+    )
 
 
 @st.cache_resource
@@ -1324,6 +1390,7 @@ def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_java
 
 
 def render():
+    _reset_email_after_browser_reload()
     validator, _ = get_core_backend()
     background_jobs = _get_background_job_manager()
 
@@ -1338,13 +1405,23 @@ def render():
 
     with col_upload:
         st.markdown('<div class="fs-section-label">Add email file</div>', unsafe_allow_html=True)
-        uploaded_file = st.file_uploader("Choose an .eml file", type=["eml"], label_visibility="collapsed")
+        uploaded_file = st.file_uploader(
+            "Choose an .eml file",
+            type=["eml"],
+            label_visibility="collapsed",
+            key=_EMAIL_UPLOADER_KEY,
+        )
         st.caption(
             "The file is parsed locally. Reputation services receive only indicators. "
             "On the hosted website, anonymized email content is analyzed with GitHub Models."
         )
 
         if uploaded_file is not None:
+            st.button(
+                "Clear email",
+                key="clear_email_analysis",
+                on_click=_clear_email_analysis_state,
+            )
             raw_bytes = uploaded_file.getvalue()
             if len(raw_bytes) > MAX_EML_BYTES:
                 st.error(

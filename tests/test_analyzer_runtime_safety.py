@@ -14,6 +14,28 @@ class _RecordingAnalyzer:
         return {"subject": "safe"}
 
 
+def test_clear_email_state_preserves_client_settings(monkeypatch):
+    state = {
+        "fishstop_eml_uploader": object(),
+        "raw_eml_text": "raw email",
+        "current_eml_name": "message.eml",
+        "current_eml_hash": "digest",
+        "soc_analysis_digest": {"subject": "cached"},
+        "phi4_analysis_digest_result": {"final_verdict": "review"},
+        "background_lookup_signature_digest": ("done",),
+        "fishstop_user_api_keys": {"GITHUB_MODELS_TOKEN": "secret"},
+        "page": "analyze",
+    }
+    monkeypatch.setattr(analyzer_view.st, "session_state", state)
+
+    analyzer_view._clear_email_analysis_state()
+
+    assert state == {
+        "fishstop_user_api_keys": {"GITHUB_MODELS_TOKEN": "secret"},
+        "page": "analyze",
+    }
+
+
 def test_uploaded_email_uses_unique_deleted_temporary_file(monkeypatch):
     recording_analyzer = _RecordingAnalyzer()
     monkeypatch.setattr(
