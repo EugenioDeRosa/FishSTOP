@@ -2,71 +2,13 @@ import re
 import json
 import socket
 import ipaddress
-import urllib.request
-import urllib.parse
-import urllib.error
-import dns.resolver
+import subprocess
 import requests
-from typing import Optional
 
 # Config centralizzata
 from src.config import get_secret
 
 ABUSEIPDB_ENDPOINT  = "https://api.abuseipdb.com/api/v2/check"
-VIRUSTOTAL_ENDPOINT = "https://www.virustotal.com/api/v3/files"
-
-_IPAPI_FIELDS = (
-    "status,message,country,countryCode,regionName,city,"
-    "zip,lat,lon,timezone,isp,org,as,proxy,hosting,query"
-)
-IPAPI_ENDPOINT = "http://ip-api.com/json/{ip}?fields=" + _IPAPI_FIELDS
-
-# Inizializziamo una sessione riutilizzabile Keep-Alive a livello di modulo
-_session = requests.Session()
-_session.headers.update({"Accept": "application/json"})
-
-# Resolver di fallback a livello di modulo
-_resolver = dns.resolver.Resolver()
-_resolver.nameservers = [
-    "1.1.1.1",  # Cloudflare
-    "8.8.8.8",  # Google
-    "9.9.9.9",  # Quad9
-]
-_resolver.timeout = 2.0
-_resolver.lifetime = 6.0
-
-def _resolve_domain_a(domain: str) -> Optional[str]:
-    """Resolves a domain using the SYSTEM resolver (bypasses dns.resolver/custom port 53)."""
-    try:
-        return socket.gethostbyname(domain)
-    except (socket.gaierror, socket.timeout, UnicodeError):
-        return None
-    
-def _extract_address(raw: Optional[str]) -> Optional[str]:
-    if not raw:
-        return None
-    m = re.search(r"<([^>]+)>", raw)
-    if m:
-        return m.group(1).strip()
-    m2 = re.search(r"[\w.+\-]+@[\w.\-]+", raw)
-    return m2.group(0).strip() if m2 else None
-
-
-def _extract_domain(email_or_raw: str) -> str:
-    addr = _extract_address(email_or_raw) or email_or_raw
-    m = re.search(r"@([\w.\-]+)", addr)
-    return m.group(1).lower() if m else ""
-
-
-def _parse_dmarc_record(record: str) -> dict:
-    tags: dict = {}
-    for part in record.split(";"):
-        part = part.strip()
-        if "=" in part:
-            k, _, v = part.partition("=")
-            tags[k.strip().lower()] = v.strip().lower()
-    return tags
-
 
 # ── UTILS DI FORMATTAZIONE E CHIAMATE API ─────────────────────────────────
 
@@ -74,7 +16,12 @@ def _abuseipdb_call(ip: str) -> dict:
     """Esegue la chiamata ad AbuseIPDB usando la sessione Keep-Alive globale."""
     params = {"ipAddress": ip, "maxAgeInDays": "90"}
     headers = {"Key": get_secret("ABUSEIPDB_API_KEY")}
-    response = _session.get(ABUSEIPDB_ENDPOINT, params=params, headers=headers, timeout=4)
+    response = requests.get(
+        ABUSEIPDB_ENDPOINT,
+        params=params,
+        headers={**headers, "Accept": "application/json"},
+        timeout=4,
+    )
     response.raise_for_status()
     return response.json().get("data", {})
 
@@ -99,22 +46,6 @@ def _format_abuseipdb(data: dict, lookup_key: str) -> dict:
     }
 
 
-def _format_vt_file(data: dict, base: dict) -> dict:
-    attrs = data.get("data", {}).get("attributes", {})
-    stats = attrs.get("last_analysis_stats", {})
-    malicious = int(stats.get("malicious", 0))
-    suspicious = int(stats.get("suspicious", 0))
-    total = sum(int(v) for v in stats.values())
-    return {
-        **base,
-        "status": "malicious" if malicious > 0 else "clean",
-        "malicious": malicious,
-        "suspicious": suspicious,
-        "total_engines": total,
-        "message": f"{malicious} engines detect threats out of {total}.",
-    }
-
-
 # ── FUNZIONI PRINCIPALI EXPORTATE DA __INIT__.PY ──────────────────────────
 
 def check_ip_reputation(ip: str) -> dict:
@@ -133,11 +64,6 @@ def check_ip_reputation(ip: str) -> dict:
         return {**base, "status": "error", "message": f"Error AbuseIPDB: {exc}"}
 
 
-import subprocess
-import re
-import socket
-from typing import Optional
-
 def check_domain_reputation(domain: str, resolver = None) -> dict:
     """
     Resolves the domain by emulating system NSLOOKUP.
@@ -148,6 +74,7 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
     if not get_secret("ABUSEIPDB_API_KEY"): return {**base, "status": "skipped", "message": "API key missing"}
 
     resolved_ip = None
+    lookup_method = "system-nslookup-subprocess"
 
     try:
         # Eseguiamo letteralmente il comando 'nslookup' come fai da terminale
@@ -180,6 +107,7 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
     if not resolved_ip:
         try:
             resolved_ip = socket.gethostbyname(domain)
+            lookup_method = "system-socket-fallback"
         except Exception as exc:
             return {**base, "status": "skipped", "message": f"Nslookup and socket failed for the domain. Error: {exc}"}
 
@@ -190,48 +118,12 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
         result_dict.update({
             "domain_queried": domain, 
             "resolved_ip": resolved_ip, 
-            "lookup_method": "system-nslookup-subprocess"
+            "lookup_method": lookup_method
         })
         return result_dict
     except Exception as exc:
         return {**base, "status": "error", "message": f"Error API AbuseIPDB su IP {resolved_ip}: {exc}"}
     
-def check_file_hash(sha256: str) -> dict:
-    base = {"sha256": sha256, "malicious": 0, "suspicious": 0, "total_engines": 0}
-    if not sha256: return {**base, "status": "skipped", "message": "No hash"}
-    if not get_secret("VIRUSTOTAL_API_KEY"): return {**base, "status": "skipped", "message": "VT key missing"}
-    
-    url = f"{VIRUSTOTAL_ENDPOINT}/{sha256}"
-    headers = {"x-apikey": get_secret("VIRUSTOTAL_API_KEY")}
-    try:
-        response = _session.get(url, headers=headers, timeout=5)
-        if response.status_code == 404:
-            return {**base, "status": "not_found", "message": "Hash not found on VT"}
-        response.raise_for_status()
-        return _format_vt_file(response.json(), base)
-    except Exception as exc:
-        return {**base, "status": "error", "message": f"Error VT: {exc}"}
-
-
-def geolocate_ip(ip: str) -> dict:
-    base = {"ip": ip, "country": "", "is_proxy": False, "is_hosting": False}
-    if not ip or ip.startswith("10.") or ip.startswith("192.168.") or ip.startswith("127."):
-        return {**base, "status": "skipped", "message": "Private or missing IP"}
-    try:
-        response = _session.get(IPAPI_ENDPOINT.format(ip=ip), timeout=4)
-        response.raise_for_status()
-        data = response.json()
-        if data.get("status") != "success":
-            return {**base, "status": "skipped", "message": data.get("message", "fail")}
-        return {
-            "status": "ok", "ip": data.get("query", ip), "country": data.get("country", ""),
-            "is_proxy": bool(data.get("proxy")), "is_hosting": bool(data.get("hosting")),
-            "message": f"{data.get('city')}, {data.get('country')}",
-        }
-    except Exception as exc:
-        return {**base, "status": "error", "message": f"Error geo: {exc}"}
-
-
 if __name__ == "__main__":
     print("=== TEST REPUTAZIONE IP STANDALONE ===")
     # Test veloce di controllo locale se viene eseguito direttamente il file

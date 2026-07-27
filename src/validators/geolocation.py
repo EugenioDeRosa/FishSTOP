@@ -8,10 +8,6 @@ _IPAPI_FIELDS = (
 )
 IPAPI_ENDPOINT = "http://ip-api.com/json/{ip}?fields=" + _IPAPI_FIELDS
 
-_session = requests.Session()
-_session.headers.update({"User-Agent": "FishStop/1.0", "Accept": "application/json"})
-
-
 def _is_geolocatable_ip(ip: str) -> bool:
     try:
         return ipaddress.ip_address((ip or "").strip("[]")).is_global
@@ -48,7 +44,11 @@ def geolocate_ip(ip: str) -> dict:
         }
 
     try:
-        resp = _session.get(IPAPI_ENDPOINT.format(ip=ip), timeout=5)
+        resp = requests.get(
+            IPAPI_ENDPOINT.format(ip=ip),
+            headers={"User-Agent": "FishStop/1.0", "Accept": "application/json"},
+            timeout=5,
+        )
         resp.raise_for_status()
         data = resp.json()
     except requests.exceptions.RequestException as exc:

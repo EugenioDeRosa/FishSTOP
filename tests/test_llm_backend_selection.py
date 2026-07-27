@@ -38,19 +38,13 @@ def test_phi4_compact_schema_reaches_stable_policy_without_retry(monkeypatch):
             "model": model,
             "text": (
                 '{"action":"payment","channel":"link",'
-                '"summary":"The email body requests payment through a supplied link, a financial phishing pattern."}'
+                '"evidence":"Please pay using [URL LINK]."}'
             ),
         }
 
     monkeypatch.setattr(llm, "_use_ollama", lambda: False)
     monkeypatch.setattr(llm, "_github_models_token", lambda: "token")
     monkeypatch.setattr(llm, "_stream_github_models", fake_stream)
-    monkeypatch.setattr(
-        llm,
-        "_request_content_summary",
-        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError("unexpected summary retry")),
-    )
-
     events = list(llm.stream_phi4_email_analysis({
         "body_for_ai": "Please pay using [URL LINK].",
         "links": [{"url": "https://example.test/pay", "host": "example.test"}],
@@ -67,10 +61,14 @@ def test_phi4_compact_schema_reaches_stable_policy_without_retry(monkeypatch):
     assert analysis["content_risk"] == "suspicious"
 
     user_prompt = captured["messages"][1]["content"]
-    assert '"signals"' not in user_prompt
+    assert '"signals"' in user_prompt
+    assert '"credential_type"' in user_prompt
+    assert '"claimed_brand"' in user_prompt
     assert '"check_relation"' not in user_prompt
     assert '"asks_for_payment"' not in user_prompt
     assert '"content_risk"' not in user_prompt
+    assert '"evidence"' in user_prompt
+    assert '"summary"' not in user_prompt
 
 
 def test_ollama_uses_schema_constrained_output_and_zero_temperature(monkeypatch):
@@ -104,14 +102,14 @@ def test_ollama_uses_schema_constrained_output_and_zero_temperature(monkeypatch)
     assert captured["payload"]["options"]["temperature"] == 0.0
 
 
-def test_natural_model_summary_is_not_replaced_by_generic_visit_link_fallback(monkeypatch):
+def test_summary_is_derived_from_verified_action(monkeypatch):
     def fake_stream(messages, model, timeout):
         yield {
             "status": "ok",
             "model": model,
             "text": (
                 '{"action":"visit_link","channel":"link",'
-                '"summary":"This message announces a routine monthly update and offers an optional website link."}'
+                '"evidence":"Read more on our website."}'
             ),
         }
 
@@ -131,5 +129,177 @@ def test_natural_model_summary_is_not_replaced_by_generic_visit_link_fallback(mo
     }))
 
     text = events[-1]["text"]
-    assert "This message announces a routine monthly update" in text
-    assert "a pattern that requires destination verification" not in text
+    assert "direct the recipient to a supplied link" in text
+
+
+def test_ambiguous_credential_link_uses_targeted_verifier(monkeypatch):
+    calls = []
+
+    def fake_stream(messages, model, timeout):
+        calls.append(messages)
+        if len(calls) == 1:
+            text = (
+                '{"action":"visit_link","channel":"link",'
+                '"evidence":"open the form"}'
+            )
+        else:
+            text = (
+                '{"action":"provide_credentials","channel":"form",'
+                '"evidence":"enter your email address and password"}'
+            )
+        yield {"status": "ok", "model": model, "text": text}
+
+    monkeypatch.setattr(llm, "_use_ollama", lambda: False)
+    monkeypatch.setattr(llm, "_github_models_token", lambda: "token")
+    monkeypatch.setattr(llm, "_stream_github_models", fake_stream)
+
+    events = list(llm.stream_phi4_email_analysis({
+        "subject": "Mailbox verification",
+        "body_for_ai": (
+            "To keep your mailbox active, open the form and enter your email "
+            "address and password now."
+        ),
+        "links": [{"url": "https://example.test/form", "host": "example.test"}],
+        "auth_results": {},
+    }))
+
+    analysis = events[-1]["analysis"]
+    assert len(calls) == 2
+    assert analysis["requested_action"] == "provide_credentials"
+    assert analysis["action_channel"] == "external_form"
+    assert analysis["semantic_extraction"]["intent_verifier_used"] is True
+    assert analysis["semantic_extraction"]["primary_requested_action"] == "visit_link"
+    assert analysis["semantic_extraction"]["evidence_phrase"] == (
+        "enter your email address and password"
+    )
+
+
+def test_long_email_prompt_preserves_late_intent():
+    body = (
+        ("This is background information about the service and its features. " * 90)
+        + "To complete the request, enter your password and recovery code in the form."
+    )
+
+    prompt = llm.build_fast_email_prompt({
+        "subject": "Service information",
+        "body_for_ai": body,
+        "links": [{"url": "https://example.test/form", "host": "example.test"}],
+    })
+
+    assert "[EMAIL BEGINNING]" in prompt
+    assert "[ACTION-BEARING SENTENCES]" in prompt
+    assert "[EMAIL ENDING]" in prompt
+    assert "enter your password and recovery code" in prompt
+
+
+def test_impossible_link_channel_is_removed():
+    semantic = llm.normalize_semantic_extraction(
+        {
+            "action": "verify_account",
+            "channel": "link",
+            "evidence": "confirm whether this login was yours",
+        },
+        {
+            "subject": "Login alert",
+            "body_for_ai": "Confirm whether this login was yours.",
+            "links": [],
+        },
+    )
+
+    corrected = llm._correlate_semantic_with_message_structure(
+        {
+            "subject": "Login alert",
+            "body_for_ai": "Confirm whether this login was yours.",
+            "links": [],
+        },
+        semantic,
+    )
+
+    assert corrected["requested_action"] == "verify_account"
+    assert corrected["action_channel"] == "unclear"
+    assert corrected["asks_to_click_link"] is False
+
+
+def test_reply_channel_requires_an_explicit_email_reply():
+    semantic = llm.normalize_semantic_extraction(
+        {
+            "action": "verify_account",
+            "channel": "reply",
+            "evidence": "confirm whether this login was yours",
+        },
+        {
+            "subject": "Login alert",
+            "body_for_ai": "Confirm whether this login was yours.",
+        },
+    )
+
+    corrected = llm._correlate_semantic_with_message_structure(
+        {
+            "subject": "Login alert",
+            "body_for_ai": "Confirm whether this login was yours.",
+        },
+        semantic,
+    )
+
+    assert corrected["requested_action"] == "verify_account"
+    assert corrected["action_channel"] == "unclear"
+
+
+def test_model_evidence_must_exist_in_email():
+    semantic = llm.normalize_semantic_extraction(
+        {
+            "action": "payment",
+            "channel": "reply",
+            "evidence": "wire the money immediately",
+        },
+        {
+            "subject": "Quarterly planning",
+            "body_for_ai": "Please reply with your availability for the meeting.",
+        },
+    )
+
+    assert semantic["evidence_phrase"] == ""
+
+
+def test_unicode_variation_selectors_are_removed_before_phi4():
+    obfuscated = (
+        "Please enter your old private "
+        "wa\U000e0139\U000e0139l\U000e0139\U000e0139let "
+        "p\U000e0139\U000e0139hrase."
+    )
+
+    prompt = llm.build_fast_email_prompt({
+        "subject": "Tr\U000e0139ust Wallet",
+        "body_for_ai": obfuscated,
+        "links": [],
+    })
+
+    assert "\U000e0139" not in prompt
+    assert "wallet phrase" in prompt
+    assert "Trust Wallet" in prompt
+
+
+def test_long_obfuscated_wallet_evidence_remains_valid():
+    body = (
+        "Please click the Re-validate link and enter your old 12 or 24-word "
+        "private wa\U000e0139\U000e0139llet phrase on the next page."
+    )
+    semantic = llm.normalize_semantic_extraction(
+        {
+            "action": "provide_credentials",
+            "channel": "link",
+            "evidence": (
+                "Please click the Re-validate link and enter your old 12 or "
+                "24-word private wallet phrase on the next page."
+            ),
+            "credential_type": "wallet_seed",
+        },
+        {
+            "subject": "Wallet security update",
+            "body_for_ai": body,
+            "links": [{"url": "https://example.test", "host": "example.test"}],
+        },
+    )
+
+    assert "private wallet phrase" in semantic["evidence_phrase"]
+    assert semantic["credential_type"] == "wallet_seed"

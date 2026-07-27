@@ -1,7 +1,7 @@
 import json
 import hashlib
-import os
 import re
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from html import escape as html_escape
 from urllib.parse import urlsplit, urlunsplit
@@ -21,8 +21,83 @@ from src.bert_calibration import calibrated_probabilities, classify as classify_
 from src.bert_inference import predict_email_logits
 from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
+from src.config import get_secret
 from src.ui import page_intro, risk_banner
 from src.views.backend import get_calibration, get_content_model, get_core_backend
+
+MAX_EML_BYTES = 25 * 1024 * 1024
+
+
+def _secret_revision(name: str) -> str:
+    value = get_secret(name)
+    return hashlib.sha256(value.encode("utf-8")).hexdigest() if value else "missing"
+
+
+def _analyze_eml_bytes(raw_bytes: bytes) -> dict:
+    _, analyzer = get_core_backend()
+    temp_path = ""
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".eml", delete=False) as temp_file:
+            temp_file.write(raw_bytes)
+            temp_path = temp_file.name
+        return analyzer.analyze(temp_path)
+    finally:
+        if temp_path:
+            try:
+                import os
+
+                os.unlink(temp_path)
+            except FileNotFoundError:
+                pass
+
+
+@st.cache_data(show_spinner=False, ttl=900, max_entries=512)
+def _cached_url_reputation(url: str, secret_version: str) -> dict:
+    validator, _ = get_core_backend()
+    return validator.check_url_reputation(url)
+
+
+@st.cache_data(show_spinner=False, ttl=900, max_entries=512)
+def _cached_domain_reputation(domain: str, secret_version: str) -> dict:
+    validator, _ = get_core_backend()
+    return validator.check_domain_reputation(domain)
+
+
+@st.cache_data(show_spinner=False, ttl=900, max_entries=1024)
+def _cached_ip_reputation(ip: str, secret_version: str) -> dict:
+    validator, _ = get_core_backend()
+    return validator.check_ip_reputation(ip)
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=1024)
+def _cached_geolocation(ip: str) -> dict:
+    validator, _ = get_core_backend()
+    return validator.geolocate_ip(ip)
+
+
+@st.cache_data(show_spinner=False, ttl=900, max_entries=512)
+def _cached_file_reputation(sha256: str, secret_version: str) -> dict:
+    validator, _ = get_core_backend()
+    return validator.check_file_hash(sha256)
+
+
+class _CachedValidator:
+    """Reuse reputation results across Streamlit reruns and repeated UI sections."""
+
+    def check_url_reputation(self, url: str) -> dict:
+        return _cached_url_reputation(url, _secret_revision("VIRUSTOTAL_API_KEY"))
+
+    def check_domain_reputation(self, domain: str) -> dict:
+        return _cached_domain_reputation(domain, _secret_revision("ABUSEIPDB_API_KEY"))
+
+    def check_ip_reputation(self, ip: str) -> dict:
+        return _cached_ip_reputation(ip, _secret_revision("ABUSEIPDB_API_KEY"))
+
+    def geolocate_ip(self, ip: str) -> dict:
+        return _cached_geolocation(ip)
+
+    def check_file_hash(self, sha256: str) -> dict:
+        return _cached_file_reputation(sha256, _secret_revision("VIRUSTOTAL_API_KEY"))
 
 
 def _strip_encoded_content(raw: str) -> str:
@@ -364,30 +439,6 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
         )
 
 
-def _render_extracted_links_box(links: list[dict], key_prefix: str) -> None:
-    unique_links = []
-    seen = set()
-    for link in links:
-        url = link.get("url")
-        if not url or url in seen:
-            continue
-        seen.add(url)
-        unique_links.append(link)
-
-    with st.container(border=True):
-        st.markdown("#### Links found in the email")
-        st.caption("La preview HTML non contiene link cliccabili. Gli indicatori copiabili sono disponibili nella tab IoC.")
-        if not unique_links:
-            st.info("No links found in the email.")
-            return
-
-        for idx, link in enumerate(unique_links, start=1):
-            host = link.get("host") or "-"
-            source = link.get("source") or "-"
-            st.caption(f"{idx}. Host: `{host}` · Source: `{source}`")
-            st.code(link.get("url", ""), language="text")
-
-
 def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
@@ -406,6 +457,21 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
         st.error(st.session_state[error_key])
         return None
 
+    backend = active_llm_backend()
+    if auto_run and backend.startswith("github models"):
+        st.warning(
+            "Hosted analysis sends an anonymized excerpt of the email subject and body "
+            "to GitHub Models. Local Ollama analysis does not leave this machine."
+        )
+        consent = st.checkbox(
+            "Allow hosted analysis for this email",
+            value=False,
+            key=f"{analysis_key}_hosted_consent",
+        )
+        if not consent:
+            st.info("Hosted LLM analysis is paused until you provide consent.")
+            return None
+
     if auto_run:
         placeholder = st.empty()
         placeholder.markdown(_phi4_loading_html(), unsafe_allow_html=True)
@@ -422,6 +488,21 @@ def _show_phi4_result(target, result):
 
     verdict = str(result.get("final_verdict") or "review").lower()
     message = format_email_risk_analysis(result)
+    evidence = str(result.get("intent_evidence") or "").strip()
+    if evidence:
+        message += f'\n\nIntent evidence: “{evidence}”'
+    signals = [
+        str(value).replace("_", " ")
+        for value in (result.get("intent_signals") or [])
+    ]
+    if signals:
+        message += f"\n\nContext signals: {', '.join(signals)}."
+    signal_evidence = str(result.get("signal_evidence") or "").strip()
+    if signal_evidence:
+        message += f'\n\nContext evidence: "{signal_evidence}"'
+    claimed_brand = str(result.get("claimed_brand") or "").strip()
+    if claimed_brand:
+        message += f"\n\nClaimed identity: {claimed_brand}."
     if verdict == "phishing":
         target.error(message)
     elif verdict == "review":
@@ -884,7 +965,7 @@ def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_java
 
 
 def render():
-    parser, validator, analyzer = get_core_backend()
+    validator = _CachedValidator()
 
     page_intro(
         "Email analysis",
@@ -898,10 +979,19 @@ def render():
     with col_upload:
         st.markdown('<div class="fs-section-label">Add email file</div>', unsafe_allow_html=True)
         uploaded_file = st.file_uploader("Choose an .eml file", type=["eml"], label_visibility="collapsed")
-        st.caption("Your file is parsed locally. Only indicators are sent to reputation services when configured.")
+        st.caption(
+            "The file is parsed locally. Reputation services receive only indicators. "
+            "Hosted LLM analysis is optional, anonymized, and requires separate consent."
+        )
 
         if uploaded_file is not None:
             raw_bytes = uploaded_file.getvalue()
+            if len(raw_bytes) > MAX_EML_BYTES:
+                st.error(
+                    f"Email file too large: maximum supported size is "
+                    f"{MAX_EML_BYTES / (1024 * 1024):.0f} MB."
+                )
+                return
             raw_text = raw_bytes.decode("utf-8", errors="replace")
             current_eml_hash = hashlib.sha256(raw_bytes).hexdigest()
             if st.session_state.get("current_eml_hash") != current_eml_hash:
@@ -909,11 +999,6 @@ def render():
                 st.session_state["current_eml_name"] = uploaded_file.name
                 st.session_state["current_eml_hash"] = current_eml_hash
                 st.rerun()
-
-            temp_path = os.path.join("data", "raw", "temp_triage.eml")
-            os.makedirs(os.path.dirname(temp_path), exist_ok=True)
-            with open(temp_path, "wb") as f:
-                f.write(uploaded_file.getbuffer())
 
             file_col, size_col = st.columns([2, 1])
             file_col.metric("File", uploaded_file.name)
@@ -926,7 +1011,11 @@ def render():
 
         try:
             with st.spinner("Parsing EML e costruzione report SOC..."):
-                soc = analyzer.analyze(temp_path)
+                soc_cache_key = f"soc_analysis_{current_eml_hash}"
+                soc = st.session_state.get(soc_cache_key)
+                if soc is None:
+                    soc = _analyze_eml_bytes(raw_bytes)
+                    st.session_state[soc_cache_key] = soc
 
             flags = soc.get("flags", [])
             counts = _flag_counts(flags)
@@ -1325,17 +1414,35 @@ def render():
                     soc["bert_ai_result"] = "not available"
                     st.warning("Email has no meaningful text for classification.")
                 else:
-                    with st.spinner("DistilBERT is analyzing the complete content..."):
-                        positive_label_id = int(calibration.get("positive_label_id", 1))
-                        logits, chunk_count = predict_email_logits(
-                            model,
-                            tokenizer,
-                            email_text,
-                            positive_label_id=positive_label_id,
-                        )
-                        probabilities = calibrated_probabilities(
-                            logits, temperature=calibration["temperature"]
-                        ).flatten().tolist()
+                    positive_label_id = int(calibration.get("positive_label_id", 1))
+                    bert_cache_key = (
+                        f"bert_inference_{eml_digest}_{model_source}_"
+                        f"{model_dataset_hash}_{calibration_dataset_hash}_"
+                        f"{positive_label_id}_{calibration['temperature']}"
+                    )
+                    cached_bert = st.session_state.get(bert_cache_key)
+                    if cached_bert is None:
+                        with st.spinner("DistilBERT is analyzing the complete content..."):
+                            logits, chunk_count = predict_email_logits(
+                                model,
+                                tokenizer,
+                                email_text,
+                                positive_label_id=positive_label_id,
+                            )
+                            cached_bert = {
+                                "logits": logits.detach().cpu().flatten().tolist(),
+                                "chunk_count": chunk_count,
+                            }
+                            st.session_state[bert_cache_key] = cached_bert
+                    else:
+                        import torch
+
+                        logits = torch.tensor([cached_bert["logits"]], dtype=torch.float32)
+                        chunk_count = int(cached_bert["chunk_count"])
+
+                    probabilities = calibrated_probabilities(
+                        logits, temperature=calibration["temperature"]
+                    ).flatten().tolist()
                     negative_label_id = 1 - positive_label_id
                     prob_safe = probabilities[negative_label_id] * 100
                     prob_malicious = probabilities[positive_label_id] * 100
@@ -1456,9 +1563,6 @@ def render():
                 )
 
             _stream_phi4_analysis(soc, phi4_key, phi4_placeholder)
-
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
 
         except Exception as exc:
             st.error(f"An error occurred during analysis: {exc}")

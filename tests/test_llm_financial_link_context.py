@@ -84,7 +84,7 @@ def test_phi4_prompt_forbids_not_suspicious_payment_clean_vt_reasoning():
     assert "JSON only" in prompt_source
     assert "payment or transfer" in prompt_source
     assert "no verdict or technical checks" in prompt_source
-    assert '"signals"' not in prompt_source
+    assert '"signals"' in prompt_source
     assert '"asks_to_click_link"' not in prompt_source
     assert '"content_risk"' not in prompt_source
 

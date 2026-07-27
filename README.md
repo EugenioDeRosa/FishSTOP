@@ -15,8 +15,9 @@ The main workflow is designed for a thesis project: upload an `.eml` file, let t
 - URL extraction, lookalike-domain detection, redirect checks, and VirusTotal URL reputation.
 - Attachment analysis with extension, MIME type, magic bytes, SHA-256 hash, and VirusTotal lookup.
 - Calibrated DistilBERT content classification for legitimate vs phishing emails, including long-email chunking.
-- Local/hosted Phi-4 mini explanation focused on scam and phishing patterns.
-- Streamlit pages for EML analysis, settings, Colab training, and public dataset management.
+- Local/hosted Phi-4 mini intent extraction with Unicode deobfuscation, exact
+  action evidence, secondary lure/threat signals, and claimed-brand/domain checks.
+- Streamlit pages for EML analysis, settings, and public dataset management.
 - Custom EML dataset builder with deduplication.
 - Public dataset builder with a balanced training CSV export.
 
@@ -76,7 +77,6 @@ The old `notebooks/Phishing_detection.ipynb` is retained only as historical expl
 ## Validation
 
 ```powershell
-python -m py_compile src/views/train.py
 python -m py_compile src/views/analyzer.py
 python -m py_compile src/views/settings.py
 python -m py_compile src/analyzer/soc_analyzer.py
@@ -85,11 +85,21 @@ python -m py_compile src/analyzer/lookalike.py
 pytest
 ```
 
+With Ollama running, the repeatable Phi-4 intent benchmark can be run in full
+or on selected cases:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\eval_phi4_intent.py
+.\.venv\Scripts\python.exe scripts\eval_phi4_intent.py --case credential_form --case late_credential_request
+```
+
 ## Privacy Notes
 
 - `.eml` files are analyzed locally.
 - Reputation lookups send only IPs, domains, URLs, or hashes to the configured providers.
-- Phi-4 mini runs locally through Ollama with the explicit `phi4-mini:3.8b-q4_K_M` quantized tag, a bounded 4096-token context and model keep-alive, so LLM explanations do not require sending email content to a cloud provider or reloading FP16 weights for every request.
+- FishStop does not open URLs extracted from emails by default. Direct redirect inspection is opt-in through `FISHSTOP_ENABLE_URL_DESTINATION_CHECK=1` and rejects non-public destinations.
+- Phi-4 mini can run locally through Ollama with the explicit `phi4-mini:3.8b-q4_K_M` quantized tag and a bounded 4096-token context.
+- GitHub Models is an optional hosted fallback. It is disabled for an email until the analyst explicitly consents; only an anonymized, size-limited subject/body excerpt is sent.
 
 ## Troubleshooting
 

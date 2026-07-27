@@ -11,18 +11,15 @@ Label:
 
 from __future__ import annotations
 
-import bz2
 import calendar
 import csv
 import gzip
 import hashlib
 import json
 import mailbox
-import os
 import re
 import shutil
 import tarfile
-import tempfile
 import urllib.request
 import zipfile
 from dataclasses import asdict, dataclass

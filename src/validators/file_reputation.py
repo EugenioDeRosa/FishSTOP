@@ -1,12 +1,22 @@
 import datetime
 import base64
-from urllib.parse import urlparse
+import ipaddress
+import os
+import socket
+from urllib.parse import urljoin, urlparse
 
 import requests
 
 VIRUSTOTAL_ENDPOINT = "https://www.virustotal.com/api/v3/files"
 VIRUSTOTAL_URL_ENDPOINT = "https://www.virustotal.com/api/v3/urls"
-_session = requests.Session()
+# The module-level requests API creates an independent Session per call, avoiding
+# sharing a mutable requests.Session across the URL lookup thread pool.
+_session = requests
+MAX_REDIRECTS = 5
+URL_DESTINATION_CHECK_ENABLED = (
+    os.getenv("FISHSTOP_ENABLE_URL_DESTINATION_CHECK", "0").strip().lower()
+    in {"1", "true", "yes", "on"}
+)
 
 
 def _epoch_to_iso(val) -> str:
@@ -133,18 +143,88 @@ def _destination_base(url: str) -> dict:
     }
 
 
+def _public_http_url(url: str) -> tuple[bool, str]:
+    parsed = urlparse(url or "")
+    if parsed.scheme.lower() not in {"http", "https"}:
+        return False, "Only HTTP(S) destinations are allowed"
+    if not parsed.hostname:
+        return False, "Destination hostname is missing"
+    if parsed.username or parsed.password:
+        return False, "Destination URLs containing credentials are not allowed"
+
+    try:
+        addresses = {
+            item[4][0]
+            for item in socket.getaddrinfo(
+                parsed.hostname,
+                parsed.port or (443 if parsed.scheme.lower() == "https" else 80),
+                type=socket.SOCK_STREAM,
+            )
+        }
+    except (socket.gaierror, socket.timeout, UnicodeError, ValueError) as exc:
+        return False, f"Destination DNS lookup failed: {exc}"
+
+    if not addresses:
+        return False, "Destination DNS lookup returned no addresses"
+    try:
+        if any(not ipaddress.ip_address(address).is_global for address in addresses):
+            return False, "Private, loopback, reserved, or otherwise non-public destinations are blocked"
+    except ValueError:
+        return False, "Destination resolved to an invalid IP address"
+    return True, ""
+
+
 def _check_destination(url: str) -> dict:
     info = _destination_base(url)
     if not url:
         info.update({"destination_status": "skipped", "destination_message": "No URL provided"})
         return info
 
+    original_host = _host(url)
+    current_url = url
+    redirect_count = 0
     try:
-        resp = _session.get(url, allow_redirects=True, timeout=5, stream=True)
-        final_url = getattr(resp, "url", url) or url
+        while True:
+            allowed, reason = _public_http_url(current_url)
+            if not allowed:
+                info.update({
+                    "final_url": current_url,
+                    "final_host": _host(current_url),
+                    "destination_status": "blocked",
+                    "destination_message": reason,
+                    "redirect_count": redirect_count,
+                })
+                return info
+
+            resp = _session.get(
+                current_url,
+                allow_redirects=False,
+                headers={"User-Agent": "FishStop/1.0"},
+                timeout=5,
+                stream=True,
+            )
+            status_code = int(getattr(resp, "status_code", 200) or 200)
+            location = (getattr(resp, "headers", {}) or {}).get("Location")
+            if status_code in {301, 302, 303, 307, 308} and location:
+                close = getattr(resp, "close", None)
+                if callable(close):
+                    close()
+                redirect_count += 1
+                if redirect_count > MAX_REDIRECTS:
+                    info.update({
+                        "final_url": current_url,
+                        "final_host": _host(current_url),
+                        "destination_status": "unavailable",
+                        "destination_message": f"Too many redirects (limit: {MAX_REDIRECTS})",
+                        "redirect_count": redirect_count,
+                    })
+                    return info
+                current_url = urljoin(current_url, location)
+                continue
+            final_url = getattr(resp, "url", current_url) or current_url
+            break
+
         final_host = _host(final_url)
-        original_host = _host(url)
-        redirect_count = len(getattr(resp, "history", []) or [])
         destination_match = bool(
             original_host
             and final_host
@@ -311,7 +391,7 @@ def _format_vt_url(data: dict, base: dict) -> dict:
 
 
 def check_url(api_key: str, url: str) -> dict:
-    destination = _check_destination(url)
+    destination = _destination_base(url)
     base = {
         "url": url or "",
         "status": "skipped",
@@ -340,6 +420,24 @@ def check_url(api_key: str, url: str) -> dict:
             "status": "skipped",
             "message": "VirusTotal API key is not configured - lookup skipped",
         }
+
+    if URL_DESTINATION_CHECK_ENABLED:
+        destination = _check_destination(url)
+        base.update(destination)
+        if destination.get("destination_status") == "blocked":
+            return {
+                **base,
+                "status": "blocked",
+                "message": destination.get("destination_message") or "Unsafe destination blocked",
+            }
+    else:
+        base.update({
+            "destination_status": "skipped",
+            "destination_message": (
+                "Direct destination checks are disabled by default to prevent server-side "
+                "requests to attacker-controlled URLs"
+            ),
+        })
 
     headers = {"x-apikey": api_key, "Accept": "application/json"}
     try:

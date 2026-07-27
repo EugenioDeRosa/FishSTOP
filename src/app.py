@@ -156,7 +156,7 @@ def _render_startup_splash():
                 <div class="fishstop-badge"><span class="fishstop-dot"></span> FishStop startup</div>
                 <div class="fishstop-title">Warming up the triage engine</div>
                 <p class="fishstop-subtitle">
-                    Loading the core parser, SOC backend and BERT model so EML analysis starts fast once the dashboard appears.
+                    Loading the SOC backend so the email analysis workspace is ready.
                 </p>
                 <div class="fishstop-loader"><span></span></div>
                 <div class="fishstop-meta">Build {APP_VERSION} · Preparing secure email analysis workspace</div>
@@ -175,7 +175,7 @@ def run_startup_warmup() -> bool:
     try:
         from src.views.backend import warm_up_backend
 
-        warm_up_backend(preload_content_model=True)
+        warm_up_backend(preload_content_model=False)
         st.session_state["startup_warmup_error"] = None
     except Exception as exc:
         st.session_state["startup_warmup_error"] = str(exc)

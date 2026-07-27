@@ -238,10 +238,6 @@ def _decode_pdf_name_escapes(value: str) -> str:
     return PDF_HEX_ESCAPE_RE.sub(repl, value)
 
 
-def _pdf_text_for_static_scan(raw: bytes) -> str:
-    return _decode_pdf_name_escapes(raw.decode("latin-1", errors="ignore"))
-
-
 def _add_indicator(counter: Counter, key: str, count: int = 1) -> None:
     if key and count > 0:
         counter[key] += count

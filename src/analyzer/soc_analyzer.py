@@ -22,7 +22,7 @@ from .attachment      import analyze_attachment
 from .body_context    import select_body_for_ai
 from .html_utils      import recover_mislabelled_utf7_html, strip_html
 from .link_extractor  import extract_links
-from .lookalike       import check_lookalike_domains, is_ip_url
+from .lookalike       import check_lookalike_domains
 from .received_parser import (
     merge_auth_results,
     parse_auth_results,

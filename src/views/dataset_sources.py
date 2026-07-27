@@ -13,7 +13,6 @@ from src.public_dataset_builder import (
     DEFAULT_SYNTHETIC_CSV,
     build_balanced_public_dataset,
     build_complete_training_dataset,
-    dataset_stats,
 )
 
 SOURCE_OPTIONS = {

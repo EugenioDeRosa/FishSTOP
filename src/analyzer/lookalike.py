@@ -70,10 +70,6 @@ def _has_punycode_label(host: str) -> bool:
     return any(label.lower().startswith("xn--") for label in (host or "").split("."))
 
 
-def _has_non_ascii(value: str) -> bool:
-    return any(ord(ch) > 127 for ch in value or "")
-
-
 def _has_homoglyph_chars(value: str) -> bool:
     normalized = unicodedata.normalize("NFKC", (value or "").lower())
     return any(ch in HOMOGLYPH_MAP for ch in normalized)

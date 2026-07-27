@@ -51,6 +51,24 @@ def test_phi4_instructions_exclude_bert_and_the_final_verdict():
     assert "link or urgency alone is neutral" in prompt_source.lower()
 
 
+def test_hosted_prompt_anonymizes_personal_data():
+    prompt = build_fast_email_prompt(
+        {
+            "subject": "Contatta mario@example.com",
+            "body_clean": "Invia il bonifico a IT60X0542811101000000123456 oppure chiama +39 333 1234567.",
+            "links": [],
+            "attachments": [],
+        },
+        anonymize=True,
+    )
+
+    assert "mario@example.com" not in prompt
+    assert "IT60X0542811101000000123456" not in prompt
+    assert "+39 333 1234567" not in prompt
+    assert "[EMAIL ADDRESS]" in prompt
+    assert "[IBAN]" in prompt
+
+
 def test_bert_is_reported_after_intent_analysis_as_support_or_contrary_evidence():
     phishing = apply_email_risk_policy(
         {"auth_results": {}, "bert_ai_result": "phishing"},

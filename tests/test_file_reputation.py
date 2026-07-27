@@ -1,4 +1,4 @@
-from types import SimpleNamespace
+import socket
 
 import requests
 
@@ -6,34 +6,41 @@ from src.validators import file_reputation as fr
 
 
 class FakeResponse:
-    def __init__(self, url: str, history_len: int = 0):
+    def __init__(self, url: str, status_code: int = 200, location: str | None = None):
         self.url = url
-        self.history = [SimpleNamespace(status_code=302)] * history_len
+        self.status_code = status_code
+        self.headers = {"Location": location} if location else {}
 
     def close(self):
         return None
 
 
 class FakeSession:
-    def __init__(self, final_url: str | None = None, exc: Exception | None = None, history_len: int = 0):
-        self.final_url = final_url
+    def __init__(self, responses: list[FakeResponse] | None = None, exc: Exception | None = None):
+        self.responses = list(responses or [])
         self.exc = exc
-        self.history_len = history_len
         self.calls = []
 
     def get(self, url, **kwargs):
         self.calls.append((url, kwargs))
         if self.exc is not None:
             raise self.exc
-        return FakeResponse(self.final_url or url, self.history_len)
+        return self.responses.pop(0) if self.responses else FakeResponse(url)
+
+
+def _allow_public_dns(monkeypatch):
+    monkeypatch.setattr(fr, "_public_http_url", lambda url: (True, ""))
 
 
 def test_check_url_reports_redirect_match(monkeypatch):
-    monkeypatch.setattr(fr, "_session", FakeSession(final_url="https://example.com/welcome", history_len=1))
+    _allow_public_dns(monkeypatch)
+    monkeypatch.setattr(fr, "_session", FakeSession([
+        FakeResponse("https://example.com/start", 302, "/welcome"),
+        FakeResponse("https://example.com/welcome"),
+    ]))
 
-    result = fr.check_url("", "https://example.com/start")
+    result = fr._check_destination("https://example.com/start")
 
-    assert result["status"] == "skipped"
     assert result["final_url"] == "https://example.com/welcome"
     assert result["final_host"] == "example.com"
     assert result["destination_status"] == "match"
@@ -42,11 +49,15 @@ def test_check_url_reports_redirect_match(monkeypatch):
 
 
 def test_check_url_reports_redirect_mismatch(monkeypatch):
-    monkeypatch.setattr(fr, "_session", FakeSession(final_url="https://evil.example.net/login", history_len=2))
+    _allow_public_dns(monkeypatch)
+    monkeypatch.setattr(fr, "_session", FakeSession([
+        FakeResponse("https://example.com/start", 302, "https://redirect.example.org/next"),
+        FakeResponse("https://redirect.example.org/next", 302, "https://evil.example.net/login"),
+        FakeResponse("https://evil.example.net/login"),
+    ]))
 
-    result = fr.check_url("", "https://example.com/start")
+    result = fr._check_destination("https://example.com/start")
 
-    assert result["status"] == "skipped"
     assert result["final_url"] == "https://evil.example.net/login"
     assert result["final_host"] == "evil.example.net"
     assert result["destination_status"] == "mismatch"
@@ -55,11 +66,50 @@ def test_check_url_reports_redirect_mismatch(monkeypatch):
 
 
 def test_check_url_reports_timeout_as_unavailable(monkeypatch):
+    _allow_public_dns(monkeypatch)
     monkeypatch.setattr(fr, "_session", FakeSession(exc=requests.exceptions.Timeout()))
+
+    result = fr._check_destination("https://example.com/start")
+
+    assert result["destination_status"] == "unavailable"
+    assert result["destination_match"] is False
+    assert "Timeout" in result["destination_message"]
+
+
+def test_check_url_does_not_contact_destination_without_api_key(monkeypatch):
+    session = FakeSession()
+    monkeypatch.setattr(fr, "_session", session)
 
     result = fr.check_url("", "https://example.com/start")
 
     assert result["status"] == "skipped"
-    assert result["destination_status"] == "unavailable"
-    assert result["destination_match"] is False
-    assert "Timeout" in result["destination_message"]
+    assert session.calls == []
+
+
+def test_check_url_blocks_private_destination(monkeypatch):
+    monkeypatch.setattr(fr, "URL_DESTINATION_CHECK_ENABLED", True)
+    monkeypatch.setattr(
+        fr.socket,
+        "getaddrinfo",
+        lambda *args, **kwargs: [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 80))],
+    )
+    session = FakeSession()
+    monkeypatch.setattr(fr, "_session", session)
+
+    result = fr.check_url("token", "http://localhost/internal")
+
+    assert result["status"] == "blocked"
+    assert result["destination_status"] == "blocked"
+    assert session.calls == []
+
+
+def test_direct_destination_check_is_disabled_by_default(monkeypatch):
+    monkeypatch.setattr(fr, "URL_DESTINATION_CHECK_ENABLED", False)
+    session = FakeSession()
+    monkeypatch.setattr(fr, "_session", session)
+
+    result = fr.check_url("token", "https://example.com/start")
+
+    assert result["destination_status"] == "skipped"
+    assert len(session.calls) == 1
+    assert session.calls[0][0].startswith(fr.VIRUSTOTAL_URL_ENDPOINT)

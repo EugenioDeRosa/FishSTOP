@@ -161,7 +161,7 @@ def test_missing_model_summary_has_a_useful_deterministic_fallback():
     )
 
     assert summary == (
-        "The subject and body contain a cryptocurrency or reward offer and ask the recipient to claim it through a supplied link, "
+        "The subject and body contain a reward or promotional benefit and ask the recipient to claim it through a supplied link, "
         "a pattern commonly used in phishing."
     )
 
@@ -423,7 +423,14 @@ def test_password_expiration_reminder_without_channel_or_link_is_benign():
 
 def test_password_change_through_supplied_urgent_link_requires_review():
     analysis = apply_email_risk_policy(
-        {"auth_results": {}},
+        {
+            "auth_results": {},
+            "links": [{
+                "url": "https://unknown.example/change-password",
+                "host": "unknown.example",
+                "source": "plain_text",
+            }],
+        },
         _semantic(
             requested_action="change_account_settings",
             action_channel="supplied_link",
@@ -729,6 +736,139 @@ def test_credential_request_or_malicious_url_produces_phishing():
 
     assert credential_analysis["final_verdict"] == "phishing"
     assert url_analysis["final_verdict"] == "phishing"
+
+
+def test_toll_debt_lure_downgrades_unsupported_information_label():
+    analysis = apply_email_risk_policy(
+        {
+            "from_": "Pedagio Digital <nao-responder@pedagio-4166963>",
+            "subject": "Notificação de débito em aberto",
+            "body_for_ai": (
+                "Pendência identificada. Débitos de pedágio serão encaminhados "
+                "ao DETRAN, resultando em multa, pontuação e restrição veicular. "
+                "R$ 195,23. Consultar Minha Placa Agora."
+            ),
+            "links": [{
+                "url": "https://flowtrackr.site/cloaker/",
+                "host": "flowtrackr.site",
+            }],
+            "auth_results": {
+                "SPF": {"status": "none"},
+                "DKIM": {"status": "none"},
+                "DMARC": {"status": "none"},
+            },
+        },
+        {
+            "action": "provide_information",
+            "channel": "link",
+            "evidence": "R$ 195,23",
+            "claimed_brand": "Pedagio Digital",
+        },
+    )
+
+    assert analysis["requested_action"] == "visit_link"
+    assert analysis["intent_evidence"] == "Consultar Minha Placa Agora."
+    assert "financial_pretext" in analysis["intent_signals"]
+    assert "threat" in analysis["intent_signals"]
+    assert analysis["technical_risk"] == "uncertain"
+    assert analysis["final_verdict"] == "phishing"
+
+
+def test_toll_debt_without_payment_instruction_rejects_inferred_payment():
+    analysis = apply_email_risk_policy(
+        {
+            "from_": "Pedagio Digital <nao-responder@pedagio-4166963>",
+            "subject": "Notificação de débito em aberto",
+            "body_for_ai": (
+                "Débitos de pedágio serão encaminhados ao DETRAN, resultando "
+                "em multa e restrição veicular. Consultar Minha Placa Agora."
+            ),
+            "links": [{
+                "url": "https://flowtrackr.site/cloaker/",
+                "host": "flowtrackr.site",
+            }],
+            "auth_results": {},
+        },
+        {
+            "action": "payment",
+            "channel": "link",
+            "evidence": "R$ 195,23",
+        },
+    )
+
+    assert analysis["requested_action"] == "visit_link"
+    assert analysis["semantic_extraction"]["asks_for_payment"] is False
+    assert analysis["intent_evidence"] == "Consultar Minha Placa Agora."
+
+
+def test_authenticated_unrelated_domain_does_not_verify_claimed_wallet_brand():
+    analysis = apply_email_risk_policy(
+        {
+            "from_": "Trust Wallet <so@viajesbereber.com>",
+            "subject": "Wallet security update",
+            "body_for_ai": (
+                "Please click the Re-validate link and enter your old "
+                "12 or 24-word private wallet phrase on the next page."
+            ),
+            "links": [{
+                "url": "https://www.viajesbereber.com",
+                "host": "www.viajesbereber.com",
+            }],
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "pass"},
+                "DMARC": {"status": "pass"},
+            },
+        },
+        {
+            "action": "provide_credentials",
+            "channel": "link",
+            "evidence": "enter your old 12 or 24-word private wallet phrase",
+            "credential_type": "wallet_seed",
+            "claimed_brand": "Trust Wallet",
+        },
+    )
+
+    assert analysis["requested_action"] == "provide_credentials"
+    assert analysis["credential_type"] == "wallet_seed"
+    assert analysis["semantic_extraction"]["asks_to_click_link"] is True
+    assert analysis["identity_risk"] == "spoofing_evidence"
+    assert analysis["final_verdict"] == "phishing"
+
+
+def test_casino_deposit_is_primary_action_and_bonus_is_secondary_signal():
+    analysis = apply_email_risk_policy(
+        {
+            "from_": "VIP ChatGPT Casino <noreply@glacierco.firebaseapp.com>",
+            "subject": "Letzter Aufruf: Begrenztes Casino-Angebot",
+            "body_for_ai": (
+                "Willkommensbonus bis zu 3000 Euro. Jetzt bei Sportuna "
+                "einzahlen. Nur noch 9 freie Plätze. Zugang läuft heute ab."
+            ),
+            "reply_to_mismatch": True,
+            "links": [{
+                "url": "https://studyingukraine.com/sports",
+                "host": "studyingukraine.com",
+            }],
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "pass"},
+                "DMARC": {"status": "permerror"},
+            },
+        },
+        {
+            "action": "claim_reward",
+            "channel": "link",
+            "evidence": "Jetzt kostenlos",
+            "claimed_brand": "Sportuna",
+        },
+    )
+
+    assert analysis["requested_action"] == "pay_or_transfer"
+    assert analysis["semantic_extraction"]["asks_for_payment"] is True
+    assert "incentive" in analysis["intent_signals"]
+    assert "urgency" in analysis["intent_signals"]
+    assert analysis["final_verdict"] == "phishing"
 
 
 def test_malicious_attachment_and_hop_are_independent_technical_evidence():

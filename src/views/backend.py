@@ -23,13 +23,11 @@ HF_MODEL_REVISION = os.getenv(
 @st.cache_resource
 def init_core_backend():
     from src.analyzer import EmlSOCAnalyzer
-    from src.parser import EmailParserPipeline
     from src.validators import EmailSecurityValidator
 
-    parser = EmailParserPipeline()
     validator = EmailSecurityValidator()
     analyzer = EmlSOCAnalyzer()
-    return parser, validator, analyzer
+    return validator, analyzer
 
 
 @st.cache_resource
@@ -50,7 +48,7 @@ def init_content_model(hf_token: str = ""):
 def init_calibration(hf_token: str = "") -> dict:
     """
     Scarica calibration.json (temperature scaling + soglia calcolati sul
-    validation set, vedi notebooks/Phishing_detection.ipynb) dallo stesso
+    validation set da src/train.py) dallo stesso
     repo Hugging Face del modello. Se il file non è ancora stato
     pubblicato (es. modello non ancora ri-addestrato con la pipeline di
     calibrazione), usa i default legacy - stesso comportamento di prima
@@ -84,13 +82,6 @@ def init_calibration(hf_token: str = "") -> dict:
 
 def get_core_backend():
     return init_core_backend()
-
-
-def get_backend():
-    parser, validator, analyzer = init_core_backend()
-    tokenizer, model, model_source = get_content_model()
-    calibration = get_calibration()
-    return parser, validator, analyzer, tokenizer, model, model_source, calibration
 
 
 def get_content_model():
