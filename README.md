@@ -99,7 +99,7 @@ or on selected cases:
 - Reputation lookups send only IPs, domains, URLs, or hashes to the configured providers.
 - FishStop does not open URLs extracted from emails by default. Direct redirect inspection is opt-in through `FISHSTOP_ENABLE_URL_DESTINATION_CHECK=1` and rejects non-public destinations.
 - Phi-4 mini can run locally through Ollama with the explicit `phi4-mini:3.8b-q4_K_M` quantized tag and a bounded 4096-token context.
-- GitHub Models is an optional hosted fallback. It is disabled for an email until the analyst explicitly consents; only an anonymized, size-limited subject/body excerpt is sent.
+- The hosted website uses GitHub Models automatically. Email content is anonymized before it is sent; local deployments can continue to use Ollama.
 
 ## Troubleshooting
 

@@ -430,8 +430,6 @@ def _schedule_phi4_background(
     hosted = backend.startswith("github models")
     if backend == "not configured":
         return None
-    if hosted and not st.session_state.get(f"{analysis_key}_hosted_consent"):
-        return None
 
     github_token = get_secret("GITHUB_MODELS_TOKEN") if hosted else ""
     token_revision = (
@@ -569,19 +567,6 @@ def _render_phi4_analysis(
         return None
 
     backend = active_llm_backend()
-    if auto_run and backend.startswith("github models"):
-        st.warning(
-            "Hosted analysis sends an anonymized excerpt of the email subject and body "
-            "to GitHub Models. Local Ollama analysis does not leave this machine."
-        )
-        consent = st.checkbox(
-            "Allow hosted analysis for this email",
-            value=False,
-            key=f"{analysis_key}_hosted_consent",
-        )
-        if not consent:
-            st.info("Hosted LLM analysis is paused until you provide consent.")
-            return None
 
     if job_reference is not None:
         snapshot = _get_background_job_manager().snapshot(*job_reference)
@@ -1356,7 +1341,7 @@ def render():
         uploaded_file = st.file_uploader("Choose an .eml file", type=["eml"], label_visibility="collapsed")
         st.caption(
             "The file is parsed locally. Reputation services receive only indicators. "
-            "Hosted LLM analysis is optional, anonymized, and requires separate consent."
+            "On the hosted website, anonymized email content is analyzed with GitHub Models."
         )
 
         if uploaded_file is not None:

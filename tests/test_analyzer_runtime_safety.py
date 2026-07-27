@@ -148,6 +148,38 @@ def test_bert_is_scheduled_on_its_dedicated_background_pool(monkeypatch):
     assert kwargs == {}
 
 
+def test_hosted_phi4_is_scheduled_without_per_email_consent(monkeypatch):
+    jobs = _RecordingJobs()
+    monkeypatch.setattr(
+        analyzer_view,
+        "active_llm_backend",
+        lambda: "github models (Phi-4-mini-instruct)",
+    )
+    monkeypatch.setattr(
+        analyzer_view,
+        "get_secret",
+        lambda name, default="": (
+            "session-github" if name == "GITHUB_MODELS_TOKEN" else default
+        ),
+    )
+
+    reference = analyzer_view._schedule_phi4_background(
+        jobs,
+        {"subject": "Test", "body_for_ai": "Analyze this email."},
+        "analysis-key",
+    )
+
+    assert reference is not None
+    assert reference[0] == "llm"
+    assert len(jobs.submissions) == 1
+    pool, key, function, args, kwargs = jobs.submissions[0]
+    assert pool == "llm"
+    assert key[0] == "phi4"
+    assert function is analyzer_view._run_phi4_background
+    assert args[1] == "session-github"
+    assert kwargs == {}
+
+
 def test_completed_bert_result_is_applied_without_model_rerun():
     soc = {}
     analyzer_view._apply_bert_result_to_soc(
