@@ -1477,7 +1477,13 @@ def render():
     col_results = st.container()
 
     with col_upload:
-        st.markdown('<div class="fs-section-label">Add email file</div>', unsafe_allow_html=True)
+        upload_title_col, clear_button_col = st.columns([5, 1])
+        with upload_title_col:
+            st.markdown(
+                '<div class="fs-section-label">Add email file</div>',
+                unsafe_allow_html=True,
+            )
+        clear_button_slot = clear_button_col.empty()
         uploaded_file = st.file_uploader(
             "Choose an .eml file",
             type=["eml"],
@@ -1490,11 +1496,13 @@ def render():
         )
 
         if uploaded_file is not None:
-            st.button(
-                "Clear email",
-                key="clear_email_analysis",
-                on_click=_clear_email_analysis_state,
-            )
+            with clear_button_slot:
+                st.button(
+                    "Clear email",
+                    key="clear_email_analysis",
+                    on_click=_clear_email_analysis_state,
+                    use_container_width=True,
+                )
             raw_bytes = uploaded_file.getvalue()
             try:
                 _validate_eml_size(raw_bytes)
