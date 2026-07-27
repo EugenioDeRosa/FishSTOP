@@ -4,6 +4,7 @@ from src.analyzer.llm_context_analyzer import (
     _fallback_content_summary,
     _valid_content_summary,
     apply_email_risk_policy,
+    build_fast_email_prompt,
     format_email_risk_analysis,
     normalize_semantic_extraction,
 )
@@ -87,6 +88,47 @@ def _semantic(**overrides):
     return result
 
 
+def test_free_offer_link_uses_html_cta_and_bert_to_reject_low_risk():
+    url = "https://theultimatesurvival.bid/free-edt"
+    soc = {
+        "from_": "The Coolest Multi Tool <contact@theultimatesurvival.bid>",
+        "subject": "[SPAM] Did You Get Your Free EDT Yet?",
+        "body_for_ai": "Did You Get Your Free EDT Yet?\n\n=> [URL LINK]",
+        "links": [{
+            "url": url,
+            "host": "theultimatesurvival.bid",
+            "display_text": "Click here to see it in action now...",
+        }],
+        "link_reputation": {url: {"status": "clean"}},
+        "auth_results": {
+            "SPF": {"status": "none"},
+            "DKIM": {"status": "fail"},
+            "DMARC": {"status": "none"},
+        },
+        "bert_ai_result": "phishing",
+    }
+
+    prompt = build_fast_email_prompt(soc)
+    analysis = apply_email_risk_policy(
+        soc,
+        {
+            "action": "visit_link",
+            "channel": "link",
+            "evidence": "[URL LINK]",
+        },
+    )
+    text = format_email_risk_analysis(analysis)
+
+    assert "[LINK CALL-TO-ACTION TEXT]" in prompt
+    assert "Click here to see it in action now..." in prompt
+    assert analysis["final_verdict"] == "phishing"
+    assert analysis["identity_risk"] == "uncertain"
+    assert analysis["action_channel"] == "supplied_link"
+    assert analysis["intent_evidence"] == "Click here to see it in action now..."
+    assert "incentive" in analysis["intent_signals"]
+    assert "requires destination verification" not in text
+
+
 def test_phi4_result_is_presented_as_a_fluent_soc_summary():
     assert format_email_risk_analysis({
         "final_verdict": "legitimate",
@@ -100,7 +142,7 @@ def test_phi4_result_is_presented_as_a_fluent_soc_summary():
     }) == (
         "Our analysis indicates that this email is likely legitimate. "
         "The subject and body provide routine meeting information without requesting risky actions. "
-        "Independent technical checks support this assessment because the sender is authenticated "
+        "Independent checks support this assessment because the sender is authenticated "
         "and no confirmed technical threat was detected."
     )
     assert format_email_risk_analysis({
@@ -119,7 +161,7 @@ def test_phi4_result_is_presented_as_a_fluent_soc_summary():
         }) == (
             "Our analysis indicates that this email requires manual verification before the recipient takes action. "
             "The subject and body contain a cryptocurrency offer and direct the recipient to a link, a pattern commonly used in phishing. "
-            "Independent technical checks support this assessment because SPF did not pass (temperror), "
+            "Independent checks support this assessment because SPF did not pass (temperror), "
             "DMARC did not pass (temperror), and the Return-Path differs from the visible sender."
         )
     assert format_email_risk_analysis({
@@ -134,7 +176,7 @@ def test_phi4_result_is_presented_as_a_fluent_soc_summary():
         }) == (
             "Our analysis indicates that this email is likely a phishing attempt. "
             "The subject and body ask the recipient to enter credentials on a linked page, a strong phishing pattern. "
-            "Independent technical checks support this assessment because a URL was detected as malicious."
+            "Independent checks support this assessment because a URL was detected as malicious."
         )
 
     rendered = format_email_risk_analysis({
@@ -357,7 +399,7 @@ def test_internal_tool_recommendation_is_legitimate_and_reports_missing_dkim():
     assert "recommend an internal remote-access tool" in rendered
     assert "social engineering" not in rendered
     assert (
-        "Independent technical checks support this assessment because the sender is authenticated "
+        "Independent checks support this assessment because the sender is authenticated "
         "and no confirmed technical threat was detected. However, the message has no DKIM signature."
     ) in rendered
 
@@ -466,10 +508,10 @@ def test_extracted_link_overrides_model_calling_account_change_normal():
         ),
     )
 
-    assert analysis["final_verdict"] == "review"
+    assert analysis["final_verdict"] == "phishing"
     assert analysis["content_risk"] == "suspicious"
     assert analysis["action_channel"] == "supplied_link"
-    assert analysis["technical_risk"] == "clean"
+    assert analysis["technical_risk"] == "uncertain"
 
 
 def test_bank_account_verification_sample_corrects_phi4_false_negative():
@@ -659,7 +701,7 @@ def test_reward_claim_through_supplied_link_requires_review():
         ),
     )
 
-    assert analysis["final_verdict"] == "review"
+    assert analysis["final_verdict"] == "phishing"
     assert analysis["content_risk"] == "suspicious"
     assert analysis["action_channel"] == "supplied_link"
     assert "reward or financial benefit" in analysis["evidence"]["content"][0]
@@ -695,7 +737,7 @@ def test_crypto_offer_button_corrects_phi4_informational_false_negative():
         ),
     )
 
-    assert analysis["final_verdict"] == "review"
+    assert analysis["final_verdict"] == "phishing"
     assert analysis["content_risk"] == "suspicious"
     assert analysis["requested_action"] == "claim_reward"
     assert analysis["action_channel"] == "supplied_link"
@@ -869,6 +911,141 @@ def test_casino_deposit_is_primary_action_and_bonus_is_secondary_signal():
     assert "incentive" in analysis["intent_signals"]
     assert "urgency" in analysis["intent_signals"]
     assert analysis["final_verdict"] == "phishing"
+
+
+def test_dutch_icloud_payment_details_lure_is_phishing():
+    analysis = apply_email_risk_policy(
+        {
+            "from_": 'iCloud heeft limiet bereikt <"noreply@icloud.nl">',
+            "subject": "Uw iCloud-gegevens lopen direct risico",
+            "body_for_ai": (
+                "Uw betaalmethode is verlopen. Uw persoonlijke data loopt het "
+                "risico permanent verwijderd te worden. Laatste herinnering: "
+                "werk alstublieft direct uw betaalgegevens bij. "
+                "Betaalgegevens bijwerken & Mijn gegevens beveiligen."
+            ),
+            "return_path_domain_mismatch": True,
+            "links": [{
+                "url": "http://nonpaint.shop/update",
+                "host": "nonpaint.shop",
+            }],
+            "auth_results": {
+                "SPF": {"status": "pass", "identity": "kitazon.shop"},
+                "DKIM": {"status": "none"},
+                "DMARC": {"status": "none"},
+            },
+        },
+        {
+            "action": "provide_information",
+            "channel": "link",
+            "evidence": "Uw persoonlijke data loopt het risico permanent verwijderd te worden.",
+            "signals": ["urgency"],
+            "signal_evidence": "[PHONE NUMBER]",
+        },
+    )
+
+    assert analysis["requested_action"] == "provide_information"
+    assert "werk alstublieft direct uw betaalgegevens bij" in analysis["intent_evidence"]
+    assert analysis["claimed_brand"] == "iCloud"
+    assert set(analysis["intent_signals"]) >= {
+        "financial_pretext", "threat", "urgency",
+    }
+    assert analysis["identity_risk"] == "spoofing_evidence"
+    assert analysis["technical_risk"] == "uncertain"
+    assert analysis["final_verdict"] == "phishing"
+
+
+def test_known_icloud_brand_accepts_an_apple_sender_domain():
+    risk, reasons = _identity_risk(
+        {
+            "from_": "iCloud <noreply@email.apple.com>",
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "pass"},
+                "DMARC": {"status": "pass"},
+            },
+        },
+        {
+            "requested_action": "provide_information",
+            "claimed_brand": "iCloud",
+        },
+    )
+
+    assert risk == "verified"
+    assert reasons == ["sender authentication passed"]
+
+
+def test_french_credit_offer_with_unverified_link_and_unrelated_brand_is_phishing():
+    analysis = apply_email_risk_policy(
+        {
+            "from_": "Conseiller en Finances <a087173@uri.edu.br>",
+            "subject": "Regroupez vos crédits",
+            "body_for_ai": (
+                "Un organisme est prêt à racheter vos crédits. Il faut 1 min 30 "
+                "pour remplir la demande. Vous recevez immédiatement plusieurs "
+                "offres. Voir l'offre ici sur le site de notre partenaire. "
+                "Comparerfacile - Finance"
+            ),
+            "links": [{
+                "url": "https://click.daoassist.com/offer",
+                "host": "click.daoassist.com",
+                "display_text": "Voir l'offre ici",
+            }],
+            "link_reputation": {},
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "pass"},
+                "DMARC": {"status": "pass"},
+            },
+        },
+        {
+            "action": "payment",
+            "channel": "link",
+            "evidence": "racheter vos crédits",
+            "signals": ["incentive"],
+            "claimed_brand": "Comparerfacile - Finance",
+        },
+    )
+
+    assert analysis["requested_action"] == "provide_information"
+    assert "remplir la demande" in analysis["intent_evidence"]
+    assert analysis["content_risk"] == "malicious"
+    assert analysis["identity_risk"] == "spoofing_evidence"
+    assert analysis["technical_risk"] == "uncertain"
+    assert "no conclusive reputation result" in " ".join(
+        analysis["evidence"]["technical"]
+    )
+    assert analysis["final_verdict"] == "phishing"
+
+
+def test_clean_reputation_keeps_plain_authenticated_newsletter_technical_risk_clean():
+    url = "https://news.example.com/article"
+    analysis = apply_email_risk_policy(
+        {
+            "from_": "Example News <news@example.com>",
+            "subject": "Monthly news",
+            "body_for_ai": "Read this month's article on our website.",
+            "links": [{
+                "url": url,
+                "host": "news.example.com",
+                "display_text": "Read the article",
+            }],
+            "link_reputation": {url: {"status": "clean"}},
+            "auth_results": {
+                "SPF": {"status": "pass"},
+                "DKIM": {"status": "pass"},
+                "DMARC": {"status": "pass"},
+            },
+        },
+        {
+            "action": "visit_link",
+            "channel": "link",
+            "evidence": "Read this month's article",
+        },
+    )
+
+    assert analysis["technical_risk"] == "clean"
+    assert analysis["final_verdict"] == "legitimate"
 
 
 def test_malicious_attachment_and_hop_are_independent_technical_evidence():

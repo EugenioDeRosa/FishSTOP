@@ -1,5 +1,8 @@
+import inspect
+
 import src.config as config
 from src.analyzer import llm_context_analyzer
+from src.views import settings
 
 
 def test_user_secret_has_priority_over_environment(monkeypatch):
@@ -23,3 +26,10 @@ def test_phi4_token_is_read_at_runtime(monkeypatch):
 
     assert llm_context_analyzer._llm_enabled() is True
     assert llm_context_analyzer._github_models_token() == "runtime-token"
+
+
+def test_session_key_changes_do_not_clear_the_global_model_cache():
+    source = inspect.getsource(settings.render)
+
+    assert "init_content_model.clear" not in source
+    assert "cache_resource.clear" not in source

@@ -20,8 +20,24 @@ OLLAMA_KEEP_ALIVE = os.getenv("OLLAMA_KEEP_ALIVE", "15m")
 OLLAMA_NUM_CTX = int(os.getenv("OLLAMA_NUM_CTX", "4096"))
 OLLAMA_NUM_PREDICT = int(os.getenv("OLLAMA_NUM_PREDICT", "220"))
 GITHUB_MODELS_MAX_TOKENS = int(os.getenv("GITHUB_MODELS_MAX_TOKENS", "220"))
+PHI4_PROMPT_RESERVED_TOKENS = int(os.getenv("PHI4_PROMPT_RESERVED_TOKENS", "1600"))
+PHI4_CHARS_PER_TOKEN = float(os.getenv("PHI4_CHARS_PER_TOKEN", "3"))
+PHI4_BODY_CHUNK_CHARS = int(os.getenv(
+    "PHI4_BODY_CHUNK_CHARS",
+    str(max(
+        2400,
+        int(
+            max(
+                800,
+                OLLAMA_NUM_CTX - OLLAMA_NUM_PREDICT - PHI4_PROMPT_RESERVED_TOKENS,
+            )
+            * PHI4_CHARS_PER_TOKEN
+        ),
+    )),
+))
+PHI4_BODY_CHUNK_OVERLAP = int(os.getenv("PHI4_BODY_CHUNK_OVERLAP", "600"))
 LLM_PROVIDER = os.getenv("FISHSTOP_LLM_PROVIDER", "auto").strip().lower()
-PROMPT_VERSION = "semantic-policy-v22-multisignal-unicode"
+PROMPT_VERSION = "semantic-policy-v26-full-email-chunks"
 
 
 def _github_models_token() -> str:
@@ -284,6 +300,44 @@ def _body_context_for_llm(soc: dict) -> str:
     return html_body
 
 
+_NON_ACTION_LINK_TEXT_RE = re.compile(
+    r"\b(?:unsubscribe|afmelden|abmelden|désabonner|disiscriv\w*)\b",
+    re.IGNORECASE,
+)
+
+
+def _actionable_link_texts(soc: dict) -> list[str]:
+    """Retain meaningful HTML link labels when the selected plain body loses them."""
+    values: list[str] = []
+    seen: set[str] = set()
+    for link in (soc.get("links") or []):
+        value = re.sub(
+            r"\s+",
+            " ",
+            _normalize_obfuscated_text(str(link.get("display_text") or "")),
+        ).strip()
+        normalized = value.casefold()
+        if (
+            len(value) < 4
+            or normalized in seen
+            or _NON_ACTION_LINK_TEXT_RE.search(value)
+            or re.fullmatch(r"https?://\S+", value, re.IGNORECASE)
+        ):
+            continue
+        seen.add(normalized)
+        values.append(value)
+    return values[:8]
+
+
+def _message_evidence_text(soc: dict) -> str:
+    parts = [
+        str(soc.get("subject") or ""),
+        _body_context_for_llm(soc),
+        *_actionable_link_texts(soc),
+    ]
+    return "\n".join(part for part in parts if part)
+
+
 def _vt_evidence_label(status: str) -> str:
     status = (status or "unknown").lower()
     if status == "malicious":
@@ -472,52 +526,57 @@ def _technical_context_lines(soc: dict, body_for_llm: str = "", link_reputation:
     return lines
 
 
-_INTENT_SENTENCE_RE = re.compile(
-    r"\b(?:click|open|visit|enter|provide|submit|send|share|reply|respond|pay|transfer|"
-    r"deposit|verify|confirm|review|secure|protect|create|set|reset|change|claim|redeem|collect|"
-    r"accedi|clicca|apri|inserisci|fornisci|invia|rispondi|paga|trasferisci|verifica|"
-    r"deposita|conferma|proteggi|crea|imposta|reimposta|cambia|riscatta|ritira|"
-    r"klick\w*|öffn\w*|besuch\w*|eingeb\w*|einzahl\w*|zahl\w*|überweis\w*|"
-    r"bestätig\w*|prüf\w*|sicher\w*|beanspruch\w*|hol\w*|"
-    r"clic\w*|abr\w*|consult\w*|inser\w*|fornec\w*|envi\w*|respond\w*|"
-    r"pag\w*|deposit\w*|transfer\w*|verific\w*|confirm\w*|resgat\w*)\b",
-    re.IGNORECASE,
-)
-
-
-def _intent_relevant_sentences(value: str, limit: int = 520) -> str:
-    value = _normalize_obfuscated_text(value)
-    candidates: list[str] = []
-    seen: set[str] = set()
-    for sentence in re.split(r"(?<=[.!?])\s+|\n+", str(value or "")):
-        sentence = re.sub(r"\s+", " ", sentence).strip()
-        normalized = sentence.lower()
-        if (
-            len(sentence) < 8
-            or normalized in seen
-            or not _INTENT_SENTENCE_RE.search(sentence)
-        ):
-            continue
-        seen.add(normalized)
-        candidates.append(sentence)
-    return _clip("\n".join(candidates[-6:]), limit) if candidates else ""
-
-
-def _select_intent_body(value: str, limit: int = 1800) -> str:
-    """Preserve beginning, action-bearing sentences, and ending of long emails."""
+def _split_complete_email_body(
+    value: str,
+    *,
+    limit: int = PHI4_BODY_CHUNK_CHARS,
+    overlap: int = PHI4_BODY_CHUNK_OVERLAP,
+) -> list[str]:
+    """Split a long body without dropping content, retaining context at boundaries."""
     value = str(value or "").strip()
+    if not value:
+        return [""]
+    limit = max(400, int(limit))
+    overlap = max(0, min(int(overlap), limit // 3))
     if len(value) <= limit:
-        return value
+        return [value]
 
-    candidates = _intent_relevant_sentences(value)
-    head = _clip(value[:620], 620)
-    tail = value[-620:].lstrip()
-    sections = [
-        "[EMAIL BEGINNING]\n" + head,
-        "[ACTION-BEARING SENTENCES]\n" + (candidates or "(none identified)"),
-        "[EMAIL ENDING]\n" + tail,
-    ]
-    return "\n\n".join(sections)
+    chunks: list[str] = []
+    start = 0
+    value_length = len(value)
+    while start < value_length:
+        hard_end = min(value_length, start + limit)
+        end = hard_end
+        if hard_end < value_length:
+            search_start = start + int(limit * 0.65)
+            boundary_candidates = [
+                value.rfind("\n\n", search_start, hard_end),
+                value.rfind("\n", search_start, hard_end),
+                value.rfind(". ", search_start, hard_end),
+                value.rfind(" ", search_start, hard_end),
+            ]
+            boundary = max(boundary_candidates)
+            if boundary > start:
+                end = boundary + (2 if value[boundary:boundary + 2] in {"\n\n", ". "} else 1)
+
+        chunk = value[start:end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end >= value_length:
+            break
+
+        next_start = max(start + 1, end - overlap)
+        if next_start > 0:
+            preceding_boundary = max(
+                value.rfind("\n\n", start, next_start),
+                value.rfind("\n", start, next_start),
+                value.rfind(". ", start, next_start),
+                value.rfind(" ", start, next_start),
+            )
+            if preceding_boundary > start:
+                next_start = preceding_boundary + 1
+        start = next_start
+    return chunks
 
 
 def _normalized_evidence(value: str) -> str:
@@ -545,7 +604,11 @@ _ACTION_EVIDENCE_PATTERNS = {
         r"\b(?:enter|provide|submit|send|share|fill|inser\w*|fornisc\w*|"
         r"fornec\w*|envi\w*|eingeb\w*)\b.{0,80}\b(?:data|details|information|"
         r"address|phone|name|dati|informazioni|indirizzo|daten|adresse|"
-        r"dados|endereço|datos|direcci[oó]n)\b",
+        r"dados|endereço|datos|direcci[oó]n)\b|"
+        r"\b(?:werk|update|vernieuw|vul|bevestig)\w*\b.{0,100}"
+        r"\b(?:betaalgegevens|betalingsgegevens|betaalmethode|persoonlijke\s+gegevens|gegevens)\b|"
+        r"\b(?:remplir|compl[eé]ter|soumettre|envoyer)\b.{0,60}"
+        r"\b(?:la|une|votre)\s+(?:demande|formulaire|dossier)\b",
         re.IGNORECASE,
     ),
     "provide_credentials": re.compile(
@@ -597,10 +660,13 @@ def _validated_evidence(soc: dict, value: str, action: str = "") -> str:
     evidence = _clip_exact_span(_normalize_obfuscated_text(value), 180)
     if not evidence:
         return ""
-    body = _body_context_for_llm(soc)
     searchable = "\n".join([
         str(soc.get("subject") or ""),
-        compact_ai_body(body, has_extracted_links=bool(soc.get("links"))),
+        compact_ai_body(
+            _body_context_for_llm(soc),
+            has_extracted_links=bool(soc.get("links")),
+        ),
+        *_actionable_link_texts(soc),
     ])
     normalized_searchable = _normalized_evidence(searchable)
     normalized_anonymized = _normalized_evidence(_anonymize_for_llm(searchable))
@@ -614,9 +680,7 @@ def _validated_evidence(soc: dict, value: str, action: str = "") -> str:
 
 
 def _evidence_segments(soc: dict) -> list[str]:
-    text = _normalize_obfuscated_text(
-        f"{soc.get('subject') or ''}\n{_body_context_for_llm(soc)}"
-    )
+    text = _normalize_obfuscated_text(_message_evidence_text(soc))
     segments: list[str] = []
     seen: set[str] = set()
     for value in re.split(r"(?<=[.!?])\s+|\n+", text):
@@ -660,10 +724,13 @@ def _find_signal_evidence(soc: dict, semantic: dict) -> str:
     return ""
 
 
-def build_fast_email_prompt(soc: dict, anonymize: bool = False) -> str:
+def _prepared_email_prompt_parts(
+    soc: dict,
+    *,
+    anonymize: bool,
+) -> tuple[str, str, str]:
     body = _normalize_obfuscated_text(_body_context_for_llm(soc))
     body = _remove_mail_client_signatures(body)
-    links = soc.get("links") or []
     attachments = soc.get("attachments") or []
     subject = compact_ai_body(
         _normalize_obfuscated_text(str(soc.get("subject") or "(no subject)"))
@@ -672,23 +739,97 @@ def build_fast_email_prompt(soc: dict, anonymize: bool = False) -> str:
     # for every HTML/footer URL biases small models toward visit_link even when
     # the message's main action is unrelated.
     compact_body = compact_ai_body(body, has_extracted_links=False)
+    link_action_text = "\n".join(
+        value
+        for value in _actionable_link_texts(soc)
+        if _normalized_evidence(value) not in _normalized_evidence(compact_body)
+    )
     if anonymize:
         subject = _anonymize_for_llm(subject)
         compact_body = _anonymize_for_llm(compact_body)
-    compact_body = _select_intent_body(compact_body)
+        link_action_text = _anonymize_for_llm(link_action_text)
+    if link_action_text:
+        compact_body = (
+            f"{compact_body}\n\n[LINK CALL-TO-ACTION TEXT]\n"
+            f"{link_action_text}"
+        ).strip()
     attachment_types = sorted({
         str(att.get("extension_from_filename") or att.get("content_type") or "file").lower()
         for att in attachments
     })
     attachment_meta = ",".join(attachment_types[:3]) or "none"
+    return subject, compact_body, attachment_meta
+
+
+def _email_prompt_from_body(
+    soc: dict,
+    *,
+    subject: str,
+    body: str,
+    attachment_meta: str,
+    section_number: int = 1,
+    section_total: int = 1,
+) -> str:
+    links = soc.get("links") or []
+    attachments = soc.get("attachments") or []
+    section_meta = (
+        f"; section={section_number}/{section_total}"
+        if section_total > 1
+        else ""
+    )
 
     return "\n".join([
         f"SUBJECT: {_clip(subject, 240)}",
-        f"META: links={len(links)}; attachments={len(attachments)}; types={attachment_meta}",
+        (
+            f"META: links={len(links)}; attachments={len(attachments)}; "
+            f"types={attachment_meta}{section_meta}"
+        ),
         _CONTENT_BEGIN_MARKER,
-        compact_body,
+        body,
         _CONTENT_END_MARKER,
     ])
+
+
+def build_fast_email_prompt(soc: dict, anonymize: bool = False) -> str:
+    """Build a prompt containing the complete normalized email body."""
+    subject, body, attachment_meta = _prepared_email_prompt_parts(
+        soc,
+        anonymize=anonymize,
+    )
+    return _email_prompt_from_body(
+        soc,
+        subject=subject,
+        body=body,
+        attachment_meta=attachment_meta,
+    )
+
+
+def _build_complete_email_prompts(
+    soc: dict,
+    *,
+    anonymize: bool,
+) -> list[tuple[str, str]]:
+    """Return every body section and its prompt; no middle section is discarded."""
+    subject, body, attachment_meta = _prepared_email_prompt_parts(
+        soc,
+        anonymize=anonymize,
+    )
+    sections = _split_complete_email_body(body)
+    total = len(sections)
+    return [
+        (
+            section,
+            _email_prompt_from_body(
+                soc,
+                subject=subject,
+                body=section,
+                attachment_meta=attachment_meta,
+                section_number=index,
+                section_total=total,
+            ),
+        )
+        for index, section in enumerate(sections, start=1)
+    ]
 
 
 _REQUESTED_ACTIONS = {
@@ -904,11 +1045,12 @@ def normalize_semantic_extraction(raw: dict, soc: dict | None = None) -> dict:
 _FINANCIAL_PRETEXT_RE = re.compile(
     r"\b(?:debt|amount\s+due|outstanding|invoice|charge|toll|fine|"
     r"d[eé]bito|pend[eê]ncia|ped[aá]gio|multa|fattura|debito|"
-    r"schuld|rechnung|zahlung\s+offen)\b",
+    r"schuld|rechnung|zahlung\s+offen|betaalmethode|betaalgegevens|"
+    r"betalingsgegevens|abonnement|verlopen)\b",
     re.IGNORECASE,
 )
 _INCENTIVE_RE = re.compile(
-    r"\b(?:\w*bonus|reward|prize|refund|cashback|free\s+spins?|giveaway|"
+    r"\b(?:\w*bonus|reward|prize|refund|cashback|free(?:\s+spins?)?|giveaway|"
     r"premio|ricompensa|rimborso|freispiele|gewinn|kostenlos|"
     r"b[oô]nus|pr[eê]mio|reembolso)\b",
     re.IGNORECASE,
@@ -917,14 +1059,16 @@ _THREAT_RE = re.compile(
     r"\b(?:penalty|fine|points?|restriction|suspend\w*|terminat\w*|"
     r"removed?|lose\s+(?:your\s+)?access|closed?|blocked?|multa|"
     r"pontua[cç][aã]o|restri[cç][aã]o|sospes\w*|blocc\w*|perder\w*|"
-    r"entfern\w*|gesperrt|verlier\w*|geschlossen)\b",
+    r"entfern\w*|gesperrt|verlier\w*|geschlossen|verwijder\w*|"
+    r"verlie[sz]\w*|dataverlies|geblokkeerd|opgeschort)\b",
     re.IGNORECASE,
 )
 _URGENCY_RE = re.compile(
     r"\b(?:urgent|immediately|now|today|expires?|deadline|last\s+chance|"
     r"limited|only\s+\d+|act\s+now|agora|hoje|imediat\w*|prazo|"
     r"urgente|subito|oggi|scade|ultima\s+possibilit[aà]|"
-    r"sofort|heute|l[aä]uft\s+ab|nur\s+noch|letzter\s+aufruf)\b",
+    r"sofort|heute|l[aä]uft\s+ab|nur\s+noch|letzter\s+aufruf|"
+    r"direct|laatste\s+herinnering|v[oó][oó]r\s+\w+|onmiddellijk)\b",
     re.IGNORECASE,
 )
 _PAYMENT_ACTION_RE = re.compile(
@@ -963,15 +1107,32 @@ def _enrich_context_signals(message_text: str, semantic: dict) -> None:
         semantic.get("financial_incentive_present", False) or incentive
     )
     semantic["threat_or_consequence_present"] = threat
-    semantic["urgency_present"] = semantic.get("urgency_present", False) or urgency
+    effective_urgency = semantic.get("urgency_present", False) or urgency
+    semantic["urgency_present"] = effective_urgency
     risky_action = semantic.get("requested_action") not in {
         "none", "informational", "other",
     }
     semantic["urgency_targets_risky_action"] = (
         semantic.get("urgency_targets_risky_action", False)
-        or (urgency and risky_action)
+        or (effective_urgency and risky_action)
     )
     semantic["semantic_signals"] = sorted(signals)
+    signal_evidence = str(semantic.get("signal_evidence") or "")
+    supporting_patterns = []
+    if "financial_pretext" in signals:
+        supporting_patterns.append(_FINANCIAL_PRETEXT_RE)
+    if "incentive" in signals:
+        supporting_patterns.append(_INCENTIVE_RE)
+    if "threat" in signals:
+        supporting_patterns.append(_THREAT_RE)
+    if "urgency" in signals:
+        supporting_patterns.append(_URGENCY_RE)
+    if (
+        signal_evidence
+        and supporting_patterns
+        and not any(pattern.search(signal_evidence) for pattern in supporting_patterns)
+    ):
+        semantic["signal_evidence"] = ""
 
 
 def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dict:
@@ -981,14 +1142,22 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
     attachments = soc.get("attachments") or []
     message_body = _body_context_for_llm(soc)
     message_text = _normalize_obfuscated_text(
-        f"{soc.get('subject') or ''}\n{message_body}"
+        _message_evidence_text(soc)
     ).lower()
+    if not semantic.get("claimed_brand"):
+        semantic["claimed_brand"] = _infer_known_brand(message_text)
     _enrich_context_signals(message_text, semantic)
     if (
         not semantic.get("claimed_brand")
         and "impersonation" in (semantic.get("semantic_signals") or [])
     ):
         semantic["claimed_brand"] = _sender_display_name(soc)
+    if _claimed_brand_domain_mismatch(soc, semantic):
+        semantic["impersonation_or_deception"] = True
+        semantic["semantic_signals"] = sorted({
+            *(semantic.get("semantic_signals") or []),
+            "impersonation",
+        })
 
     # A small model must not invent a delivery channel that contradicts the
     # parser. Preserve the requested action, but downgrade the impossible
@@ -1106,7 +1275,12 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
         r"best[aä]tig\w*|inser\w*|fornisc\w*|conferm\w*)\b"
         r"[^\n.!?]{0,45}\b(?:your|ihre|ihr|tuoi|tua|su)\b"
         r"[^\n.!?]{0,18}\b(?:data|details|information|address|daten|datein|adresse|"
-        r"informazioni|dati|indirizzo|datos|direcci[oó]n)\b",
+        r"informazioni|dati|indirizzo|datos|direcci[oó]n)\b|"
+        r"\b(?:werk|update|vernieuw|vul|bevestig)\w*\b"
+        r"[^\n.!?]{0,100}\b(?:uw|je|jouw)\b[^\n.!?]{0,30}"
+        r"\b(?:betaalgegevens|betalingsgegevens|betaalmethode|persoonlijke\s+gegevens|gegevens)\b|"
+        r"\b(?:remplir|compl[eé]ter|soumettre|envoyer)\b"
+        r"[^\n.!?]{0,60}\b(?:la|une|votre)\s+(?:demande|formulaire|dossier)\b",
         message_text,
         re.IGNORECASE,
     ))
@@ -1433,6 +1607,29 @@ _GENERIC_BRAND_WORDS = {
     "no", "reply", "account", "wallet", "casino", "vip",
 }
 
+_KNOWN_BRAND_DOMAINS = {
+    "iCloud": {"apple.com", "icloud.com"},
+    "Trust Wallet": {"trustwallet.com"},
+    "Microsoft": {"microsoft.com"},
+    "PayPal": {"paypal.com"},
+    "Netflix": {"netflix.com"},
+}
+
+
+def _infer_known_brand(message_text: str) -> str:
+    normalized = _normalize_obfuscated_text(message_text).casefold()
+    checks = (
+        ("iCloud", r"\bicloud\b"),
+        ("Trust Wallet", r"\btrust\s+wallet\b"),
+        ("Microsoft", r"\bmicrosoft\b"),
+        ("PayPal", r"\bpaypal\b"),
+        ("Netflix", r"\bnetflix\b"),
+    )
+    for brand, pattern in checks:
+        if re.search(pattern, normalized, re.IGNORECASE):
+            return brand
+    return ""
+
 
 def _brand_tokens(value: str) -> set[str]:
     value = unicodedata.normalize(
@@ -1467,7 +1664,7 @@ def _claimed_brand_domain_mismatch(soc: dict, semantic: dict) -> bool:
         display_name = _sender_display_name(soc)
         if not re.search(
             r"\b(?:wallet|bank|casino|security|digital|microsoft|paypal|"
-            r"apple|amazon|netflix|account)\b",
+            r"apple|icloud|amazon|netflix|account)\b",
             display_name,
             re.IGNORECASE,
         ):
@@ -1478,6 +1675,13 @@ def _claimed_brand_domain_mismatch(soc: dict, semantic: dict) -> bool:
     sender_domain = _sender_domain(soc)
     if not tokens or not sender_domain:
         return False
+    for known_brand, allowed_domains in _KNOWN_BRAND_DOMAINS.items():
+        if known_brand.casefold() in brand.casefold():
+            return not any(
+                sender_domain == allowed
+                or sender_domain.endswith("." + allowed)
+                for allowed in allowed_domains
+            )
     compact_domain = re.sub(r"[^a-z0-9]", "", sender_domain.casefold())
     return not any(token in compact_domain for token in tokens)
 
@@ -1570,7 +1774,32 @@ def _technical_risk(soc: dict, semantic: dict | None = None) -> tuple[str, list[
     if soc.get("lookalike_alerts"):
         suspicious.append("a lookalike or deceptive domain was detected")
     if semantic and _sensitive_link_domain_mismatch(soc, semantic):
-        suspicious.append("a sensitive account-verification link uses a domain unrelated to the sender")
+        suspicious.append("a requested-action link uses a domain unrelated to the sender")
+    if (
+        semantic
+        and semantic.get("action_channel") == "supplied_link"
+        and "link_reputation" in soc
+    ):
+        actionable_links = [
+            link
+            for link in (soc.get("links") or [])
+            if not re.search(
+                r"\b(?:unsubscribe|afmelden|abmelden|désabonner|disiscriv\w*)\b",
+                str(link.get("display_text") or ""),
+                re.IGNORECASE,
+            )
+        ]
+        reputation = soc.get("link_reputation") or {}
+        actionable_statuses = {
+            str((reputation.get(link.get("url") or "") or {}).get("status") or "").lower()
+            for link in actionable_links
+        }
+        if actionable_links and not (
+            actionable_statuses & {"clean", "malicious", "suspicious"}
+        ):
+            suspicious.append(
+                "the requested-action link has no conclusive reputation result"
+            )
     return ("uncertain", suspicious) if suspicious else ("clean", ["no strong technical threat was detected"])
 
 
@@ -1648,6 +1877,10 @@ def apply_email_risk_policy(soc: dict, semantic: dict) -> dict:
     content_risk, content_reasons = _content_risk(semantic)
     identity_risk, identity_reasons = _identity_risk(soc, semantic)
     technical_risk, technical_reasons = _technical_risk(soc, semantic)
+    bert_result, _ = _bert_evidence(soc)
+    supplied_action = semantic["action_channel"] in {
+        "supplied_link", "external_form", "supplied_attachment",
+    }
 
     if technical_risk == "malicious" or content_risk == "malicious":
         verdict = "phishing"
@@ -1655,6 +1888,14 @@ def apply_email_risk_policy(soc: dict, semantic: dict) -> dict:
         identity_risk == "spoofing_evidence" or technical_risk == "uncertain"
     ):
         verdict = "phishing"
+    elif (
+        bert_result == "malicious"
+        and supplied_action
+        and identity_risk in {"uncertain", "spoofing_evidence"}
+    ):
+        verdict = "phishing"
+    elif bert_result == "malicious" and supplied_action:
+        verdict = "review"
     elif content_risk == "suspicious" or identity_risk == "spoofing_evidence" or technical_risk == "uncertain":
         verdict = "review"
     else:
@@ -1757,13 +1998,13 @@ def format_email_risk_analysis(analysis: dict) -> str:
     corroboration_caveats = _format_evidence(corroboration.get("caveats") or [])
     if supports_decision:
         checks = (
-            "Independent technical checks support this assessment"
+            "Independent checks support this assessment"
             f" because {corroboration_details}." if corroboration_details
-            else "Independent technical checks support this assessment."
+            else "Independent checks support this assessment."
         )
     else:
         checks = (
-            "Independent technical checks do not corroborate this assessment; "
+            "Independent checks do not corroborate this assessment; "
             "the conclusion is based on the action requested in the subject and body."
         )
     if corroboration_caveats:
@@ -1840,7 +2081,7 @@ def _fallback_content_summary(soc: dict, semantic: dict) -> str:
         "change_account_settings": "requests account changes, an action that can expose the recipient to account takeover",
         "verify_account": "claims an account-security issue and asks the recipient to respond through a supplied channel, a common phishing pattern",
         "open_attachment": "asks the recipient to open an attachment, which may deliver malicious content",
-        "visit_link": "directs the recipient to a supplied link, a pattern that requires destination verification",
+        "visit_link": "ask the recipient to follow a supplied link",
         "reply": "asks the recipient to reply, without presenting another clearly identified risky action",
         "bypass_procedure": "asks the recipient to bypass normal procedures, a strong social-engineering indicator",
         "informational": "provides information without a clearly identified risky request",
@@ -1930,10 +2171,15 @@ def _request_targeted_intent(
     use_ollama: bool,
     model: str,
     timeout: int,
+    email_prompt: str | None = None,
+    github_token: str | None = None,
 ) -> dict:
-    prompt = TARGETED_INTENT_INSTRUCTIONS + build_fast_email_prompt(
-        soc,
-        anonymize=not use_ollama,
+    prompt = TARGETED_INTENT_INSTRUCTIONS + (
+        email_prompt
+        or build_fast_email_prompt(
+            soc,
+            anonymize=not use_ollama,
+        )
     )
     messages = [
         {
@@ -1942,16 +2188,26 @@ def _request_targeted_intent(
         },
         {"role": "user", "content": prompt},
     ]
-    backend_stream = (
-        _stream_ollama(
+    if use_ollama:
+        backend_stream = _stream_ollama(
             messages,
             OLLAMA_MODEL,
             min(timeout, 45),
             output_schema=TARGETED_INTENT_SCHEMA,
         )
-        if use_ollama
-        else _stream_github_models(messages, model, min(timeout, 45))
-    )
+    elif github_token is None:
+        backend_stream = _stream_github_models(
+            messages,
+            model,
+            min(timeout, 45),
+        )
+    else:
+        backend_stream = _stream_github_models(
+            messages,
+            model,
+            min(timeout, 45),
+            token=github_token,
+        )
     try:
         for event in backend_stream:
             if event.get("status") != "ok":
@@ -1984,9 +2240,96 @@ def _request_targeted_intent(
     return {}
 
 
-def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, timeout: int = 90):
+_MERGED_ACTION_PRIORITY = {
+    "provide_credentials": 120,
+    "pay_or_transfer": 110,
+    "bypass_procedure": 100,
+    "provide_information": 90,
+    "change_account_settings": 85,
+    "verify_account": 80,
+    "claim_reward": 75,
+    "open_attachment": 60,
+    "reply": 50,
+    "visit_link": 40,
+    "other": 20,
+    "informational": 10,
+    "none": 0,
+}
+
+
+def _merge_semantic_candidates(candidates: list[dict], soc: dict) -> dict:
+    """Merge section-level outputs, preferring the most specific supported action."""
+    if not candidates:
+        raise ValueError("Phi-4 did not return a usable analysis for any email section")
+
+    ranked: list[tuple[int, int, dict, dict]] = []
+    for index, candidate in enumerate(candidates):
+        normalized = normalize_semantic_extraction(candidate, soc=soc)
+        score = _MERGED_ACTION_PRIORITY.get(
+            normalized["requested_action"],
+            0,
+        )
+        if normalized.get("evidence_phrase"):
+            score += 8
+        if normalized.get("action_channel") in {
+            "supplied_link", "external_form", "supplied_attachment", "email_reply",
+        }:
+            score += 3
+        ranked.append((score, -index, candidate, normalized))
+
+    _, _, winner, winner_normalized = max(ranked, key=lambda item: (item[0], item[1]))
+    merged = dict(winner)
+    merged_signals = sorted({
+        signal
+        for _, _, _, normalized in ranked
+        for signal in (normalized.get("semantic_signals") or [])
+    })
+    merged["signals"] = merged_signals
+
+    if not str(merged.get("signal_evidence") or "").strip():
+        for _, _, candidate, normalized in sorted(ranked, reverse=True):
+            evidence = (
+                candidate.get("signal_evidence")
+                or normalized.get("signal_evidence")
+            )
+            if evidence:
+                merged["signal_evidence"] = evidence
+                break
+
+    if not str(merged.get("claimed_brand") or "").strip():
+        for _, _, candidate, normalized in sorted(ranked, reverse=True):
+            brand = candidate.get("claimed_brand") or normalized.get("claimed_brand")
+            if brand:
+                merged["claimed_brand"] = brand
+                break
+
+    if winner_normalized["requested_action"] == "provide_credentials":
+        for _, _, candidate, normalized in sorted(ranked, reverse=True):
+            credential_type = (
+                candidate.get("credential_type")
+                or normalized.get("credential_type")
+            )
+            if credential_type and credential_type != "none":
+                merged["credential_type"] = credential_type
+                break
+
+    merged["analyzed_sections"] = len(candidates)
+    return merged
+
+
+def stream_phi4_email_analysis(
+    soc: dict,
+    model: str = GITHUB_MODELS_MODEL,
+    timeout: int = 90,
+    github_token: str | None = None,
+):
     use_ollama = _use_ollama()
-    if not use_ollama and not _github_models_token():
+    effective_github_token = (
+        _github_models_token()
+        if github_token is None
+        else github_token
+    )
+    if not use_ollama and not effective_github_token:
         yield {
             "status": "error",
             "message": (
@@ -1997,53 +2340,158 @@ def stream_phi4_email_analysis(soc: dict, model: str = GITHUB_MODELS_MODEL, time
         }
         return
 
-    messages = [
-        {"role": "system", "content": SYSTEM_MESSAGE},
-        {
-            "role": "user",
-            "content": TASK_INSTRUCTIONS + build_fast_email_prompt(
-                soc,
-                anonymize=not use_ollama,
-            ),
-        },
-    ]
-    backend_stream = (
-        _stream_ollama(messages, OLLAMA_MODEL, timeout)
-        if use_ollama else _stream_github_models(messages, model, timeout)
+    prompt_sections = _build_complete_email_prompts(
+        soc,
+        anonymize=not use_ollama,
     )
-    for event in backend_stream:
-        if event.get("status") != "ok":
-            yield event
-            continue
-        try:
-            semantic = _json_object(event.get("text") or "")
-            primary = normalize_semantic_extraction(semantic, soc=soc)
-            if _needs_targeted_intent_verifier(soc, primary):
-                targeted = _request_targeted_intent(
-                    soc,
-                    use_ollama=use_ollama,
-                    model=model,
-                    timeout=timeout,
+    total_sections = len(prompt_sections)
+    semantic_candidates: list[dict] = []
+    raw_outputs: list[str] = []
+    final_backend_event: dict = {}
+
+    for section_number, (section_body, email_prompt) in enumerate(
+        prompt_sections,
+        start=1,
+    ):
+        yield {
+            "status": "progress",
+            "stage": "content",
+            "current": section_number,
+            "total": total_sections,
+            "message": (
+                "Phi-4 mini is analyzing the complete email"
+                if total_sections == 1
+                else (
+                    f"Phi-4 mini is analyzing email section "
+                    f"{section_number} of {total_sections}"
                 )
-                if targeted:
-                    semantic["primary_requested_action"] = primary["requested_action"]
-                    semantic.update(targeted)
-                    semantic["intent_verifier_used"] = True
-            semantic["summary"] = _fallback_content_summary(soc, semantic)
-            analysis = apply_email_risk_policy(soc, semantic)
-        except (ValueError, json.JSONDecodeError) as exc:
+            ),
+        }
+        messages = [
+            {"role": "system", "content": SYSTEM_MESSAGE},
+            {
+                "role": "user",
+                "content": TASK_INSTRUCTIONS + email_prompt,
+            },
+        ]
+        if use_ollama:
+            backend_stream = _stream_ollama(
+                messages,
+                OLLAMA_MODEL,
+                timeout,
+            )
+        elif github_token is None:
+            backend_stream = _stream_github_models(
+                messages,
+                model,
+                timeout,
+            )
+        else:
+            backend_stream = _stream_github_models(
+                messages,
+                model,
+                timeout,
+                token=effective_github_token,
+            )
+        section_complete = False
+        for event in backend_stream:
+            if event.get("status") == "stream":
+                yield {
+                    **event,
+                    "current": section_number,
+                    "total": total_sections,
+                }
+                continue
+            if event.get("status") == "error":
+                yield event
+                return
+            if event.get("status") != "ok":
+                continue
+            section_complete = True
+            final_backend_event = event
+            raw_output = event.get("text") or ""
+            raw_outputs.append(raw_output)
+            try:
+                semantic = _json_object(raw_output)
+                section_soc = dict(soc)
+                section_soc["body_for_ai"] = section_body
+                primary = normalize_semantic_extraction(
+                    semantic,
+                    soc=section_soc,
+                )
+                if _needs_targeted_intent_verifier(section_soc, primary):
+                    targeted = _request_targeted_intent(
+                        section_soc,
+                        use_ollama=use_ollama,
+                        model=model,
+                        timeout=timeout,
+                        email_prompt=email_prompt,
+                        github_token=(
+                            effective_github_token
+                            if github_token is not None
+                            else None
+                        ),
+                    )
+                    if targeted:
+                        semantic["primary_requested_action"] = primary["requested_action"]
+                        semantic.update(targeted)
+                        semantic["intent_verifier_used"] = True
+                semantic_candidates.append(semantic)
+            except (ValueError, json.JSONDecodeError) as exc:
+                yield {
+                    "status": "error",
+                    "message": (
+                        "Phi-4 returned an invalid structured analysis for "
+                        f"section {section_number}/{total_sections}: {exc}"
+                    ),
+                    "text": "",
+                }
+                return
+        if not section_complete:
             yield {
                 "status": "error",
-                "message": f"Phi-4 returned an invalid structured analysis: {exc}",
+                "message": (
+                    "Phi-4 did not return a final result for "
+                    f"section {section_number}/{total_sections}."
+                ),
                 "text": "",
             }
             return
+
+    yield {
+        "status": "progress",
+        "stage": "merge",
+        "current": total_sections,
+        "total": total_sections,
+        "message": (
+            "Phi-4 mini finished reading the email and is combining the results"
+        ),
+    }
+    try:
+        semantic = _merge_semantic_candidates(semantic_candidates, soc)
+        semantic["summary"] = _fallback_content_summary(soc, semantic)
+        analysis = apply_email_risk_policy(soc, semantic)
+    except (ValueError, json.JSONDecodeError) as exc:
         yield {
-            **event,
-            "text": format_email_risk_analysis(analysis),
-            "analysis": analysis,
-            "raw_model_output": event.get("text") or "",
+            "status": "error",
+            "message": f"Phi-4 returned an invalid structured analysis: {exc}",
+            "text": "",
         }
+        return
+
+    raw_model_output = (
+        raw_outputs[0]
+        if len(raw_outputs) == 1
+        else json.dumps(raw_outputs, ensure_ascii=False)
+    )
+    yield {
+        **final_backend_event,
+        "status": "ok",
+        "text": format_email_risk_analysis(analysis),
+        "analysis": analysis,
+        "raw_model_output": raw_model_output,
+        "analyzed_sections": total_sections,
+    }
 
 
 def _stream_ollama(
@@ -2099,12 +2547,17 @@ def _stream_ollama(
     yield {"status": "ok", "model": model, "backend": "ollama", "text": "".join(chunks).strip()}
 
 
-def _stream_github_models(messages: list[dict], model: str, timeout: int):
+def _stream_github_models(
+    messages: list[dict],
+    model: str,
+    timeout: int,
+    token: str | None = None,
+):
     """
     Chiama GitHub Models (Azure AI Inference, API OpenAI-compatible) in streaming
     SSE. Richiede un GitHub PAT con permesso 'Models: read' in GITHUB_MODELS_TOKEN.
     """
-    token = _github_models_token()
+    token = _github_models_token() if token is None else token
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json",

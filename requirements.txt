@@ -2,7 +2,7 @@ pandas>=2.0.0
 numpy>=1.24.0
 torch>=2.0.0
 transformers>=4.30.0
-streamlit>=1.25.0
+streamlit>=1.37.0
 python-dotenv>=1.0.0
 scikit-learn>=1.2.0
 datasets

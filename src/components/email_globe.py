@@ -15,7 +15,6 @@ Utilizzo in app.py:
 
 import ipaddress
 import json
-from concurrent.futures import ThreadPoolExecutor
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -581,7 +580,12 @@ requestAnimationFrame(animate);
 
 # ── Entry point ────────────────────────────────────────────────────────────
 
-def render_email_globe(soc: dict, validator) -> None:
+def render_email_globe(
+    soc: dict,
+    *,
+    geolocation_results: dict[str, dict] | None = None,
+    reputation_results: dict[str, dict] | None = None,
+) -> None:
     """
     Renderizza il globo 3D interattivo del percorso email in Streamlit.
 
@@ -604,16 +608,31 @@ def render_email_globe(soc: dict, validator) -> None:
         elif i == 1:        roles.append("injection")
         else:               roles.append("relay")
 
-    # Geolocalizza + reputazione in parallelo
-    def _fetch(hop: dict):
+    geolocation_results = geolocation_results or {}
+    reputation_results = reputation_results or {}
+    results = []
+    pending = False
+    for hop in hops:
         ip = hop.get("sender_ip") or ""
         if not _is_geolocatable_ip(ip):
-            return {"status": "skipped"}, {"status": "skipped"}
-        return validator.geolocate_ip(ip), validator.check_ip_reputation(ip)
-
-    with st.spinner("Geolocation hop in corso..."):
-        with ThreadPoolExecutor(max_workers=min(n, 6)) as ex:
-            results = list(ex.map(_fetch, hops))
+            results.append((
+                {"status": "skipped"},
+                {"status": "skipped"},
+            ))
+            continue
+        geo = geolocation_results.get(ip, {
+            "status": "pending",
+            "message": "Geolocation in progress",
+        })
+        reputation = reputation_results.get(ip, {
+            "status": "pending",
+            "message": "Reputation analysis in progress",
+        })
+        pending = pending or (
+            geo.get("status") == "pending"
+            or reputation.get("status") == "pending"
+        )
+        results.append((geo, reputation))
 
     hops_data = [
         {
@@ -629,6 +648,12 @@ def render_email_globe(soc: dict, validator) -> None:
     located = [h for h in hops_data if h["coords"] is not None]
 
     if not located:
+        if pending:
+            st.info(
+                "The geographic route is loading in the background and will "
+                "appear automatically when location data is available."
+            )
+            return
         st.info(
             "All hops are private or not geolocalizable. "
             "The globe requires at least one public geolocalizable IP."

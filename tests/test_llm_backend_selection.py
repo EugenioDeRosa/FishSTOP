@@ -129,7 +129,8 @@ def test_summary_is_derived_from_verified_action(monkeypatch):
     }))
 
     text = events[-1]["text"]
-    assert "direct the recipient to a supplied link" in text
+    assert "ask the recipient to follow a supplied link" in text
+    assert "requires destination verification" not in text
 
 
 def test_ambiguous_credential_link_uses_targeted_verifier(monkeypatch):
@@ -186,10 +187,81 @@ def test_long_email_prompt_preserves_late_intent():
         "links": [{"url": "https://example.test/form", "host": "example.test"}],
     })
 
-    assert "[EMAIL BEGINNING]" in prompt
-    assert "[ACTION-BEARING SENTENCES]" in prompt
-    assert "[EMAIL ENDING]" in prompt
+    assert prompt.count(
+        "This is background information about the service and its features."
+    ) == 90
+    assert "[EMAIL BEGINNING]" not in prompt
+    assert "[ACTION-BEARING SENTENCES]" not in prompt
+    assert "[EMAIL ENDING]" not in prompt
     assert "enter your password and recovery code" in prompt
+
+
+def test_complete_body_split_keeps_every_middle_section():
+    paragraphs = [
+        f"Paragraph {index}: unique context value {index}."
+        for index in range(1, 31)
+    ]
+    body = "\n\n".join(paragraphs)
+
+    chunks = llm._split_complete_email_body(
+        body,
+        limit=180,
+        overlap=40,
+    )
+
+    assert len(chunks) > 1
+    for paragraph in paragraphs:
+        assert any(paragraph in chunk for chunk in chunks)
+
+
+def test_long_email_analyzes_all_sections_and_merges_middle_intent(monkeypatch):
+    calls = []
+
+    def fake_stream(messages, model, timeout):
+        prompt = messages[1]["content"]
+        calls.append(prompt)
+        if "enter your password and recovery code" in prompt:
+            text = (
+                '{"action":"provide_credentials","channel":"form",'
+                '"evidence":"enter your password and recovery code"}'
+            )
+        else:
+            text = '{"action":"info","channel":"none","evidence":""}'
+        yield {"status": "ok", "model": model, "text": text}
+
+    background = (
+        "This paragraph contains ordinary background information about the service. "
+        * 70
+    )
+    body = (
+        background
+        + "\n\nTo continue, enter your password and recovery code in the form.\n\n"
+        + background
+        + background
+    )
+    monkeypatch.setattr(llm, "_use_ollama", lambda: False)
+    monkeypatch.setattr(llm, "_github_models_token", lambda: "token")
+    monkeypatch.setattr(llm, "_stream_github_models", fake_stream)
+
+    events = list(llm.stream_phi4_email_analysis({
+        "subject": "Service information",
+        "body_for_ai": body,
+        "links": [{"url": "https://example.test/form", "host": "example.test"}],
+        "auth_results": {},
+    }))
+
+    progress = [
+        event for event in events
+        if event.get("status") == "progress"
+        and event.get("stage") == "content"
+    ]
+    analysis = events[-1]["analysis"]
+    assert len(calls) > 1
+    assert len(progress) == len(calls)
+    assert progress[-1]["current"] == progress[-1]["total"]
+    assert analysis["requested_action"] == "provide_credentials"
+    assert analysis["intent_evidence"] == "enter your password and recovery code"
+    assert events[-1]["analyzed_sections"] == len(calls)
 
 
 def test_impossible_link_channel_is_removed():

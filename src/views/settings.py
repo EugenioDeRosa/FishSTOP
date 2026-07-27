@@ -1,7 +1,6 @@
 import streamlit as st
 
 from src.config import MANAGED_API_KEYS, get_secret, get_secret_source, set_user_secret
-from src.views import backend
 from src.views.backend import get_model_source
 from src.analyzer.llm_context_analyzer import active_llm_backend
 from src.ui import page_intro
@@ -68,14 +67,12 @@ def render():
         for key, value in pending_values.items():
             if value.strip():
                 set_user_secret(key, value)
-        backend.init_content_model.clear()
         st.success("API keys saved for this session. New requests will use them first.")
         st.rerun()
 
     if clear:
         for key in MANAGED_API_KEYS:
             set_user_secret(key, "")
-        backend.init_content_model.clear()
         st.success("Session API keys cleared. FishSTOP will use .env/environment/secrets fallbacks.")
         st.rerun()
 

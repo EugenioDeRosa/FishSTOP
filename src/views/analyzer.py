@@ -1,8 +1,8 @@
 import json
 import hashlib
+import copy
 import re
 import tempfile
-from concurrent.futures import ThreadPoolExecutor
 from html import escape as html_escape
 from urllib.parse import urlsplit, urlunsplit
 
@@ -13,9 +13,11 @@ from src.analyzer.html_utils import sanitize_html_for_js_preview, sanitize_html_
 from src.analyzer.llm_context_analyzer import (
     PROMPT_VERSION,
     active_llm_backend,
+    apply_email_risk_policy,
     format_email_risk_analysis,
     stream_phi4_email_analysis,
 )
+from src.background_jobs import BackgroundJobManager
 from src.analyzer.received_parser import order_received_hops
 from src.bert_calibration import calibrated_probabilities, classify as classify_bert_result
 from src.bert_inference import predict_email_logits
@@ -23,14 +25,19 @@ from src.bert_input import prepare_bert_input
 from src.components.email_globe import render_email_globe
 from src.config import get_secret
 from src.ui import page_intro, risk_banner
-from src.views.backend import get_calibration, get_content_model, get_core_backend
+from src.views.backend import (
+    HF_MODEL_REVISION,
+    get_core_backend,
+    init_calibration,
+    init_content_model,
+)
 
 MAX_EML_BYTES = 25 * 1024 * 1024
 
 
-def _secret_revision(name: str) -> str:
-    value = get_secret(name)
-    return hashlib.sha256(value.encode("utf-8")).hexdigest() if value else "missing"
+@st.cache_resource
+def _get_background_job_manager() -> BackgroundJobManager:
+    return BackgroundJobManager()
 
 
 def _analyze_eml_bytes(raw_bytes: bytes) -> dict:
@@ -49,55 +56,6 @@ def _analyze_eml_bytes(raw_bytes: bytes) -> dict:
                 os.unlink(temp_path)
             except FileNotFoundError:
                 pass
-
-
-@st.cache_data(show_spinner=False, ttl=900, max_entries=512)
-def _cached_url_reputation(url: str, secret_version: str) -> dict:
-    validator, _ = get_core_backend()
-    return validator.check_url_reputation(url)
-
-
-@st.cache_data(show_spinner=False, ttl=900, max_entries=512)
-def _cached_domain_reputation(domain: str, secret_version: str) -> dict:
-    validator, _ = get_core_backend()
-    return validator.check_domain_reputation(domain)
-
-
-@st.cache_data(show_spinner=False, ttl=900, max_entries=1024)
-def _cached_ip_reputation(ip: str, secret_version: str) -> dict:
-    validator, _ = get_core_backend()
-    return validator.check_ip_reputation(ip)
-
-
-@st.cache_data(show_spinner=False, ttl=3600, max_entries=1024)
-def _cached_geolocation(ip: str) -> dict:
-    validator, _ = get_core_backend()
-    return validator.geolocate_ip(ip)
-
-
-@st.cache_data(show_spinner=False, ttl=900, max_entries=512)
-def _cached_file_reputation(sha256: str, secret_version: str) -> dict:
-    validator, _ = get_core_backend()
-    return validator.check_file_hash(sha256)
-
-
-class _CachedValidator:
-    """Reuse reputation results across Streamlit reruns and repeated UI sections."""
-
-    def check_url_reputation(self, url: str) -> dict:
-        return _cached_url_reputation(url, _secret_revision("VIRUSTOTAL_API_KEY"))
-
-    def check_domain_reputation(self, domain: str) -> dict:
-        return _cached_domain_reputation(domain, _secret_revision("ABUSEIPDB_API_KEY"))
-
-    def check_ip_reputation(self, ip: str) -> dict:
-        return _cached_ip_reputation(ip, _secret_revision("ABUSEIPDB_API_KEY"))
-
-    def geolocate_ip(self, ip: str) -> dict:
-        return _cached_geolocation(ip)
-
-    def check_file_hash(self, sha256: str) -> dict:
-        return _cached_file_reputation(sha256, _secret_revision("VIRUSTOTAL_API_KEY"))
 
 
 def _strip_encoded_content(raw: str) -> str:
@@ -152,7 +110,18 @@ def _flag_counts(flags: list[dict]) -> dict:
     }
 
 
-def _severity(counts: dict) -> tuple[str, str]:
+def _severity(
+    counts: dict,
+    phi4_analysis: dict | None = None,
+) -> tuple[str, str]:
+    if isinstance(phi4_analysis, dict):
+        verdict = str(phi4_analysis.get("final_verdict") or "").lower()
+        if verdict == "phishing":
+            return "CRITICAL", "Final combined verdict: phishing"
+        if verdict == "review":
+            return "SUSPICIOUS", "Final combined verdict: manual review required"
+        if verdict == "legitimate":
+            return "LOW", "Final combined verdict: likely legitimate"
     if counts["HIGH"]:
         return "CRITICAL", "High-priority indicators found"
     if counts["MEDIUM"]:
@@ -439,7 +408,149 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
         )
 
 
-def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
+def _run_phi4_background(soc: dict, github_token: str = "") -> dict:
+    last_error = ""
+    for event in stream_phi4_email_analysis(
+        soc,
+        github_token=github_token or None,
+    ):
+        if event.get("status") == "ok":
+            return event
+        if event.get("status") == "error":
+            last_error = event.get("message") or "Phi-4 mini analysis failed"
+    raise RuntimeError(last_error or "Phi-4 mini did not return a final result")
+
+
+def _schedule_phi4_background(
+    manager: BackgroundJobManager,
+    soc: dict,
+    analysis_key: str,
+) -> tuple[str, tuple] | None:
+    backend = active_llm_backend()
+    hosted = backend.startswith("github models")
+    if backend == "not configured":
+        return None
+    if hosted and not st.session_state.get(f"{analysis_key}_hosted_consent"):
+        return None
+
+    github_token = get_secret("GITHUB_MODELS_TOKEN") if hosted else ""
+    token_revision = (
+        hashlib.sha256(github_token.encode("utf-8")).hexdigest()
+        if github_token
+        else "local"
+    )
+    key = ("phi4", analysis_key, backend, token_revision)
+    soc_snapshot = copy.deepcopy({
+        name: value
+        for name, value in soc.items()
+        if name != "raw_eml_bytes"
+    })
+    manager.get_or_submit(
+        "llm",
+        key,
+        _run_phi4_background,
+        soc_snapshot,
+        github_token,
+    )
+    return ("llm", key)
+
+
+def _run_bert_background(email_text: str, hf_token: str = "") -> dict:
+    tokenizer, model, model_source = init_content_model(hf_token)
+    calibration = init_calibration(hf_token)
+    model_dataset_hash = str(
+        getattr(model.config, "fishstop_dataset_sha256", "") or ""
+    )
+    calibration_dataset_hash = str(
+        calibration.get("dataset_sha256") or ""
+    )
+    if (
+        model_dataset_hash
+        and calibration_dataset_hash
+        and model_dataset_hash != calibration_dataset_hash
+    ):
+        raise ValueError(
+            "DistilBERT model and calibration.json were produced from "
+            "different datasets"
+        )
+
+    positive_label_id = int(calibration.get("positive_label_id", 1))
+    logits, chunk_count = predict_email_logits(
+        model,
+        tokenizer,
+        email_text,
+        positive_label_id=positive_label_id,
+    )
+    probabilities = calibrated_probabilities(
+        logits,
+        temperature=calibration["temperature"],
+    ).flatten().tolist()
+    negative_label_id = 1 - positive_label_id
+    classification = classify_bert_result(
+        probabilities[positive_label_id],
+        threshold=calibration["threshold"],
+        band=calibration["band"],
+    )
+    return {
+        "classification": classification,
+        "probability_legitimate": probabilities[negative_label_id] * 100,
+        "probability_malicious": probabilities[positive_label_id] * 100,
+        "logits": logits.detach().cpu().flatten().tolist(),
+        "chunk_count": chunk_count,
+        "positive_label_id": positive_label_id,
+        "model_source": model_source,
+        "model_dataset_hash": model_dataset_hash,
+        "calibration_dataset_hash": calibration_dataset_hash,
+        "calibration": calibration,
+    }
+
+
+def _schedule_bert_background(
+    manager: BackgroundJobManager,
+    email_text: str,
+    email_digest: str,
+) -> tuple[str, tuple] | None:
+    if not email_text:
+        return None
+    hf_token = get_secret("HF_TOKEN")
+    token_revision = (
+        hashlib.sha256(hf_token.encode("utf-8")).hexdigest()
+        if hf_token
+        else "public"
+    )
+    key = (
+        "bert",
+        email_digest,
+        HF_MODEL_REVISION,
+        token_revision,
+    )
+    manager.get_or_submit(
+        "bert",
+        key,
+        _run_bert_background,
+        email_text,
+        hf_token,
+    )
+    return ("bert", key)
+
+
+def _apply_bert_result_to_soc(soc: dict, result: dict) -> None:
+    soc["bert_ai_result"] = result["classification"]
+    soc["bert_phishing_probability"] = result["probability_malicious"]
+    soc["bert_malicious_probability"] = result["probability_malicious"]
+    soc["bert_legitimate_probability"] = result["probability_legitimate"]
+    soc["bert_chunk_count"] = result["chunk_count"]
+    soc["bert_probability_calibrated"] = (
+        (result.get("calibration") or {}).get("source") == "huggingface"
+    )
+
+
+def _render_phi4_analysis(
+    soc: dict,
+    analysis_key: str,
+    job_reference: tuple[str, tuple] | None,
+    auto_run: bool = False,
+):
     st.markdown("#### Phi-4 mini scam/phishing explanation")
     st.caption(
         f"Phi-4 mini analysis via {active_llm_backend()}: evaluates plain and HTML content, urgency, money, IBANs, "
@@ -472,10 +583,34 @@ def _render_phi4_analysis(soc: dict, analysis_key: str, auto_run: bool = False):
             st.info("Hosted LLM analysis is paused until you provide consent.")
             return None
 
-    if auto_run:
-        placeholder = st.empty()
-        placeholder.markdown(_phi4_loading_html(), unsafe_allow_html=True)
-        return placeholder
+    if job_reference is not None:
+        snapshot = _get_background_job_manager().snapshot(*job_reference)
+        if snapshot.state == "done":
+            event = snapshot.result if isinstance(snapshot.result, dict) else {}
+            analysis = event.get("analysis")
+            if not isinstance(analysis, dict):
+                st.session_state[error_key] = (
+                    "Structured Phi-4 analysis is missing"
+                )
+                st.error(st.session_state[error_key])
+                return None
+            st.session_state[result_key] = analysis
+            st.rerun()
+        if snapshot.state == "error":
+            st.session_state[error_key] = (
+                f"Error during Phi-4 mini analysis: {snapshot.error}"
+            )
+            st.error(st.session_state[error_key])
+            return None
+        st.markdown(_phi4_loading_html(), unsafe_allow_html=True)
+        return None
+
+    if auto_run and backend == "not configured":
+        st.error(
+            "LLM analysis unavailable: start Ollama locally with Phi-4 mini "
+            "or configure GITHUB_MODELS_TOKEN."
+        )
+        return None
 
     st.info("Phi-4 mini analysis starts automatically in the Executive Triage panel.")
     return None
@@ -511,7 +646,13 @@ def _show_phi4_result(target, result):
         target.success(message)
 
 
-def _phi4_loading_html() -> str:
+def _phi4_loading_html(
+    detail: str = (
+        "Phi-4 mini is still analyzing the email. "
+        "The final verdict is not available yet."
+    ),
+) -> str:
+    safe_detail = html_escape(str(detail or "Phi-4 mini is analyzing the email."))
     return """
     <div style="
         display: flex;
@@ -524,16 +665,30 @@ def _phi4_loading_html() -> str:
         color: #57606a;
         font-size: 0.95rem;
     ">
-        <span>Phi-4 mini is analyzing content and technical indicators</span>
+        <span class="phi4-spinner" aria-hidden="true"></span>
+        <span>
+            <strong style="display:block; color:#24292f;">Analysis in progress</strong>
+            __PHI4_PROGRESS_DETAIL__
+        </span>
         <span class="phi4-typing-dots" aria-label="loading">
             <span></span><span></span><span></span>
         </span>
     </div>
     <style>
+        .phi4-spinner {
+            width: 18px;
+            height: 18px;
+            flex: 0 0 18px;
+            border: 2px solid #afb8c1;
+            border-top-color: #0969da;
+            border-radius: 50%;
+            animation: phi4Spin 0.8s linear infinite;
+        }
         .phi4-typing-dots {
             display: inline-flex;
             align-items: center;
             gap: 4px;
+            margin-left: auto;
         }
         .phi4-typing-dots span {
             width: 6px;
@@ -559,49 +714,20 @@ def _phi4_loading_html() -> str:
                 opacity: 1;
             }
         }
+        @keyframes phi4Spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
     </style>
-    """
-
-
-def _stream_phi4_analysis(soc: dict, analysis_key: str, placeholder):
-    if placeholder is None:
-        return
-
-    result_key = f"{analysis_key}_result"
-    error_key = f"{analysis_key}_error"
-    if st.session_state.get(result_key) or st.session_state.get(error_key):
-        return
-
-    last_text = ""
-    try:
-        placeholder.markdown(_phi4_loading_html(), unsafe_allow_html=True)
-        for event in stream_phi4_email_analysis(soc):
-            if event.get("status") == "stream":
-                # The streamed model output is JSON and is intentionally hidden
-                # until it has been parsed and validated by the application.
-                last_text = event.get("text") or last_text
-            elif event.get("status") == "ok":
-                analysis = event.get("analysis")
-                if not isinstance(analysis, dict):
-                    raise ValueError("Structured Phi-4 analysis is missing")
-                st.session_state[result_key] = analysis
-                _show_phi4_result(placeholder, analysis)
-                return
-            elif event.get("status") == "error":
-                last_text = event.get("text") or last_text
-                if last_text:
-                    placeholder.warning(last_text)
-                st.session_state[error_key] = event.get("message") or "Error durante l'analisi Phi-4 mini."
-                st.error(st.session_state[error_key])
-                return
-    except Exception as exc:
-        st.session_state[error_key] = f"Error durante l'analisi Phi-4 mini: {exc}"
-        st.error(st.session_state[error_key])
+    """.replace("__PHI4_PROGRESS_DETAIL__", safe_detail)
 
 
 def _render_abuseipdb(rep: dict):
     status = rep.get("status")
-    if status == "ok":
+    if status == "pending":
+        st.info(rep.get("message", "Reputation analysis in progress"))
+    elif status == "ok":
         score = int(rep.get("abuseConfidenceScore") or 0)
         if rep.get("isWhitelisted"):
             st.success("Whitelisted - known provider")
@@ -629,7 +755,9 @@ def _render_abuseipdb(rep: dict):
 
 
 def _render_geo(geo: dict):
-    if geo.get("status") == "ok":
+    if geo.get("status") == "pending":
+        st.info(geo.get("message", "Geolocation in progress"))
+    elif geo.get("status") == "ok":
         parts = [geo.get("city"), geo.get("region"), geo.get("country")]
         location = ", ".join(p for p in parts if p) or "-"
         st.markdown(f"**Geo:** {location}")
@@ -650,6 +778,9 @@ def _render_geo(geo: dict):
 
 def _render_virustotal(vt: dict):
     status = vt.get("status")
+    if status == "pending":
+        st.info(vt.get("message", "VirusTotal analysis in progress"))
+        return
     if status == "malicious":
         st.error(f"MALICIOUS - {vt.get('detection_ratio', '-')}")
     elif status == "suspicious":
@@ -674,6 +805,9 @@ def _render_vt_url(rep: dict):
     message = rep.get("message", "")
     permalink = rep.get("permalink")
 
+    if status == "pending":
+        st.info(f"VirusTotal: {message or 'analysis in progress'}")
+        return
     if status == "malicious":
         st.error(f"VirusTotal: MALICIOUS - {rep.get('detection_ratio', '-')}")
     elif status == "suspicious":
@@ -924,11 +1058,251 @@ def _render_auth_evidence(result: dict) -> None:
         st.caption("Nessuna stringa trovata nell'EML per questo controllo.")
 
 
-def _safe_vt_url_lookup(validator, url: str) -> dict:
+def _safe_vt_url_lookup(
+    validator,
+    url: str,
+    api_key: str | None = None,
+) -> dict:
     lookup = getattr(validator, "check_url_reputation", None)
     if callable(lookup):
-        return lookup(url)
+        try:
+            return lookup(url, api_key=api_key)
+        except TypeError:
+            return lookup(url)
     return {"status": "skipped", "url": url, "message": "Validator VirusTotal URL unavailable"}
+
+
+def _sender_domains(soc: dict) -> dict[str, str]:
+    def pull_domain(raw: str | None) -> str:
+        if not raw:
+            return ""
+        match = re.search(r"@([\w.\-]+)", raw)
+        return match.group(1).lower() if match else ""
+
+    domains: dict[str, str] = {}
+    from_domain = pull_domain(soc.get("from_"))
+    return_path_domain = pull_domain(soc.get("return_path"))
+    reply_to_domain = pull_domain(soc.get("reply_to"))
+    if from_domain:
+        domains[f"From ({from_domain})"] = from_domain
+    if return_path_domain and return_path_domain != from_domain:
+        domains[f"Return-Path ({return_path_domain})"] = return_path_domain
+    if reply_to_domain and reply_to_domain not in {
+        from_domain,
+        return_path_domain,
+    }:
+        domains[f"Reply-To ({reply_to_domain})"] = reply_to_domain
+    return domains
+
+
+def _routing_ips(soc: dict) -> list[str]:
+    values = [
+        soc.get("injection_sender_ip"),
+        *[
+            ip
+            for hop in (soc.get("received_hops") or [])
+            for ip in (
+                hop.get("all_ips")
+                or ([hop.get("sender_ip")] if hop.get("sender_ip") else [])
+            )
+        ],
+    ]
+    return list(dict.fromkeys(
+        str(value).strip()
+        for value in values
+        if str(value or "").strip()
+    ))
+
+
+def _schedule_background_lookups(
+    manager: BackgroundJobManager,
+    validator,
+    soc: dict,
+) -> dict[str, dict[str, tuple[str, tuple]]]:
+    vt_api_key = get_secret("VIRUSTOTAL_API_KEY")
+    abuse_api_key = get_secret("ABUSEIPDB_API_KEY")
+    vt_revision = hashlib.sha256(vt_api_key.encode("utf-8")).hexdigest() if vt_api_key else "missing"
+    abuse_revision = hashlib.sha256(abuse_api_key.encode("utf-8")).hexdigest() if abuse_api_key else "missing"
+    plan: dict[str, dict[str, tuple[str, tuple]]] = {
+        "urls": {},
+        "domains": {},
+        "ip_reputation": {},
+        "geolocation": {},
+        "files": {},
+    }
+
+    for link in (soc.get("links") or []):
+        url = str(link.get("url") or "").strip()
+        if not url or url in plan["urls"]:
+            continue
+        key = ("url", vt_revision, url)
+        manager.get_or_submit(
+            "virustotal",
+            key,
+            _safe_vt_url_lookup,
+            validator,
+            url,
+            vt_api_key,
+        )
+        plan["urls"][url] = ("virustotal", key)
+
+    for domain in dict.fromkeys(_sender_domains(soc).values()):
+        key = ("domain", abuse_revision, domain)
+        manager.get_or_submit(
+            "abuseipdb",
+            key,
+            validator.check_domain_reputation,
+            domain,
+            api_key=abuse_api_key,
+        )
+        plan["domains"][domain] = ("abuseipdb", key)
+
+    for ip in _routing_ips(soc):
+        reputation_key = ("ip", abuse_revision, ip)
+        manager.get_or_submit(
+            "abuseipdb",
+            reputation_key,
+            validator.check_ip_reputation,
+            ip,
+            api_key=abuse_api_key,
+        )
+        plan["ip_reputation"][ip] = ("abuseipdb", reputation_key)
+
+        geolocation_key = ("ip", ip)
+        manager.get_or_submit(
+            "geolocation",
+            geolocation_key,
+            validator.geolocate_ip,
+            ip,
+        )
+        plan["geolocation"][ip] = ("geolocation", geolocation_key)
+
+    for attachment in (soc.get("attachments") or []):
+        sha256 = str(attachment.get("hash_sha256") or "").strip()
+        if not sha256 or sha256 in plan["files"]:
+            continue
+        key = ("file", vt_revision, sha256)
+        manager.get_or_submit(
+            "virustotal",
+            key,
+            validator.check_file_hash,
+            sha256,
+            api_key=vt_api_key,
+        )
+        plan["files"][sha256] = ("virustotal", key)
+
+    return plan
+
+
+def _background_lookup_result(
+    manager: BackgroundJobManager,
+    reference: tuple[str, tuple],
+    *,
+    service: str,
+) -> dict:
+    pool, key = reference
+    snapshot = manager.snapshot(pool, key)
+    if snapshot.state == "done":
+        if isinstance(snapshot.result, dict):
+            return snapshot.result
+        return {
+            "status": "error",
+            "message": f"{service} returned an invalid result",
+        }
+    if snapshot.state == "error":
+        return {
+            "status": "error",
+            "message": f"{service}: {snapshot.error}",
+        }
+    return {
+        "status": "pending",
+        "message": f"{service} analysis in progress",
+    }
+
+
+def _background_plan_states(
+    manager: BackgroundJobManager,
+    plan: dict[str, dict[str, tuple[str, tuple]]],
+) -> tuple[str, ...]:
+    return tuple(
+        manager.snapshot(pool, key).state
+        for group in plan.values()
+        for pool, key in group.values()
+    )
+
+
+def _background_refresh_required(
+    rendered_states: tuple[str, ...],
+    current_states: tuple[str, ...],
+    previous_states: tuple[str, ...] | None,
+) -> bool:
+    return (
+        current_states != rendered_states
+        or (
+            previous_states is not None
+            and previous_states != current_states
+        )
+    )
+
+
+@st.fragment(run_every=0.75)
+def _render_background_progress(
+    email_hash: str,
+    plan: dict[str, dict[str, tuple[str, tuple]]],
+    rendered_states: tuple[str, ...],
+) -> None:
+    manager = _get_background_job_manager()
+    states = _background_plan_states(manager, plan)
+    if not states:
+        return
+    terminal_states = {"done", "error", "cancelled"}
+
+    def group_progress(group_names: set[str]) -> tuple[int, int]:
+        group_states = [
+            manager.snapshot(pool, key).state
+            for name, group in plan.items()
+            if name in group_names
+            for pool, key in group.values()
+        ]
+        return (
+            sum(state in terminal_states for state in group_states),
+            len(group_states),
+        )
+
+    external_done, external_total = group_progress({
+        "urls", "domains", "ip_reputation", "geolocation", "files",
+    })
+    bert_done, bert_total = group_progress({"bert"})
+    phi_done, phi_total = group_progress({"phi4"})
+    progress_parts = []
+    if external_total:
+        progress_parts.append(
+            f"External intelligence {external_done}/{external_total}"
+        )
+    if bert_total:
+        progress_parts.append(f"DistilBERT {bert_done}/{bert_total}")
+    if phi_total:
+        progress_parts.append(f"Phi-4 mini {phi_done}/{phi_total}")
+
+    completed = sum(state in terminal_states for state in states)
+    if completed < len(states):
+        st.info(
+            "Results appear independently as soon as they are ready: "
+            + " · ".join(progress_parts)
+        )
+    else:
+        st.success("All analysis jobs completed: " + " · ".join(progress_parts))
+
+    signature_key = f"background_lookup_signature_{email_hash}"
+    previous = st.session_state.get(signature_key)
+    if _background_refresh_required(
+        rendered_states,
+        states,
+        previous,
+    ):
+        st.session_state[signature_key] = states
+        st.rerun(scope="app")
+    st.session_state[signature_key] = states
 
 
 def _summarize_link_reputation(results: dict) -> str:
@@ -965,7 +1339,8 @@ def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_java
 
 
 def render():
-    validator = _CachedValidator()
+    validator, _ = get_core_backend()
+    background_jobs = _get_background_job_manager()
 
     page_intro(
         "Email analysis",
@@ -1018,48 +1393,192 @@ def render():
                     st.session_state[soc_cache_key] = soc
 
             flags = soc.get("flags", [])
-            counts = _flag_counts(flags)
-            severity, severity_caption = _severity(counts)
             links = soc.get("links", [])
             attachments = soc.get("attachments", [])
             lookalike_alerts = soc.get("lookalike_alerts", [])
             eml_auth = _email_auth_from_eml(soc)
-            unique_links = {lnk["url"]: lnk for lnk in links if lnk.get("url")}
-            vt_url_results = {}
-            if unique_links:
-                with st.spinner("Running VirusTotal URL lookup..."):
-                    max_workers = min(4, max(1, len(unique_links)))
-                    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                        futures = {
-                            executor.submit(_safe_vt_url_lookup, validator, url): url
-                            for url in unique_links
-                        }
-                        for future, url in futures.items():
-                            try:
-                                vt_url_results[url] = future.result()
-                            except Exception as exc:
-                                vt_url_results[url] = {
-                                    "status": "error",
-                                    "url": url,
-                                    "message": f"Error lookup VirusTotal URL: {exc}",
-                                }
+            background_plan = _schedule_background_lookups(
+                background_jobs,
+                validator,
+                soc,
+            )
+            rendered_background_states = list(
+                _background_plan_states(
+                    background_jobs,
+                    background_plan,
+                )
+            )
+            vt_url_results = {
+                url: _background_lookup_result(
+                    background_jobs,
+                    reference,
+                    service="VirusTotal URL",
+                )
+                for url, reference in background_plan["urls"].items()
+            }
+            domain_results = {
+                domain: _background_lookup_result(
+                    background_jobs,
+                    reference,
+                    service="Domain reputation",
+                )
+                for domain, reference in background_plan["domains"].items()
+            }
+            hop_reputation_results = {
+                ip: _background_lookup_result(
+                    background_jobs,
+                    reference,
+                    service="IP reputation",
+                )
+                for ip, reference in background_plan["ip_reputation"].items()
+            }
+            geolocation_results = {
+                ip: _background_lookup_result(
+                    background_jobs,
+                    reference,
+                    service="IP geolocation",
+                )
+                for ip, reference in background_plan["geolocation"].items()
+            }
+            file_results = {
+                sha256: _background_lookup_result(
+                    background_jobs,
+                    reference,
+                    service="VirusTotal file",
+                )
+                for sha256, reference in background_plan["files"].items()
+            }
             soc["link_reputation"] = vt_url_results
             soc["link_reputation_summary"] = _summarize_link_reputation(vt_url_results)
-            soc["domain_reputation"] = {}
-            soc["hop_reputation"] = {}
+            soc["domain_reputation"] = domain_results
+            soc["hop_reputation"] = hop_reputation_results
+            soc["geolocation_results"] = geolocation_results
+            for attachment in attachments:
+                sha256 = str(attachment.get("hash_sha256") or "").strip()
+                if sha256 and sha256 in file_results:
+                    attachment["file_reputation"] = file_results[sha256]
 
-            st.markdown("### Analysis summary")
-            risk_banner(severity, severity_caption)
+            eml_digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
+            phi4_key = f"phi4_analysis_{PROMPT_VERSION}_{eml_digest}"
+            clean_body = (
+                soc.get("body_for_ai")
+                or soc.get("body_ai")
+                or soc.get("body_clean")
+                or ""
+            )
+            email_text = prepare_bert_input(
+                soc.get("subject") or "",
+                clean_body,
+                has_extracted_links=bool(soc.get("links")),
+            )
+            bert_job_reference = _schedule_bert_background(
+                background_jobs,
+                email_text,
+                eml_digest,
+            )
+            bert_result = None
+            bert_error = ""
+            if bert_job_reference is not None:
+                background_plan["bert"] = {
+                    eml_digest: bert_job_reference,
+                }
+                bert_snapshot = background_jobs.snapshot(
+                    *bert_job_reference
+                )
+                rendered_background_states.append(bert_snapshot.state)
+                if (
+                    bert_snapshot.state == "done"
+                    and isinstance(bert_snapshot.result, dict)
+                ):
+                    bert_result = bert_snapshot.result
+                    _apply_bert_result_to_soc(soc, bert_result)
+                elif bert_snapshot.state == "error":
+                    bert_error = bert_snapshot.error
+            elif not email_text:
+                soc["bert_ai_result"] = "not available"
+
+            cached_phi4 = st.session_state.get(f"{phi4_key}_result")
+            phi4_error = st.session_state.get(f"{phi4_key}_error")
+            phi4_job_reference = None
+            if not isinstance(cached_phi4, dict) and not phi4_error:
+                phi4_job_reference = _schedule_phi4_background(
+                    background_jobs,
+                    soc,
+                    phi4_key,
+                )
+                if phi4_job_reference is not None:
+                    background_plan["phi4"] = {
+                        phi4_key: phi4_job_reference,
+                    }
+                    rendered_background_states.append(
+                        background_jobs.snapshot(
+                            *phi4_job_reference
+                        ).state
+                    )
+            if (
+                isinstance(cached_phi4, dict)
+                and isinstance(cached_phi4.get("semantic_extraction"), dict)
+            ):
+                cached_phi4 = apply_email_risk_policy(
+                    soc,
+                    cached_phi4["semantic_extraction"],
+                )
+                st.session_state[f"{phi4_key}_result"] = cached_phi4
+            phi4_pending = not isinstance(cached_phi4, dict) and not phi4_error
+            if isinstance(cached_phi4, dict):
+                phi4_verdict = str(
+                    cached_phi4.get("final_verdict") or ""
+                ).lower()
+                if phi4_verdict in {"phishing", "review"}:
+                    flags = [
+                        *flags,
+                        {
+                            "level": "HIGH" if phi4_verdict == "phishing" else "MEDIUM",
+                            "field": "Phi-4 policy",
+                            "message": (
+                                cached_phi4.get("content_summary")
+                                or cached_phi4.get("explanation")
+                                or f"Phi-4 verdict: {phi4_verdict}"
+                            ),
+                        },
+                    ]
+            counts = _flag_counts(flags)
+            severity, severity_caption = _severity(counts, cached_phi4)
+
+            if isinstance(cached_phi4, dict):
+                st.markdown("### Final analysis")
+            elif phi4_pending:
+                st.markdown("### Analysis in progress")
+                st.info(
+                    "Phi-4 mini is still analyzing the email. The indicators below "
+                    "are preliminary; the final verdict will appear automatically."
+                )
+            else:
+                st.markdown("### Preliminary analysis")
+            risk_banner(
+                severity,
+                severity_caption
+                if not phi4_pending
+                else f"Preliminary technical triage: {severity_caption}",
+            )
             c1, c2, c3, c4 = st.columns(4)
             c1.metric("Critical signals", counts["HIGH"])
             c2.metric("Review signals", counts["MEDIUM"])
             c3.metric("Links", len(links))
             c4.metric("Attachments", len(attachments))
+            _render_background_progress(
+                current_eml_hash,
+                background_plan,
+                tuple(rendered_background_states),
+            )
 
-            eml_digest = hashlib.sha256(uploaded_file.getvalue()).hexdigest()
-            phi4_key = f"phi4_analysis_{PROMPT_VERSION}_{eml_digest}"
             with st.container(border=True):
-                phi4_placeholder = _render_phi4_analysis(soc, phi4_key, auto_run=True)
+                _render_phi4_analysis(
+                    soc,
+                    phi4_key,
+                    phi4_job_reference,
+                    auto_run=True,
+                )
 
             actionable_flags = [flag for flag in flags if flag.get("level", "INFO") != "INFO"]
             main_flags = _main_alert_flags(flags)
@@ -1140,35 +1659,19 @@ def render():
                     st.error(f"Display Name Spoofing: `{soc['display_name_spoofing']}`")
 
                 st.markdown("#### Domain reputation")
-                domains = {}
-
-                def pull_domain(raw: str | None) -> str:
-                    if not raw:
-                        return ""
-                    m = re.search(r"@([\w.\-]+)", raw)
-                    return m.group(1).lower() if m else ""
-
-                from_domain = pull_domain(soc.get("from_"))
-                rp_domain = pull_domain(soc.get("return_path"))
-                rt_domain = pull_domain(soc.get("reply_to"))
-                if from_domain:
-                    domains[f"From ({from_domain})"] = from_domain
-                if rp_domain and rp_domain != from_domain:
-                    domains[f"Return-Path ({rp_domain})"] = rp_domain
-                if rt_domain and rt_domain not in (from_domain, rp_domain):
-                    domains[f"Reply-To ({rt_domain})"] = rt_domain
+                domains = _sender_domains(soc)
 
                 if not domains:
                     st.info("No sender domain could be extracted.")
                 else:
                     for label, domain in domains.items():
                         with st.expander(label):
-                            with st.spinner(f"Domain reputation {domain}..."):
-                                domain_reputation = soc["domain_reputation"].get(domain)
-                                if domain_reputation is None:
-                                    domain_reputation = validator.check_domain_reputation(domain)
-                                    soc["domain_reputation"][domain] = domain_reputation
-                                _render_abuseipdb(domain_reputation)
+                            _render_abuseipdb(
+                                domain_results.get(domain, {
+                                    "status": "pending",
+                                    "message": "Domain reputation analysis in progress",
+                                })
+                            )
 
             with auth:
                 st.markdown("#### Authentication")
@@ -1193,7 +1696,11 @@ def render():
                 c3.metric("Closest sender", (soc.get("closest_to_sender") or {}).get("from_host") or "-")
 
                 with st.expander("Email geographic route", expanded=False):
-                    render_email_globe(soc, validator)
+                    render_email_globe(
+                        soc,
+                        geolocation_results=geolocation_results,
+                        reputation_results=hop_reputation_results,
+                    )
 
                 for idx, hop in enumerate(routing_hops, start=1):
                     title = f"Hop {idx}: {_hop_from_label(hop)} -> {_hop_by_label(hop)}"
@@ -1210,15 +1717,19 @@ def render():
                         for ip in all_ips:
                             with st.container(border=True):
                                 st.write(f"IP `{ip}`")
-                                with st.spinner(f"Geolocation {ip}..."):
-                                    _render_geo(validator.geolocate_ip(ip))
+                                _render_geo(
+                                    geolocation_results.get(ip, {
+                                        "status": "pending",
+                                        "message": "IP geolocation in progress",
+                                    })
+                                )
                                 with st.expander("AbuseIPDB"):
-                                    with st.spinner(f"Reputation {ip}..."):
-                                        hop_reputation = soc["hop_reputation"].get(ip)
-                                        if hop_reputation is None:
-                                            hop_reputation = validator.check_ip_reputation(ip)
-                                            soc["hop_reputation"][ip] = hop_reputation
-                                        _render_abuseipdb(hop_reputation)
+                                    _render_abuseipdb(
+                                        hop_reputation_results.get(ip, {
+                                            "status": "pending",
+                                            "message": "IP reputation analysis in progress",
+                                        })
+                                    )
                         with st.expander("Raw header"):
                             st.code(hop.get("raw", ""), language="text")
 
@@ -1308,10 +1819,12 @@ def render():
                         if att.get("hash_sha256"):
                             with st.expander("Hash and VirusTotal"):
                                 st.code(att["hash_sha256"], language="text")
-                                with st.spinner("Running VirusTotal attachment lookup..."):
-                                    file_reputation = validator.check_file_hash(att["hash_sha256"])
-                                    att["file_reputation"] = file_reputation
-                                    _render_virustotal(file_reputation)
+                                _render_virustotal(
+                                    file_results.get(att["hash_sha256"], {
+                                        "status": "pending",
+                                        "message": "VirusTotal file analysis in progress",
+                                    })
+                                )
 
 
             with ioc_tab:
@@ -1383,69 +1896,29 @@ def render():
 
             with content_tab:
                 st.markdown("#### Content assessment")
-                clean_body = soc.get("body_for_ai") or soc.get("body_ai") or soc.get("body_clean") or ""
-                email_text = prepare_bert_input(
-                    soc.get("subject") or "",
-                    clean_body,
-                    has_extracted_links=bool(soc.get("links")),
+                _render_phi4_analysis(
+                    soc,
+                    phi4_key,
+                    phi4_job_reference,
+                    auto_run=False,
                 )
 
-                _render_phi4_analysis(soc, phi4_key, auto_run=False)
-
-                with st.spinner("Loading DistilBERT model..."):
-                    tokenizer, model, model_source = get_content_model()
-                calibration = get_calibration()
-                model_dataset_hash = str(getattr(model.config, "fishstop_dataset_sha256", "") or "")
-                calibration_dataset_hash = str(calibration.get("dataset_sha256") or "")
-                if model_dataset_hash and calibration_dataset_hash and model_dataset_hash != calibration_dataset_hash:
-                    raise ValueError(
-                        "DistilBERT model and calibration.json were produced from different datasets"
-                    )
-
-                st.info("DistilBERT model loaded from Hugging Face.")
-                if calibration["source"] != "huggingface":
-                    st.caption(
-                        "⚠️ Nessun `calibration.json` trovato per questo modello: uso i "
-                        "default legacy (soglia 50%, banda 35-65%, nessun temperature "
-                        "scaling). Rilancia il notebook di training per generarlo."
-                    )
+                # DistilBERT runs in the dedicated background worker.
 
                 if not email_text:
-                    soc["bert_ai_result"] = "not available"
                     st.warning("Email has no meaningful text for classification.")
-                else:
-                    positive_label_id = int(calibration.get("positive_label_id", 1))
-                    bert_cache_key = (
-                        f"bert_inference_{eml_digest}_{model_source}_"
-                        f"{model_dataset_hash}_{calibration_dataset_hash}_"
-                        f"{positive_label_id}_{calibration['temperature']}"
+                elif bert_error:
+                    st.error(f"DistilBERT analysis failed: {bert_error}")
+                elif not isinstance(bert_result, dict):
+                    st.info(
+                        "DistilBERT is analyzing the complete content in the "
+                        "background. This section will update automatically."
                     )
-                    cached_bert = st.session_state.get(bert_cache_key)
-                    if cached_bert is None:
-                        with st.spinner("DistilBERT is analyzing the complete content..."):
-                            logits, chunk_count = predict_email_logits(
-                                model,
-                                tokenizer,
-                                email_text,
-                                positive_label_id=positive_label_id,
-                            )
-                            cached_bert = {
-                                "logits": logits.detach().cpu().flatten().tolist(),
-                                "chunk_count": chunk_count,
-                            }
-                            st.session_state[bert_cache_key] = cached_bert
-                    else:
-                        import torch
-
-                        logits = torch.tensor([cached_bert["logits"]], dtype=torch.float32)
-                        chunk_count = int(cached_bert["chunk_count"])
-
-                    probabilities = calibrated_probabilities(
-                        logits, temperature=calibration["temperature"]
-                    ).flatten().tolist()
-                    negative_label_id = 1 - positive_label_id
-                    prob_safe = probabilities[negative_label_id] * 100
-                    prob_malicious = probabilities[positive_label_id] * 100
+                else:
+                    calibration = bert_result["calibration"]
+                    chunk_count = int(bert_result["chunk_count"])
+                    prob_safe = float(bert_result["probability_legitimate"])
+                    prob_malicious = float(bert_result["probability_malicious"])
                     c1, c2 = st.columns(2)
                     c1.metric("Legitimate", f"{prob_safe:.2f}%")
                     c2.metric("Malicious (phishing/spam)", f"{prob_malicious:.2f}%")
@@ -1459,18 +1932,7 @@ def render():
                             f"Uncalibrated classifier confidence from {chunk_count} text block(s); "
                             "it is not a real-world malicious-email probability."
                         )
-                    soc["bert_phishing_probability"] = prob_malicious
-                    soc["bert_malicious_probability"] = prob_malicious
-                    soc["bert_legitimate_probability"] = prob_safe
-                    soc["bert_chunk_count"] = chunk_count
-                    soc["bert_probability_calibrated"] = calibration["source"] == "huggingface"
-
-                    result = classify_bert_result(
-                        probabilities[positive_label_id],
-                        threshold=calibration["threshold"],
-                        band=calibration["band"],
-                    )
-                    soc["bert_ai_result"] = result
+                    result = bert_result["classification"]
                     if result == "phishing":
                         st.error("AI result: possible malicious email (phishing or spam)")
                     elif result == "legitimate":
@@ -1480,11 +1942,11 @@ def render():
 
                     with st.expander("Raw logits"):
                         st.json({
-                            "logits": logits.flatten().tolist(),
+                            "logits": bert_result["logits"],
                             "calibration_temperature": calibration["temperature"],
                             "decision_threshold": calibration["threshold"],
                             "uncertain_band": calibration["band"],
-                            "positive_label_id": positive_label_id,
+                            "positive_label_id": bert_result["positive_label_id"],
                             "analyzed_chunks": chunk_count,
                             "calibration_source": calibration["source"],
                         })
@@ -1561,8 +2023,6 @@ def render():
                     height=480,
                     disabled=True,
                 )
-
-            _stream_phi4_analysis(soc, phi4_key, phi4_placeholder)
 
         except Exception as exc:
             st.error(f"An error occurred during analysis: {exc}")

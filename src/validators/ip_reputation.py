@@ -12,10 +12,10 @@ ABUSEIPDB_ENDPOINT  = "https://api.abuseipdb.com/api/v2/check"
 
 # ── UTILS DI FORMATTAZIONE E CHIAMATE API ─────────────────────────────────
 
-def _abuseipdb_call(ip: str) -> dict:
+def _abuseipdb_call(ip: str, api_key: str | None = None) -> dict:
     """Esegue la chiamata ad AbuseIPDB usando la sessione Keep-Alive globale."""
     params = {"ipAddress": ip, "maxAgeInDays": "90"}
-    headers = {"Key": get_secret("ABUSEIPDB_API_KEY")}
+    headers = {"Key": api_key if api_key is not None else get_secret("ABUSEIPDB_API_KEY")}
     response = requests.get(
         ABUSEIPDB_ENDPOINT,
         params=params,
@@ -48,7 +48,7 @@ def _format_abuseipdb(data: dict, lookup_key: str) -> dict:
 
 # ── FUNZIONI PRINCIPALI EXPORTATE DA __INIT__.PY ──────────────────────────
 
-def check_ip_reputation(ip: str) -> dict:
+def check_ip_reputation(ip: str, api_key: str | None = None) -> dict:
     base = {"ip": ip, "abuseConfidenceScore": 0, "totalReports": 0, "numDistinctUsers": 0, "isWhitelisted": False}
     if not ip: return {**base, "status": "skipped", "message": "No IP"}
     try:
@@ -56,22 +56,28 @@ def check_ip_reputation(ip: str) -> dict:
             return {**base, "status": "skipped", "message": "IP is not public/geolocatable"}
     except ValueError:
         return {**base, "status": "skipped", "message": "Invalid IP"}
-    if not get_secret("ABUSEIPDB_API_KEY"): return {**base, "status": "skipped", "message": "API key missing"}
+    effective_api_key = api_key if api_key is not None else get_secret("ABUSEIPDB_API_KEY")
+    if not effective_api_key: return {**base, "status": "skipped", "message": "API key missing"}
     try:
-        data = _abuseipdb_call(ip)
+        data = _abuseipdb_call(ip, effective_api_key)
         return _format_abuseipdb(data, ip)
     except Exception as exc:
         return {**base, "status": "error", "message": f"Error AbuseIPDB: {exc}"}
 
 
-def check_domain_reputation(domain: str, resolver = None) -> dict:
+def check_domain_reputation(
+    domain: str,
+    resolver=None,
+    api_key: str | None = None,
+) -> dict:
     """
     Resolves the domain by emulating system NSLOOKUP.
     Bypassa completamente i socket interni di Python e le librerie DNS instabili.
     """
     base = {"domain_queried": domain, "resolved_ip": "", "lookup_method": "error", "abuseConfidenceScore": 0}
     if not domain: return {**base, "status": "skipped", "message": "No domain"}
-    if not get_secret("ABUSEIPDB_API_KEY"): return {**base, "status": "skipped", "message": "API key missing"}
+    effective_api_key = api_key if api_key is not None else get_secret("ABUSEIPDB_API_KEY")
+    if not effective_api_key: return {**base, "status": "skipped", "message": "API key missing"}
 
     resolved_ip = None
     lookup_method = "system-nslookup-subprocess"
@@ -113,7 +119,7 @@ def check_domain_reputation(domain: str, resolver = None) -> dict:
 
     # AbuseIPDB call with the clean IP obtained from nslookup
     try:
-        data = _abuseipdb_call(resolved_ip)
+        data = _abuseipdb_call(resolved_ip, effective_api_key)
         result_dict = _format_abuseipdb(data, resolved_ip)
         result_dict.update({
             "domain_queried": domain, 
