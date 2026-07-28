@@ -770,21 +770,6 @@ def _show_phi4_result(target, result):
 
     verdict = str(result.get("final_verdict") or "review").lower()
     message = format_email_risk_analysis(result)
-    evidence = str(result.get("intent_evidence") or "").strip()
-    if evidence:
-        message += f'\n\nIntent evidence: “{evidence}”'
-    signals = [
-        str(value).replace("_", " ")
-        for value in (result.get("intent_signals") or [])
-    ]
-    if signals:
-        message += f"\n\nContext signals: {', '.join(signals)}."
-    signal_evidence = str(result.get("signal_evidence") or "").strip()
-    if signal_evidence:
-        message += f'\n\nContext evidence: "{signal_evidence}"'
-    claimed_brand = str(result.get("claimed_brand") or "").strip()
-    if claimed_brand:
-        message += f"\n\nClaimed identity: {claimed_brand}."
     if verdict == "phishing":
         target.error(message)
     elif verdict == "review":
