@@ -8,7 +8,6 @@ from threading import Lock
 from urllib.parse import urlsplit, urlunsplit
 
 import streamlit as st
-import streamlit.components.v1 as components
  
 from src.analysis_limits import EmailAnalysisLimitError, MAX_EML_BYTES
 from src.analyzer.html_utils import sanitize_html_for_js_preview, sanitize_html_for_preview
@@ -86,7 +85,7 @@ def _reset_email_after_browser_reload() -> None:
         _clear_email_analysis_state()
         st.session_state[_BROWSER_RELOAD_STATE_KEY] = reload_token
 
-    components.html(
+    st.iframe(
         f"""
         <script>
         (() => {{
@@ -110,7 +109,8 @@ def _reset_email_after_browser_reload() -> None:
         }})();
         </script>
         """,
-        height=0,
+        height=1,
+        tab_index=-1,
     )
 
 
@@ -286,17 +286,25 @@ def _field_value(label: str, value: str | None) -> bool:
 
 
 def _report_table(fields: list[tuple[str, object]]) -> None:
+    rows = _report_table_rows(fields)
+    if rows:
+        st.dataframe(rows, hide_index=True, width="stretch")
+    else:
+        st.caption("No data available in this section.")
+
+
+def _report_table_rows(
+    fields: list[tuple[str, object]],
+) -> list[dict[str, str]]:
+    """Normalize display values so Arrow never receives a mixed-type column."""
     rows = []
     for label, value in fields:
         if not _is_meaningful_value(value):
             continue
         if isinstance(value, (dict, list, tuple)):
             value = json.dumps(value, ensure_ascii=False, default=str)
-        rows.append({"Field": label, "Value": value})
-    if rows:
-        st.dataframe(rows, hide_index=True, width="stretch")
-    else:
-        st.caption("No data available in this section.")
+        rows.append({"Field": str(label), "Value": str(value)})
+    return rows
 
 
 def _render_structured_report(
@@ -452,7 +460,7 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
         element_id = f"ioc_copy_{re.sub(r'[^a-zA-Z0-9_]', '_', key_prefix)}_{idx}"
         js_value = json.dumps(value)
         escaped_value = html_escape(value)
-        components.html(
+        st.iframe(
             f'''
             <div style="display:flex; align-items:center; gap:8px; width:100%; margin:0 0 8px 0;">
               <code style="flex:1; display:block; min-width:0; overflow-x:auto; white-space:nowrap; padding:9px 10px;
@@ -492,6 +500,7 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
             </script>
             ''',
             height=48,
+            tab_index=-1,
         )
 
 
@@ -790,75 +799,166 @@ def _phi4_loading_html(
         "The final verdict is not available yet."
     ),
 ) -> str:
-    safe_detail = html_escape(str(detail or "Phi-4 mini is analyzing the email."))
+    return _analysis_loading_html(
+        engine="Phi-4 mini",
+        title="Semantic analysis in progress",
+        detail=detail or "Phi-4 mini is analyzing the email.",
+    )
+
+
+def _bert_loading_html(
+    detail: str = (
+        "DistilBERT is analyzing the complete email content. "
+        "The classification will appear automatically."
+    ),
+) -> str:
+    return _analysis_loading_html(
+        engine="DistilBERT",
+        title="Content classification in progress",
+        detail=detail or "DistilBERT is analyzing the email content.",
+    )
+
+
+def _analysis_loading_html(*, engine: str, title: str, detail: str) -> str:
+    safe_engine = html_escape(str(engine))
+    safe_title = html_escape(str(title))
+    safe_detail = html_escape(str(detail))
     return """
-    <div style="
-        display: flex;
-        align-items: center;
-        gap: 10px;
-        padding: 12px 14px;
-        border: 1px solid #d0d7de;
-        border-radius: 8px;
-        background: #f6f8fa;
-        color: #57606a;
-        font-size: 0.95rem;
-    ">
-        <span class="phi4-spinner" aria-hidden="true"></span>
-        <span>
-            <strong style="display:block; color:#24292f;">Analysis in progress</strong>
-            __PHI4_PROGRESS_DETAIL__
-        </span>
-        <span class="phi4-typing-dots" aria-label="loading">
-            <span></span><span></span><span></span>
-        </span>
+    <div class="fs-analysis-splash" role="status" aria-live="polite">
+        <div class="fs-analysis-splash__top">
+            <span class="fs-analysis-splash__spinner" aria-hidden="true"></span>
+            <span class="fs-analysis-splash__copy">
+                <span class="fs-analysis-splash__engine">__ENGINE__</span>
+                <strong>__TITLE__</strong>
+                <span>__DETAIL__</span>
+            </span>
+            <span class="fs-analysis-splash__dots" aria-hidden="true">
+                <span></span><span></span><span></span>
+            </span>
+        </div>
+        <div class="fs-analysis-splash__skeleton" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        <span class="fs-visually-hidden">Loading __ENGINE__ result</span>
     </div>
     <style>
-        .phi4-spinner {
-            width: 18px;
-            height: 18px;
-            flex: 0 0 18px;
-            border: 2px solid #afb8c1;
-            border-top-color: #0969da;
-            border-radius: 50%;
-            animation: phi4Spin 0.8s linear infinite;
+        .fs-analysis-splash {
+            position: relative;
+            overflow: hidden;
+            min-height: 148px;
+            padding: 20px;
+            border: 1px solid #BFDBFE;
+            border-radius: 12px;
+            background:
+                radial-gradient(circle at 100% 0, rgba(15, 159, 143, .10), transparent 38%),
+                linear-gradient(135deg, #F8FAFF, #F0F7FF);
+            box-sizing: border-box;
         }
-        .phi4-typing-dots {
+        .fs-analysis-splash__top {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+        .fs-analysis-splash__spinner {
+            width: 30px;
+            height: 30px;
+            flex: 0 0 30px;
+            border: 3px solid #BFDBFE;
+            border-top-color: #2563EB;
+            border-right-color: #0F9F8F;
+            border-radius: 50%;
+            animation: fsAnalysisSpin .85s linear infinite;
+        }
+        .fs-analysis-splash__copy {
+            display: flex;
+            min-width: 0;
+            flex: 1;
+            flex-direction: column;
+            gap: 2px;
+            color: #526077;
+            font-size: .9rem;
+            line-height: 1.35;
+        }
+        .fs-analysis-splash__copy strong {
+            color: #0B1220;
+            font-size: 1rem;
+        }
+        .fs-analysis-splash__engine {
+            color: #2563EB;
+            font-size: .7rem;
+            font-weight: 750;
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+        .fs-analysis-splash__dots {
             display: inline-flex;
             align-items: center;
             gap: 4px;
             margin-left: auto;
         }
-        .phi4-typing-dots span {
+        .fs-analysis-splash__dots span {
             width: 6px;
             height: 6px;
             border-radius: 999px;
-            background: #57606a;
-            opacity: 0.35;
-            animation: phi4TypingPulse 1.2s infinite ease-in-out;
+            background: #2563EB;
+            opacity: .3;
+            animation: fsAnalysisPulse 1.2s infinite ease-in-out;
         }
-        .phi4-typing-dots span:nth-child(2) {
-            animation-delay: 0.15s;
+        .fs-analysis-splash__dots span:nth-child(2) {
+            animation-delay: .15s;
         }
-        .phi4-typing-dots span:nth-child(3) {
-            animation-delay: 0.3s;
+        .fs-analysis-splash__dots span:nth-child(3) {
+            animation-delay: .3s;
         }
-        @keyframes phi4TypingPulse {
-            0%, 80%, 100% {
-                transform: translateY(0);
-                opacity: 0.35;
-            }
-            40% {
-                transform: translateY(-3px);
-                opacity: 1;
-            }
+        .fs-analysis-splash__skeleton {
+            display: grid;
+            gap: 8px;
+            margin-top: 18px;
         }
-        @keyframes phi4Spin {
-            to {
-                transform: rotate(360deg);
+        .fs-analysis-splash__skeleton span {
+            height: 7px;
+            border-radius: 999px;
+            background: linear-gradient(90deg, #DBEAFE 20%, #FFFFFF 50%, #DBEAFE 80%);
+            background-size: 220% 100%;
+            animation: fsAnalysisShimmer 1.5s linear infinite;
+        }
+        .fs-analysis-splash__skeleton span:nth-child(1) { width: 92%; }
+        .fs-analysis-splash__skeleton span:nth-child(2) { width: 76%; }
+        .fs-analysis-splash__skeleton span:nth-child(3) { width: 58%; }
+        .fs-visually-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+        @keyframes fsAnalysisPulse {
+            0%, 80%, 100% { transform: translateY(0); opacity: .3; }
+            40% { transform: translateY(-3px); opacity: 1; }
+        }
+        @keyframes fsAnalysisSpin {
+            to { transform: rotate(360deg); }
+        }
+        @keyframes fsAnalysisShimmer {
+            to { background-position: -220% 0; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+            .fs-analysis-splash__spinner,
+            .fs-analysis-splash__dots span,
+            .fs-analysis-splash__skeleton span {
+                animation: none;
             }
         }
     </style>
-    """.replace("__PHI4_PROGRESS_DETAIL__", safe_detail)
+    """.replace("__ENGINE__", safe_engine).replace(
+        "__TITLE__", safe_title
+    ).replace("__DETAIL__", safe_detail)
 
 
 def _render_abuseipdb(rep: dict):
@@ -1522,10 +1622,9 @@ def _summarize_link_reputation(results: dict) -> str:
 
 def _render_html_preview(raw_html: str, key: str, height: int = 360, enable_javascript: bool = False) -> None:
     preview_html = sanitize_html_for_js_preview(raw_html) if enable_javascript else sanitize_html_for_preview(raw_html)
-    components.html(
+    st.iframe(
         preview_html,
         height=height,
-        scrolling=True,
     )
 
 
@@ -2163,9 +2262,9 @@ def render():
                 elif bert_error:
                     st.error(f"DistilBERT analysis failed: {bert_error}")
                 elif not isinstance(bert_result, dict):
-                    st.info(
-                        "DistilBERT is analyzing the complete content in the "
-                        "background. This section will update automatically."
+                    st.markdown(
+                        _bert_loading_html(),
+                        unsafe_allow_html=True,
                     )
                 else:
                     calibration = bert_result["calibration"]

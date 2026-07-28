@@ -17,7 +17,6 @@ import ipaddress
 import json
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────
@@ -693,6 +692,6 @@ def render_email_globe(
     st.markdown("")
     # Render globo
     globe_html = _build_globe_html(hops_data)
-    components.html(globe_html, height=530, scrolling=False)
+    st.iframe(globe_html, height=530)
 
     st.caption("Trascina per ruotare. Passa su un marker per l'anteprima, cliccalo per fissare tutti i dettagli.")

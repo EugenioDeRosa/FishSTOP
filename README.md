@@ -77,6 +77,60 @@ FishSTOP/
 
 ## Clone and local installation
 
+### macOS (Apple Silicon and Intel)
+
+Install the prerequisites with [Homebrew](https://brew.sh/):
+
+```bash
+brew install python@3.11 git-lfs
+git lfs install
+git lfs pull
+```
+
+If Homebrew reports that no Python 3.11 bottle is available for your macOS
+version, install Python through `uv` instead:
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+~/.local/bin/uv python install 3.11
+```
+
+Git LFS is needed for tracked processed datasets, but not for starting the
+application itself.
+
+From the FishSTOP project directory, make the helper executable and run it:
+
+```bash
+chmod +x run_clean.sh
+./run_clean.sh
+```
+
+On its first run, `run_clean.sh` creates `.venv` with Python 3.11 and installs
+`requirements.txt`. On later runs it stops only old FishSTOP Streamlit
+processes, removes project Python caches, and starts a clean instance at
+`http://localhost:8501`.
+
+If Python 3.11 is installed in a non-standard location, provide it explicitly:
+
+```bash
+FISHSTOP_PYTHON=/path/to/python3.11 ./run_clean.sh
+```
+
+To create and activate the environment manually instead:
+
+```bash
+/opt/homebrew/bin/python3.11 -m venv .venv  # Apple Silicon Homebrew
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+python -m streamlit run streamlit_app.py
+```
+
+On an Intel Mac, Homebrew normally installs Python under
+`/usr/local/bin/python3.11`.
+
+### Windows
+
 Install Git LFS before cloning:
 
 ```powershell
