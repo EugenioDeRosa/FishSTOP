@@ -476,22 +476,33 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
                   <path fill-rule="evenodd" clip-rule="evenodd" d="M19.5 16.5L19.5 4.5L18.75 3.75H9L8.25 4.5L8.25 7.5L5.25 7.5L4.5 8.25V20.25L5.25 21H15L15.75 20.25V17.25H18.75L19.5 16.5ZM15.75 15.75L15.75 8.25L15 7.5L9.75 7.5V5.25L18 5.25V15.75H15.75ZM6 9L14.25 9L14.25 19.5L6 19.5L6 9Z" fill="currentColor"/>
                 </svg>
               </button>
+              <span id="{element_id}_status" role="status" aria-live="polite"
+                    style="min-width:0; color:#067647; font-size:12px; font-weight:600;"></span>
             </div>
             <script>
               const button_{element_id} = document.getElementById("{element_id}");
+              const status_{element_id} = document.getElementById("{element_id}_status");
               button_{element_id}.onclick = async () => {{
                 try {{
                   await navigator.clipboard.writeText({js_value});
+                  status_{element_id}.textContent = "Copied";
+                  button_{element_id}.title = "Copied to clipboard";
+                  button_{element_id}.setAttribute("aria-label", "Copied to clipboard");
                   button_{element_id}.style.background = "#ecfdf3";
                   button_{element_id}.style.color = "#067647";
                   setTimeout(() => {{
+                    status_{element_id}.textContent = "";
+                    button_{element_id}.title = "Copy indicator";
+                    button_{element_id}.setAttribute("aria-label", "Copy indicator");
                     button_{element_id}.style.background = "#ffffff";
                     button_{element_id}.style.color = "#080341";
                   }}, 900);
                 }} catch (err) {{
+                  status_{element_id}.textContent = "Copy failed";
                   button_{element_id}.style.background = "#fef3f2";
                   button_{element_id}.style.color = "#b42318";
                   setTimeout(() => {{
+                    status_{element_id}.textContent = "";
                     button_{element_id}.style.background = "#ffffff";
                     button_{element_id}.style.color = "#080341";
                   }}, 900);
@@ -502,6 +513,126 @@ def _render_ioc_values(label: str, values: list[str], key_prefix: str) -> None:
             height=48,
             tab_index=-1,
         )
+
+
+def _render_url_intelligence_card(link: dict, report: dict, index: int) -> None:
+    status = str(report.get("status") or "pending").lower()
+    palette = {
+        "malicious": ("#d92d20", "#fef3f2", "MALICIOUS"),
+        "suspicious": ("#dc6803", "#fffaeb", "SUSPICIOUS"),
+        "clean": ("#079455", "#ecfdf3", "CLEAN"),
+        "not_found": ("#667085", "#f2f4f7", "NOT FOUND"),
+        "pending": ("#1570ef", "#eff8ff", "CHECKING"),
+    }
+    color, tint, label = palette.get(
+        status,
+        ("#667085", "#f2f4f7", "UNAVAILABLE"),
+    )
+    raw_url = str(link.get("url") or "").strip()
+    shown_url = _defang_url(raw_url) if status == "not_found" else raw_url
+    host = str(link.get("host") or "-").strip()
+    detection_ratio = str(report.get("detection_ratio") or "").strip()
+    last_analysis = str(report.get("last_analysis") or "").strip()
+    permalink = str(report.get("permalink") or "").strip()
+    element_id = f"vt_url_card_{index}"
+
+    meta_parts = []
+    if detection_ratio and status in {"malicious", "suspicious", "clean"}:
+        meta_parts.append(f"{html_escape(detection_ratio)} engines")
+    if last_analysis:
+        meta_parts.append(f"Last analysis: {html_escape(last_analysis)}")
+    meta_html = " · ".join(meta_parts)
+
+    actions = []
+    if status == "not_found":
+        actions.append(
+            f'''
+            <a id="{element_id}_scan" class="action primary"
+               href="https://www.virustotal.com/gui/home/url"
+               target="_blank" rel="noopener noreferrer">
+              Copy URL &amp; scan on VirusTotal
+            </a>
+            '''
+        )
+    elif permalink:
+        actions.append(
+            f'<a class="action primary" href="{html_escape(permalink, quote=True)}" '
+            'target="_blank" rel="noopener noreferrer">VirusTotal URL report</a>'
+        )
+    if host and host != "-":
+        safe_host = html_escape(host, quote=True)
+        actions.extend([
+            f'<a class="action" href="https://www.virustotal.com/gui/domain/{safe_host}" '
+            'target="_blank" rel="noopener noreferrer">Domain report</a>',
+            f'<a class="action" href="https://www.whois.com/whois/{safe_host}" '
+            'target="_blank" rel="noopener noreferrer">WHOIS</a>',
+        ])
+
+    clipboard_script = ""
+    if status == "not_found":
+        clipboard_script = f'''
+        const scanButton = document.getElementById("{element_id}_scan");
+        const copyStatus = document.getElementById("{element_id}_copy_status");
+        scanButton.onclick = () => {{
+          navigator.clipboard.writeText({json.dumps(raw_url)}).then(() => {{
+            copyStatus.textContent = "URL copied";
+          }}).catch(() => {{
+            copyStatus.textContent = "Copy failed";
+          }});
+        }};
+        '''
+
+    st.iframe(
+        f'''
+        <style>
+          * {{ box-sizing: border-box; }}
+          body {{ margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }}
+          .card {{
+            border: 1px solid {color};
+            border-left: 5px solid {color};
+            border-radius: 9px;
+            background: #fff;
+            padding: 10px 12px;
+          }}
+          .top {{ display:flex; align-items:center; justify-content:space-between; gap:10px; }}
+          .host {{ min-width:0; color:#101828; font-size:14px; font-weight:700; }}
+          .badge {{
+            flex:none; border-radius:999px; padding:3px 8px;
+            background:{tint}; color:{color}; font-size:11px; font-weight:800;
+          }}
+          .url {{
+            margin-top:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+            color:#475467; font:12px ui-monospace, SFMono-Regular, Menlo, monospace;
+            user-select:none;
+          }}
+          .meta {{ min-height:16px; margin-top:4px; color:#667085; font-size:11px; }}
+          .actions {{ display:flex; align-items:center; gap:7px; flex-wrap:wrap; margin-top:8px; }}
+          .action {{
+            display:inline-flex; align-items:center; justify-content:center;
+            min-height:30px; padding:5px 9px; border:1px solid #d0d5dd; border-radius:6px;
+            background:#fff; color:#344054; text-decoration:none; font-size:11px; font-weight:650;
+          }}
+          .action.primary {{ border-color:{color}; color:{color}; background:{tint}; }}
+          .copy-status {{ color:#067647; font-size:11px; font-weight:650; }}
+        </style>
+        <div class="card">
+          <div class="top">
+            <div class="host">{html_escape(host)}</div>
+            <div class="badge">{label}</div>
+          </div>
+          <div class="url" title="{html_escape(shown_url, quote=True)}">{html_escape(shown_url)}</div>
+          <div class="meta">{meta_html}</div>
+          <div class="actions">
+            {''.join(actions)}
+            <span id="{element_id}_copy_status" class="copy-status" role="status"
+                  aria-live="polite"></span>
+          </div>
+        </div>
+        <script>{clipboard_script}</script>
+        ''',
+        height=126,
+        tab_index=-1,
+    )
 
 
 def _run_phi4_background(
@@ -749,7 +880,6 @@ def _render_phi4_analysis(
         if state == "cancelled":
             st.warning("Phi-4 mini analysis was cancelled.")
             return None
-        st.markdown(_phi4_loading_html(), unsafe_allow_html=True)
         return None
 
     if auto_run and backend == "not configured":
@@ -778,29 +908,15 @@ def _show_phi4_result(target, result):
         target.success(message)
 
 
-def _phi4_loading_html(
-    detail: str = (
-        "Phi-4 mini is still analyzing the email. "
-        "The final verdict is not available yet."
-    ),
-) -> str:
+def _verdict_loading_html() -> str:
     return _analysis_loading_html(
-        engine="Phi-4 mini",
-        title="Semantic analysis in progress",
-        detail=detail or "Phi-4 mini is analyzing the email.",
-    )
-
-
-def _bert_loading_html(
-    detail: str = (
-        "DistilBERT is analyzing the complete email content. "
-        "The classification will appear automatically."
-    ),
-) -> str:
-    return _analysis_loading_html(
-        engine="DistilBERT",
-        title="Content classification in progress",
-        detail=detail or "DistilBERT is analyzing the email content.",
+        engine="FishSTOP",
+        title="Building the final verdict",
+        detail=(
+            "Technical intelligence, DistilBERT, and Phi-4 mini are still "
+            "running. The verdict will appear automatically when every "
+            "analysis is complete."
+        ),
     )
 
 
@@ -1023,56 +1139,6 @@ def _render_virustotal(vt: dict):
         st.markdown(f"[Apri report VirusTotal]({vt['permalink']})")
 
 
-def _render_vt_url(rep: dict):
-    status = rep.get("status", "error")
-    message = rep.get("message", "")
-    permalink = rep.get("permalink")
-
-    if status == "pending":
-        st.info(f"VirusTotal: {message or 'analysis in progress'}")
-        return
-    if status == "malicious":
-        st.error(f"VirusTotal: MALICIOUS - {rep.get('detection_ratio', '-')}")
-    elif status == "suspicious":
-        st.warning(f"VirusTotal: SUSPICIOUS - {rep.get('detection_ratio', '-')}")
-    elif status == "clean":
-        st.success(f"VirusTotal: clean - {rep.get('detection_ratio', '-')}")
-    elif status == "not_found":
-        st.info("VirusTotal: URL not found")
-    elif status == "skipped":
-        st.info(f"VirusTotal: {message}")
-        if permalink:
-            st.markdown(f"[Open VirusTotal]({permalink})")
-        return
-    else:
-        st.warning(f"VirusTotal: {message}")
-        if permalink:
-            st.markdown(f"[Open VirusTotal]({permalink})")
-        return
-
-    st.caption(
-        f"Malicious `{rep.get('malicious', 0)}` · Suspicious `{rep.get('suspicious', 0)}` · "
-        f"Harmless `{rep.get('harmless', 0)}` · Undetected `{rep.get('undetected', 0)}`"
-    )
-    if rep.get("last_analysis"):
-        st.caption(f"Last analysis: `{rep['last_analysis']}`")
-    context_items = rep.get("crowdsourced_context") or []
-    if context_items:
-        with st.expander("VirusTotal crowdsourced context", expanded=False):
-            st.caption(rep.get("crowdsourced_context_summary") or "Additional context reported by VirusTotal users/sources.")
-            for item in context_items:
-                label = f"[{item.get('severity', 'INFO')}] {item.get('title') or 'Context'}"
-                if item.get("source"):
-                    label += f" - source: {item['source']}"
-                if item.get("date"):
-                    label += f" - {item['date']}"
-                st.write(label)
-                for detail in item.get("details") or []:
-                    st.caption(detail)
-    if permalink:
-        st.markdown(f"[Open VirusTotal page]({permalink})")
-
-
 def _auth_status_box(title: str, status: str, show_help: bool = True):
     status = (status or "unknown").lower()
     help_texts = {
@@ -1292,7 +1358,11 @@ def _safe_vt_url_lookup(
             return lookup(url, api_key=api_key)
         except TypeError:
             return lookup(url)
-    return {"status": "skipped", "url": url, "message": "Validator VirusTotal URL unavailable"}
+    return {
+        "status": "skipped",
+        "url": url,
+        "message": "Validator VirusTotal URL unavailable",
+    }
 
 
 def _sender_domains(soc: dict) -> dict[str, str]:
@@ -1501,8 +1571,13 @@ def _background_refresh_required(
     )
 
 
+def _background_jobs_complete(states: tuple[str, ...]) -> bool:
+    terminal_states = {"done", "error", "cancelled", "overloaded"}
+    return all(state in terminal_states for state in states)
+
+
 @st.fragment(run_every=0.75)
-def _render_background_progress(
+def _poll_background_jobs(
     email_hash: str,
     plan: dict[str, dict[str, tuple[str, tuple]]],
     rendered_states: tuple[str, ...],
@@ -1511,63 +1586,6 @@ def _render_background_progress(
     states = _background_plan_states(manager, plan)
     if not states:
         return
-    terminal_states = {"done", "error", "cancelled", "overloaded"}
-
-    def group_progress(group_names: set[str]) -> tuple[int, int]:
-        group_states = [
-            (
-                "overloaded"
-                if pool == "__overloaded__"
-                else manager.snapshot(pool, key).state
-            )
-            for name, group in plan.items()
-            if name in group_names
-            for pool, key in group.values()
-        ]
-        return (
-            sum(state in terminal_states for state in group_states),
-            len(group_states),
-        )
-
-    external_done, external_total = group_progress({
-        "urls", "domains", "ip_reputation", "geolocation", "files",
-    })
-    bert_done, bert_total = group_progress({"bert"})
-    phi_done, phi_total = group_progress({"phi4"})
-    progress_parts = []
-    if external_total:
-        progress_parts.append(
-            f"External intelligence {external_done}/{external_total}"
-        )
-    if bert_total:
-        progress_parts.append(f"DistilBERT {bert_done}/{bert_total}")
-    if phi_total:
-        phi_detail = ""
-        for pool, key in plan.get("phi4", {}).values():
-            if pool == "__overloaded__":
-                continue
-            snapshot = manager.snapshot(pool, key)
-            progress = snapshot.progress
-            if not isinstance(progress, dict):
-                continue
-            stage = str(progress.get("stage") or "")
-            current = int(progress.get("current") or 0)
-            total = int(progress.get("total") or 0)
-            if stage == "merge":
-                phi_detail = "Phi-4 mini combining results"
-            elif current > 0 and total > 0:
-                phi_detail = f"Phi-4 mini section {current}/{total}"
-            break
-        progress_parts.append(phi_detail or f"Phi-4 mini {phi_done}/{phi_total}")
-
-    completed = sum(state in terminal_states for state in states)
-    if completed < len(states):
-        st.info(
-            "Results appear independently as soon as they are ready: "
-            + " · ".join(progress_parts)
-        )
-    else:
-        st.success("All analysis jobs completed: " + " · ".join(progress_parts))
 
     signature_key = f"background_lookup_signature_{email_hash}"
     previous = st.session_state.get(signature_key)
@@ -1859,7 +1877,6 @@ def render():
                     cached_phi4["semantic_extraction"],
                 )
                 st.session_state[f"{phi4_key}_result"] = cached_phi4
-            phi4_pending = not isinstance(cached_phi4, dict) and not phi4_error
             if isinstance(cached_phi4, dict):
                 phi4_verdict = str(
                     cached_phi4.get("final_verdict") or ""
@@ -1879,32 +1896,31 @@ def render():
                     ]
             counts = _flag_counts(flags)
             severity, severity_caption = _severity(counts, cached_phi4)
+            rendered_states = tuple(rendered_background_states)
+            all_analysis_complete = _background_jobs_complete(rendered_states)
 
-            if isinstance(cached_phi4, dict):
-                st.markdown("### Final analysis")
-            elif phi4_pending:
+            if not all_analysis_complete:
                 st.markdown("### Analysis in progress")
-                st.info(
-                    "Phi-4 mini is still analyzing the email. The indicators below "
-                    "are preliminary; the final verdict will appear automatically."
+                st.markdown(
+                    _verdict_loading_html(),
+                    unsafe_allow_html=True,
                 )
             else:
-                st.markdown("### Preliminary analysis")
-            risk_banner(
-                severity,
-                severity_caption
-                if not phi4_pending
-                else f"Preliminary technical triage: {severity_caption}",
-            )
-            c1, c2, c3, c4 = st.columns(4)
-            c1.metric("Critical signals", counts["HIGH"])
-            c2.metric("Review signals", counts["MEDIUM"])
-            c3.metric("Links", len(links))
-            c4.metric("Attachments", len(attachments))
-            _render_background_progress(
+                st.markdown(
+                    "### Final analysis"
+                    if isinstance(cached_phi4, dict)
+                    else "### Preliminary analysis"
+                )
+                risk_banner(severity, severity_caption)
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("Critical signals", counts["HIGH"])
+                c2.metric("Review signals", counts["MEDIUM"])
+                c3.metric("Links", len(links))
+                c4.metric("Attachments", len(attachments))
+            _poll_background_jobs(
                 current_eml_hash,
                 background_plan,
-                tuple(rendered_background_states),
+                rendered_states,
             )
 
             with st.container(border=True):
@@ -2074,7 +2090,10 @@ def render():
                 if not links:
                     st.info("No URL found in the email body.")
                 else:
-                    st.caption("Each URL is checked on VirusTotal. Only malicious or suspicious results are passed to Phi-4 mini.")
+                    st.caption(
+                        "FishSTOP checks existing VirusTotal reports without submitting "
+                        "new scans. Unknown URLs can be investigated manually."
+                    )
                     if soc.get("link_reputation_summary"):
                         st.warning(soc["link_reputation_summary"])
 
@@ -2090,26 +2109,9 @@ def render():
                                 )
 
                     st.markdown("##### Extracted URLs")
-                    for lnk in links:
+                    for link_index, lnk in enumerate(links, start=1):
                         rep = vt_url_results.get(lnk["url"], {})
-                        risky = rep.get("status") in ("malicious", "suspicious")
-                        with st.container(border=True):
-                            top_left, top_right = st.columns([3, 1])
-                            with top_left:
-                                st.markdown(f"**`{lnk.get('host') or '-'}`**")
-                                st.caption(f"`{lnk.get('url')}`")
-                                if lnk.get("display_host"):
-                                    st.caption(f"Visible text: `{lnk.get('display_host')}`")
-                            with top_right:
-                                if lnk.get("is_ip"):
-                                    st.error("Direct IP")
-                                elif risky:
-                                    st.warning(rep.get("status", "suspicious"))
-                            _render_vt_url(rep)
-                            st.markdown(
-                                f"[VirusTotal](https://www.virustotal.com/gui/domain/{lnk['host']})"
-                                f" · [WHOIS](https://www.whois.com/whois/{lnk['host']})"
-                            )
+                        _render_url_intelligence_card(lnk, rep, link_index)
 
             with attach_tab:
                 st.markdown("#### Attachments")
@@ -2246,12 +2248,7 @@ def render():
                     st.warning("Email has no meaningful text for classification.")
                 elif bert_error:
                     st.error(f"DistilBERT analysis failed: {bert_error}")
-                elif not isinstance(bert_result, dict):
-                    st.markdown(
-                        _bert_loading_html(),
-                        unsafe_allow_html=True,
-                    )
-                else:
+                elif isinstance(bert_result, dict):
                     calibration = bert_result["calibration"]
                     chunk_count = int(bert_result["chunk_count"])
                     prob_safe = float(bert_result["probability_legitimate"])

@@ -164,6 +164,11 @@ def test_background_lookup_plan_captures_session_api_keys(monkeypatch):
     assert set(plan) == {
         "urls", "domains", "ip_reputation", "geolocation", "files",
     }
+    assert "https://example.test/action" in plan["urls"]
+    assert any(
+        pool == "virustotal" and key[0] == "url"
+        for pool, key, *_rest in jobs.submissions
+    )
     submitted_kwargs = [submission[4] for submission in jobs.submissions]
     assert any(kwargs.get("api_key") == "session-vt" for kwargs in submitted_kwargs)
     assert any(
@@ -172,7 +177,7 @@ def test_background_lookup_plan_captures_session_api_keys(monkeypatch):
     )
 
 
-def test_background_job_keys_are_isolated_between_client_sessions(monkeypatch):
+def test_url_lookup_jobs_are_isolated_between_client_sessions(monkeypatch):
     jobs = _RecordingJobs()
     monkeypatch.setattr(
         analyzer_view,

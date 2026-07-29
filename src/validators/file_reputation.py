@@ -349,7 +349,8 @@ def _summarize_crowdsourced_context(items: list[dict]) -> str:
 
 
 def _format_vt_url(data: dict, base: dict) -> dict:
-    attrs = data.get("data", {}).get("attributes", {})
+    url_object = data.get("data", {})
+    attrs = url_object.get("attributes", {})
     stats = attrs.get("last_analysis_stats", {})
 
     malicious = int(stats.get("malicious", 0))
@@ -373,6 +374,11 @@ def _format_vt_url(data: dict, base: dict) -> dict:
 
     return {
         **base,
+        "permalink": (
+            f"https://www.virustotal.com/gui/url/{url_object['id']}"
+            if url_object.get("id")
+            else base.get("permalink", "")
+        ),
         "status": status,
         "malicious": malicious,
         "suspicious": suspicious,
@@ -407,7 +413,7 @@ def check_url(api_key: str, url: str) -> dict:
         "title": "",
         "crowdsourced_context": [],
         "crowdsourced_context_summary": "",
-        "permalink": f"https://www.virustotal.com/gui/url/{_url_id(url) if url else ''}",
+        "permalink": "https://www.virustotal.com/gui/home/url",
         "message": "",
         **destination,
     }
@@ -447,7 +453,11 @@ def check_url(api_key: str, url: str) -> dict:
     except requests.exceptions.HTTPError as exc:
         code = exc.response.status_code
         if code == 404:
-            return {**base, "status": "not_found", "message": "URL not found su VirusTotal"}
+            return {
+                **base,
+                "status": "not_found",
+                "message": "URL not found su VirusTotal",
+            }
         if code == 401:
             return {**base, "status": "error", "message": "API key VirusTotal non valida (HTTP 401)"}
         if code == 429:

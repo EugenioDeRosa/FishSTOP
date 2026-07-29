@@ -28,6 +28,20 @@ class FakeSession:
         return self.responses.pop(0) if self.responses else FakeResponse(url)
 
 
+class FakeAPIResponse:
+    def __init__(self, status_code: int, payload: dict | None = None):
+        self.status_code = status_code
+        self.reason = "test response"
+        self._payload = payload or {}
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            raise requests.exceptions.HTTPError(response=self)
+
+
 def _allow_public_dns(monkeypatch):
     monkeypatch.setattr(fr, "_public_http_url", lambda url: (True, ""))
 
@@ -113,3 +127,30 @@ def test_direct_destination_check_is_disabled_by_default(monkeypatch):
     assert result["destination_status"] == "skipped"
     assert len(session.calls) == 1
     assert session.calls[0][0].startswith(fr.VIRUSTOTAL_URL_ENDPOINT)
+
+
+def test_url_report_permalink_uses_canonical_object_id():
+    result = fr._format_vt_url(
+        {
+            "data": {
+                "id": "a" * 64,
+                "attributes": {
+                    "last_analysis_stats": {"harmless": 70},
+                },
+            }
+        },
+        {"permalink": "https://www.virustotal.com/gui/home/url"},
+    )
+
+    assert result["permalink"] == f"https://www.virustotal.com/gui/url/{'a' * 64}"
+
+
+def test_unknown_url_is_not_submitted_automatically(monkeypatch):
+    session = FakeSession([FakeAPIResponse(404)])
+    monkeypatch.setattr(fr, "_session", session)
+
+    result = fr.check_url("token", "https://example.test/unknown")
+
+    assert result["status"] == "not_found"
+    assert result["permalink"] == "https://www.virustotal.com/gui/home/url"
+    assert len(session.calls) == 1
