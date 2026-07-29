@@ -4,7 +4,6 @@ from html import escape
 
 import streamlit as st
 
-
 PALETTE = {
     "ink": "#0B1220",
     "muted": "#526077",

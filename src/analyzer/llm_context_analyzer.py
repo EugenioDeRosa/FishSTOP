@@ -2,6 +2,7 @@
 import os
 import re
 import unicodedata
+from difflib import SequenceMatcher
 from threading import Lock
 from time import monotonic
 
@@ -51,7 +52,7 @@ OLLAMA_AVAILABILITY_TTL = max(
     0.0,
     float(os.getenv("OLLAMA_AVAILABILITY_TTL", "5")),
 )
-PROMPT_VERSION = "semantic-policy-v26-full-email-chunks"
+PROMPT_VERSION = "semantic-policy-v28-structured-scam-intent"
 
 _OLLAMA_AVAILABILITY_LOCK = Lock()
 _OLLAMA_AVAILABILITY_CACHE: tuple[float, tuple, bool] | None = None
@@ -147,13 +148,22 @@ TASK_INSTRUCTIONS = (
     "Signals are secondary context, not the primary action: financial_pretext=alleged debt/invoice/charge; incentive=bonus/prize/refund; "
     "threat=penalty/loss/suspension; urgency=deadline/scarcity; impersonation=a claimed organization or brand. "
     "Set credential_type for password, OTP/PIN/recovery code, or wallet seed/private phrase. "
+    "Set payment_method, payment_asset, and amount when money or value is requested; otherwise use none or an empty string. "
+    "Use cryptocurrency for a blockchain wallet/address and bank_transfer only for a bank account or IBAN. "
+    "Set coercion=true only when compliance is obtained through a threat. "
+    "Classify the threat_type and scam_type from meaning, regardless of language; sextortion means payment demanded under threat of exposing intimate material, which is private_material_exposure. "
     "claimed_brand is the organization the message claims to represent, otherwise empty. "
+    "Evidence fields must be copied verbatim in the email's original language: never translate or paraphrase them. "
     "signal_evidence is the shortest exact phrase proving the strongest secondary signal, otherwise empty.\n"
     "JSON only:\n"
     "{\"action\":\"none|info|visit_link|open_attachment|reply|provide_information|provide_credentials|payment|change_settings|"
     "verify_account|claim_reward|bypass|other\",\"channel\":\"none|known_procedure|link|form|attachment|reply|phone|unclear\","
     "\"evidence\":\"exact action phrase\",\"signals\":[\"financial_pretext|incentive|threat|urgency|impersonation\"],"
     "\"signal_evidence\":\"exact context phrase\",\"credential_type\":\"none|password|otp_or_pin|recovery_code|wallet_seed|other\","
+    "\"payment_method\":\"none|bank_transfer|card|cash|gift_card|cryptocurrency|other\","
+    "\"payment_asset\":\"currency or asset named in the email, otherwise empty\",\"amount\":\"exact requested amount, otherwise empty\","
+    "\"coercion\":false,\"threat_type\":\"none|account_loss|financial_penalty|data_exposure|private_material_exposure|physical_harm|reputation_harm|other\","
+    "\"scam_type\":\"none|credential_phishing|business_email_compromise|invoice_fraud|advance_fee|investment_scam|crypto_scam|extortion|sextortion|account_takeover|other\","
     "\"claimed_brand\":\"organization or empty\"}\n"
 )
 
@@ -196,11 +206,40 @@ PHI4_OUTPUT_SCHEMA = {
                 "recovery_code", "wallet_seed", "other",
             ],
         },
+        "payment_method": {
+            "type": "string",
+            "enum": [
+                "none", "bank_transfer", "card", "cash",
+                "gift_card", "cryptocurrency", "other",
+            ],
+        },
+        "payment_asset": {"type": "string", "maxLength": 40},
+        "amount": {"type": "string", "maxLength": 40},
+        "coercion": {"type": "boolean"},
+        "threat_type": {
+            "type": "string",
+            "enum": [
+                "none", "account_loss", "financial_penalty", "data_exposure",
+                "private_material_exposure", "physical_harm",
+                "reputation_harm", "other",
+            ],
+        },
+        "scam_type": {
+            "type": "string",
+            "enum": [
+                "none", "credential_phishing", "business_email_compromise",
+                "invoice_fraud", "advance_fee", "investment_scam",
+                "crypto_scam", "extortion", "sextortion",
+                "account_takeover", "other",
+            ],
+        },
         "claimed_brand": {"type": "string", "maxLength": 80},
     },
     "required": [
         "action", "channel", "evidence", "signals",
-        "signal_evidence", "credential_type", "claimed_brand",
+        "signal_evidence", "credential_type", "payment_method",
+        "payment_asset", "amount", "coercion",
+        "threat_type", "scam_type", "claimed_brand",
     ],
     "additionalProperties": False,
 }
@@ -217,8 +256,17 @@ TARGETED_INTENT_SCHEMA = {
         },
         "channel": PHI4_OUTPUT_SCHEMA["properties"]["channel"],
         "evidence": {"type": "string", "maxLength": 180},
+        "payment_method": PHI4_OUTPUT_SCHEMA["properties"]["payment_method"],
+        "payment_asset": PHI4_OUTPUT_SCHEMA["properties"]["payment_asset"],
+        "amount": PHI4_OUTPUT_SCHEMA["properties"]["amount"],
+        "coercion": PHI4_OUTPUT_SCHEMA["properties"]["coercion"],
+        "threat_type": PHI4_OUTPUT_SCHEMA["properties"]["threat_type"],
+        "scam_type": PHI4_OUTPUT_SCHEMA["properties"]["scam_type"],
     },
-    "required": ["action", "channel", "evidence"],
+    "required": [
+        "action", "channel", "evidence", "payment_method", "payment_asset", "amount",
+        "coercion", "threat_type", "scam_type",
+    ],
     "additionalProperties": False,
 }
 
@@ -753,6 +801,58 @@ def _validated_evidence(soc: dict, value: str, action: str = "") -> str:
         or normalized_evidence in normalized_anonymized
     ) and _evidence_supports_action(evidence, action):
         return evidence
+    if action == "context":
+        message_segments = _evidence_segments(soc)
+        grounded_candidates = [
+            str(soc.get("subject") or ""),
+            *message_segments,
+            *[
+                f"{first} {second}"
+                for first, second in zip(
+                    message_segments,
+                    message_segments[1:],
+                )
+            ],
+            *_actionable_link_texts(soc),
+        ]
+        ranked = [
+            (
+                SequenceMatcher(
+                    None,
+                    normalized_evidence,
+                    _normalized_evidence(candidate),
+                ).ratio(),
+                candidate,
+            )
+            for candidate in grounded_candidates
+            if candidate
+        ]
+        if ranked:
+            score, grounded = max(ranked, key=lambda item: item[0])
+            if score >= 0.82:
+                return _clip_exact_span(grounded, 180)
+        partial_matches = []
+        for candidate in grounded_candidates:
+            normalized_candidate = _normalized_evidence(candidate)
+            if not normalized_candidate:
+                continue
+            matcher = SequenceMatcher(
+                None,
+                normalized_evidence,
+                normalized_candidate,
+            )
+            match = matcher.find_longest_match()
+            if (
+                match.size >= 32
+                and match.size / len(normalized_evidence) >= 0.4
+                and match.size / len(normalized_candidate) >= 0.4
+            ):
+                partial_matches.append(
+                    (match.a, -match.size, candidate)
+                )
+        if partial_matches:
+            _, _, grounded = min(partial_matches)
+            return _clip_exact_span(grounded, 180)
     return ""
 
 
@@ -1001,6 +1101,7 @@ def normalize_semantic_extraction(raw: dict, soc: dict | None = None) -> dict:
         "other",
     )
     requested_action = _COMPACT_ACTION_ALIASES.get(compact_action, compact_action)
+    model_requested_action = requested_action
     compact_channel = _enum(
         raw.get("channel") or raw.get("action_channel"),
         _ACTION_CHANNELS | set(_COMPACT_CHANNEL_ALIASES),
@@ -1008,6 +1109,51 @@ def normalize_semantic_extraction(raw: dict, soc: dict | None = None) -> dict:
     )
     action_channel = _COMPACT_CHANNEL_ALIASES.get(compact_channel, compact_channel)
     signals = _semantic_signals(raw)
+    payment_method = _enum(
+        raw.get("payment_method"),
+        {
+            "none", "bank_transfer", "card", "cash",
+            "gift_card", "cryptocurrency", "other",
+        },
+        "none",
+    )
+    payment_asset = (
+        _validated_evidence(soc, raw.get("payment_asset") or "", "context")
+        if soc is not None
+        else _clip_exact_span(raw.get("payment_asset") or "", 40)
+    )
+    amount = (
+        _validated_evidence(soc, raw.get("amount") or "", "context")
+        if soc is not None
+        else _clip_exact_span(raw.get("amount") or "", 40)
+    )
+    coercion = _as_bool(raw.get("coercion"))
+    threat_type = _enum(
+        raw.get("threat_type"),
+        {
+            "none", "account_loss", "financial_penalty", "data_exposure",
+            "private_material_exposure", "physical_harm",
+            "reputation_harm", "other",
+        },
+        "none",
+    )
+    scam_type = _enum(
+        raw.get("scam_type"),
+        {
+            "none", "credential_phishing", "business_email_compromise",
+            "invoice_fraud", "advance_fee", "investment_scam",
+            "crypto_scam", "extortion", "sextortion",
+            "account_takeover", "other",
+        },
+        "none",
+    )
+    structured_extortion_claim = (
+        coercion
+        and payment_method != "none"
+        and scam_type in {"extortion", "sextortion"}
+    )
+    if structured_extortion_claim:
+        requested_action = "pay_or_transfer"
 
     asks_for_credentials = (
         "credentials" in signals
@@ -1024,13 +1170,20 @@ def normalize_semantic_extraction(raw: dict, soc: dict | None = None) -> dict:
         _validated_evidence(
             soc,
             raw.get("evidence") or raw.get("evidence_phrase") or "",
-            requested_action,
+            "context" if structured_extortion_claim else requested_action,
         )
         if soc is not None
         else _clip_exact_span(
             raw.get("evidence") or raw.get("evidence_phrase") or "", 180
         )
     )
+    structured_extortion = (
+        structured_extortion_claim and bool(evidence_phrase)
+    )
+    if structured_extortion:
+        signals.add("threat")
+    elif structured_extortion_claim:
+        requested_action = model_requested_action
     signal_evidence = (
         _validated_evidence(
             soc,
@@ -1111,10 +1264,17 @@ def normalize_semantic_extraction(raw: dict, soc: dict | None = None) -> dict:
             {"deception", "impersonation"} & signals
         ) or _as_bool(raw.get("impersonation_or_deception")),
         "financial_pretext_present": "financial_pretext" in signals,
-        "threat_or_consequence_present": "threat" in signals,
+        "threat_or_consequence_present": "threat" in signals or coercion,
         "semantic_signals": sorted(signals),
         "signal_evidence": signal_evidence,
         "credential_type": credential_type,
+        "payment_method": payment_method,
+        "payment_asset": payment_asset,
+        "amount": amount,
+        "coercion": coercion,
+        "threat_type": threat_type,
+        "scam_type": scam_type,
+        "structured_extortion": structured_extortion,
         "claimed_brand": claimed_brand,
         "model_content_risk": "benign",
         "confidence": _confidence(raw.get("confidence")),
@@ -1536,6 +1696,7 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
     if (
         message_body.strip()
         and semantic["requested_action"] == "pay_or_transfer"
+        and not semantic.get("structured_extortion")
         and not _PAYMENT_ACTION_RE.search(message_text)
     ):
         semantic["requested_action"] = "visit_link" if links else "informational"
@@ -1611,6 +1772,10 @@ def _content_risk(semantic: dict) -> tuple[str, list[str]]:
         semantic["requested_action"] == "claim_reward" or semantic["asks_to_claim_reward"]
     ) and risky_channel
 
+    if semantic.get("structured_extortion") and semantic["asks_for_payment"]:
+        return "malicious", [
+            "the message uses blackmail or extortion to demand a payment"
+        ]
     if credential_submission:
         return "malicious", ["the message asks the recipient to provide credentials"]
     if semantic["asks_to_bypass_procedure"]:
@@ -1972,7 +2137,9 @@ def apply_email_risk_policy(soc: dict, semantic: dict) -> dict:
     original_action = semantic["requested_action"]
     original_summary = semantic["content_summary"]
     semantic = _correlate_semantic_with_message_structure(soc, semantic)
-    if (
+    if semantic.get("structured_extortion"):
+        semantic["content_summary"] = _fallback_content_summary(soc, semantic)
+    elif (
         semantic["requested_action"] != original_action
         and semantic["content_summary"] == original_summary
     ) or semantic["content_summary"] == "The model did not summarize the content.":
@@ -2038,6 +2205,12 @@ def apply_email_risk_policy(soc: dict, semantic: dict) -> dict:
         "intent_signals": semantic["semantic_signals"],
         "signal_evidence": semantic["signal_evidence"],
         "credential_type": semantic["credential_type"],
+        "payment_method": semantic["payment_method"],
+        "payment_asset": semantic["payment_asset"],
+        "amount": semantic["amount"],
+        "coercion": semantic["coercion"],
+        "threat_type": semantic["threat_type"],
+        "scam_type": semantic["scam_type"],
         "claimed_brand": semantic["claimed_brand"],
         "evidence": {
             "content": content_reasons,
@@ -2176,6 +2349,27 @@ def _fallback_content_summary(soc: dict, semantic: dict) -> str:
         "other",
     )
     action = _COMPACT_ACTION_ALIASES.get(compact_action, compact_action)
+    if semantic.get("structured_extortion"):
+        payment_asset = str(semantic.get("payment_asset") or "").strip()
+        amount = str(semantic.get("amount") or "").strip()
+        payment_label = (
+            payment_asset
+            or (
+                "cryptocurrency"
+                if semantic.get("payment_method") == "cryptocurrency"
+                else "money"
+            )
+        )
+        amount_label = f" ({amount})" if amount else ""
+        scam_label = (
+            "sextortion"
+            if semantic.get("scam_type") == "sextortion"
+            else "extortion"
+        )
+        return (
+            "The subject and body use coercion to demand a "
+            f"{payment_label} payment{amount_label}, a clear {scam_label} scam."
+        )
     body_summary = {
         "claim_reward": "contains a reward or promotional benefit and asks the recipient to claim it, a pattern commonly used in phishing",
         "pay_or_transfer": "contains a payment or money-transfer request, which can be used for financial phishing",
@@ -2246,12 +2440,54 @@ TARGETED_INTENT_INSTRUCTIONS = (
     "provide_information=submit personal or confidential data; payment=pay or transfer money; "
     "change_settings=create/reset/change a password or account setting; verify_account=respond to unusual account activity; "
     "claim_reward=obtain a prize, refund or bonus; bypass=evade a normal control. "
+    "Also identify payment_method, payment_asset, amount, coercion, threat_type, and scam_type from meaning rather than keywords. "
+    "A demand for payment backed by a threat is extortion; use sextortion when the threatened consequence exposes intimate material. "
     "Opening a link first does not replace the more specific final action. Return action=none when none is explicitly requested. "
     "Copy the shortest exact supporting phrase as evidence. Choose channel using META and the email text. JSON only.\n"
 )
 
 
+def _merge_targeted_intent(primary: dict, targeted: dict) -> dict:
+    """Use the verifier to refine fields without discarding a more specific finding."""
+    merged = dict(targeted)
+    for field in ("payment_asset", "amount"):
+        if not merged.get(field) and primary.get(field):
+            merged[field] = primary[field]
+
+    scam_specificity = {
+        "none": 0,
+        "other": 1,
+        "extortion": 2,
+        "sextortion": 3,
+    }
+    primary_scam = str(primary.get("scam_type") or "none")
+    targeted_scam = str(merged.get("scam_type") or "none")
+    if scam_specificity.get(primary_scam, 1) > scam_specificity.get(
+        targeted_scam,
+        1,
+    ):
+        merged["scam_type"] = primary_scam
+
+    threat_specificity = {
+        "none": 0,
+        "other": 1,
+        "data_exposure": 2,
+        "reputation_harm": 2,
+        "private_material_exposure": 3,
+    }
+    primary_threat = str(primary.get("threat_type") or "none")
+    targeted_threat = str(merged.get("threat_type") or "none")
+    if threat_specificity.get(primary_threat, 1) > threat_specificity.get(
+        targeted_threat,
+        1,
+    ):
+        merged["threat_type"] = primary_threat
+    return merged
+
+
 def _needs_targeted_intent_verifier(soc: dict, semantic: dict) -> bool:
+    if semantic.get("structured_extortion"):
+        return True
     action = semantic.get("requested_action")
     generic_action = action in {"none", "informational", "visit_link", "other"}
     unsupported_sensitive_action = (
@@ -2321,27 +2557,22 @@ def _request_targeted_intent(
             if event.get("status") != "ok":
                 continue
             parsed = _json_object(event.get("text") or "")
-            action = _enum(
-                parsed.get("action"),
-                set(TARGETED_INTENT_SCHEMA["properties"]["action"]["enum"]),
-                "none",
-            )
-            evidence = _validated_evidence(
-                soc,
-                parsed.get("evidence") or "",
-                _COMPACT_ACTION_ALIASES.get(action, action),
-            )
-            if action == "none" or not evidence:
+            normalized = normalize_semantic_extraction(parsed, soc=soc)
+            if (
+                normalized["requested_action"] == "none"
+                or not normalized["evidence_phrase"]
+            ):
                 return {}
-            channel = _enum(
-                parsed.get("channel"),
-                set(PHI4_OUTPUT_SCHEMA["properties"]["channel"]["enum"]),
-                "unclear",
-            )
             return {
-                "action": action,
-                "channel": channel,
-                "evidence": evidence,
+                "action": normalized["requested_action"],
+                "channel": normalized["action_channel"],
+                "evidence": normalized["evidence_phrase"],
+                "payment_method": normalized["payment_method"],
+                "payment_asset": normalized["payment_asset"],
+                "amount": normalized["amount"],
+                "coercion": normalized["coercion"],
+                "threat_type": normalized["threat_type"],
+                "scam_type": normalized["scam_type"],
             }
     except (ValueError, json.JSONDecodeError, requests.RequestException):
         return {}
@@ -2564,7 +2795,9 @@ def stream_phi4_email_analysis(
                         return
                     if targeted:
                         semantic["primary_requested_action"] = primary["requested_action"]
-                        semantic.update(targeted)
+                        semantic.update(
+                            _merge_targeted_intent(primary, targeted)
+                        )
                         semantic["intent_verifier_used"] = True
                 semantic_candidates.append(semantic)
             except (ValueError, json.JSONDecodeError) as exc:

@@ -780,6 +780,55 @@ def test_credential_request_or_malicious_url_produces_phishing():
     assert url_analysis["final_verdict"] == "phishing"
 
 
+def test_italian_bitcoin_sextortion_overrides_generic_account_verification():
+    analysis = apply_email_risk_policy(
+        {
+            "subject": "Violazione dei dati personali a causa di presunte attività dannose",
+            "body_for_ai": (
+                "Ho realizzato una compilation di video in cui ti stai masturbando. "
+                "Posso condividere questo materiale con tutti i tuoi contatti. "
+                "Ecco cosa devi fare - trasferire l'equivalente in Bitcoin di "
+                "950EUR sul mio conto Bitcoin. "
+                "Ecco il mio Bitcoin wallet: 1Ar5U22ayhYd36rfrJ5RHJa7AT3CScCZqX. "
+                "Completa il trasferimento entro 50 ore."
+            ),
+            "links": [],
+            "attachments": [],
+            "auth_results": {
+                "SPF": {"status": "softfail"},
+                "DKIM": {"status": "none"},
+                "DMARC": {"status": "fail"},
+            },
+        },
+        {
+            "action": "verify_account",
+            "channel": "reply",
+            "evidence": (
+                "trasferire l'equivalente in Bitcoin di 950EUR sul mio conto Bitcoin"
+            ),
+            "signals": ["threat"],
+            "payment_method": "cryptocurrency",
+            "payment_asset": "Bitcoin",
+            "amount": "950EUR",
+            "coercion": True,
+            "threat_type": "private_material_exposure",
+            "scam_type": "sextortion",
+        },
+    )
+
+    assert analysis["requested_action"] == "pay_or_transfer"
+    assert analysis["content_risk"] == "malicious"
+    assert analysis["final_verdict"] == "phishing"
+    assert analysis["coercion"] is True
+    assert analysis["payment_method"] == "cryptocurrency"
+    assert analysis["payment_asset"] == "Bitcoin"
+    assert analysis["threat_type"] == "private_material_exposure"
+    assert analysis["scam_type"] == "sextortion"
+    assert "Bitcoin payment" in analysis["content_summary"]
+    assert "sextortion scam" in analysis["content_summary"]
+    assert "trasferire l'equivalente in Bitcoin" in analysis["intent_evidence"]
+
+
 def test_toll_debt_lure_downgrades_unsupported_information_label():
     analysis = apply_email_risk_policy(
         {

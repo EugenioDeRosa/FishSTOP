@@ -422,6 +422,31 @@ def test_model_evidence_must_exist_in_email():
     assert semantic["evidence_phrase"] == ""
 
 
+def test_targeted_verifier_refines_payment_without_losing_specific_scam_type():
+    merged = llm._merge_targeted_intent(
+        {
+            "payment_asset": "",
+            "amount": "950€",
+            "scam_type": "sextortion",
+            "threat_type": "private_material_exposure",
+        },
+        {
+            "action": "pay_or_transfer",
+            "payment_method": "cryptocurrency",
+            "payment_asset": "Bitcoin",
+            "amount": "",
+            "scam_type": "extortion",
+            "threat_type": "data_exposure",
+        },
+    )
+
+    assert merged["payment_method"] == "cryptocurrency"
+    assert merged["payment_asset"] == "Bitcoin"
+    assert merged["amount"] == "950€"
+    assert merged["scam_type"] == "sextortion"
+    assert merged["threat_type"] == "private_material_exposure"
+
+
 def test_unicode_variation_selectors_are_removed_before_phi4():
     obfuscated = (
         "Please enter your old private "
