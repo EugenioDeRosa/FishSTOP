@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,7 +16,14 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 from datasets import Dataset
-from sklearn.metrics import accuracy_score, confusion_matrix, f1_score, precision_score, recall_score
+from sklearn.metrics import (
+    accuracy_score,
+    classification_report,
+    confusion_matrix,
+    f1_score,
+    precision_score,
+    recall_score,
+)
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -42,6 +50,8 @@ DEFAULT_OUTPUT_DIR = Path("models/fishstop-distilbert-multilingual")
 ID2LABEL = {0: "LEGITIMATE", 1: "MALICIOUS"}
 LABEL2ID = {label: index for index, label in ID2LABEL.items()}
 REQUIRED_SPLITS = {"train", "validation", "test"}
+TRAINING_RUN_CONFIG = "training_run_config.json"
+DEFAULT_PREVALENCE_SCENARIOS = (0.50, 0.10, 0.05, 0.02)
 
 
 def audit_training_dataframe(df: pd.DataFrame) -> dict:
@@ -111,6 +121,76 @@ def _format_duration(seconds: float) -> str:
     hours, remainder = divmod(seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+def latest_checkpoint(output_dir: str | Path) -> Path | None:
+    """Return the most recent complete Hugging Face checkpoint."""
+    output_dir = Path(output_dir)
+    candidates: list[tuple[int, Path]] = []
+    if not output_dir.exists():
+        return None
+    for path in output_dir.iterdir():
+        match = re.fullmatch(r"checkpoint-(\d+)", path.name)
+        if match and path.is_dir() and path.joinpath("trainer_state.json").exists():
+            candidates.append((int(match.group(1)), path))
+    return max(candidates, default=(0, None), key=lambda item: item[0])[1]
+
+
+def resolve_resume_checkpoint(
+    output_dir: str | Path,
+    resume_from_checkpoint: str | Path | None,
+) -> Path | None:
+    """Resolve ``auto`` without silently accepting an invalid checkpoint."""
+    if resume_from_checkpoint is None:
+        return None
+    if str(resume_from_checkpoint).lower() == "auto":
+        return latest_checkpoint(output_dir)
+    checkpoint = Path(resume_from_checkpoint)
+    if not checkpoint.is_dir() or not checkpoint.joinpath("trainer_state.json").exists():
+        raise ValueError(f"Invalid Trainer checkpoint: {checkpoint}")
+    return checkpoint
+
+
+def prepare_training_run(
+    output_dir: str | Path,
+    *,
+    dataset_sha256: str,
+    base_model: str,
+    epochs: int,
+    resume_from_checkpoint: str | Path | None,
+) -> Path | None:
+    """Guard automatic resume against a changed dataset or training recipe."""
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    expected = {
+        "dataset_sha256": dataset_sha256,
+        "base_model": str(base_model),
+        "epochs": int(epochs),
+    }
+    config_path = output_dir / TRAINING_RUN_CONFIG
+    checkpoint = resolve_resume_checkpoint(output_dir, resume_from_checkpoint)
+
+    if checkpoint is not None:
+        if not config_path.exists():
+            raise ValueError(
+                f"Cannot safely resume {checkpoint}: {config_path} is missing."
+            )
+        recorded = json.loads(config_path.read_text(encoding="utf-8"))
+        mismatches = {
+            key: (recorded.get(key), value)
+            for key, value in expected.items()
+            if recorded.get(key) != value
+        }
+        if mismatches:
+            raise ValueError(
+                "Checkpoint does not match the current dataset/training recipe: "
+                + json.dumps(mismatches, sort_keys=True)
+            )
+    elif resume_from_checkpoint is not None:
+        print("No complete checkpoint found: training will start from zero.", flush=True)
+
+    config_path.write_text(json.dumps(expected, indent=2), encoding="utf-8")
+    return checkpoint
 
 
 class TrainingProgressCallback(TrainerCallback):
@@ -325,6 +405,7 @@ class DistilBERTPhishingTrainer:
         df: pd.DataFrame,
         output_dir: str | Path = DEFAULT_OUTPUT_DIR,
         epochs: int = 4,
+        resume_from_checkpoint: str | Path | None = None,
     ) -> Trainer:
         output_dir = Path(output_dir)
         print("Preparing train and validation datasets...", flush=True)
@@ -404,7 +485,15 @@ class DistilBERTPhishingTrainer:
         # Keep the Hugging Face Trainer available on the wrapper.  Trainer.state
         # belongs to this object, not to DistilBERTPhishingTrainer itself.
         self.hf_trainer = hf_trainer
-        hf_trainer.train()
+        if resume_from_checkpoint is not None:
+            print(f"Resuming Trainer from: {resume_from_checkpoint}", flush=True)
+        hf_trainer.train(
+            resume_from_checkpoint=(
+                str(resume_from_checkpoint)
+                if resume_from_checkpoint is not None
+                else None
+            )
+        )
 
         self.model.config.id2label = ID2LABEL
         self.model.config.label2id = LABEL2ID
@@ -455,6 +544,69 @@ def evaluate_calibrated(
     }
 
 
+def evaluate_prevalence_scenarios(
+    logits: torch.Tensor,
+    labels: torch.Tensor,
+    calibration: dict,
+    prevalence_scenarios=DEFAULT_PREVALENCE_SCENARIOS,
+    random_state: int = 42,
+) -> list[dict]:
+    """Evaluate calibrated decisions after deterministic prevalence subsampling."""
+    probabilities = calibrated_probabilities(logits, calibration["temperature"])[:, 1].numpy()
+    labels_np = labels.numpy()
+    threshold = float(calibration["threshold"])
+    legitimate_indices = np.flatnonzero(labels_np == 0)
+    phishing_indices = np.flatnonzero(labels_np == 1)
+    results = []
+
+    for offset, requested_prevalence in enumerate(prevalence_scenarios):
+        requested_prevalence = float(requested_prevalence)
+        target_phishing = int(
+            round(
+                len(legitimate_indices)
+                * requested_prevalence
+                / max(1.0 - requested_prevalence, 1e-12)
+            )
+        )
+        selected_phishing_count = min(target_phishing, len(phishing_indices))
+        rng = np.random.default_rng(random_state + offset)
+        selected_phishing = rng.choice(
+            phishing_indices,
+            size=selected_phishing_count,
+            replace=False,
+        )
+        selected = np.concatenate([legitimate_indices, selected_phishing])
+        rng.shuffle(selected)
+        scenario_labels = labels_np[selected]
+        scenario_predictions = (probabilities[selected] >= threshold).astype(int)
+        matrix = confusion_matrix(
+            scenario_labels,
+            scenario_predictions,
+            labels=[0, 1],
+        )
+        results.append(
+            {
+                "requested_phishing_prevalence": requested_prevalence,
+                "achieved_phishing_prevalence": (
+                    float(scenario_labels.mean()) if len(scenario_labels) else 0.0
+                ),
+                "rows": int(len(selected)),
+                "accuracy": float(accuracy_score(scenario_labels, scenario_predictions)),
+                "precision": float(
+                    precision_score(scenario_labels, scenario_predictions, zero_division=0)
+                ),
+                "recall": float(
+                    recall_score(scenario_labels, scenario_predictions, zero_division=0)
+                ),
+                "f1": float(f1_score(scenario_labels, scenario_predictions, zero_division=0)),
+                "false_positives": int(matrix[0, 1]),
+                "false_negatives": int(matrix[1, 0]),
+                "confusion_matrix": matrix.tolist(),
+            }
+        )
+    return results
+
+
 def write_model_card(output_dir: Path, metadata: dict) -> None:
     metrics = metadata["test_metrics"]
     output_dir.joinpath("README.md").write_text(
@@ -496,11 +648,19 @@ def run_training(
     output_dir: str | Path = DEFAULT_OUTPUT_DIR,
     base_model: str = DEFAULT_BASE_MODEL,
     epochs: int = 4,
+    resume_from_checkpoint: str | Path | None = None,
 ) -> dict:
     dataset_path = Path(dataset_path)
     output_dir = Path(output_dir)
     print(f"Loading training dataset: {dataset_path}", flush=True)
     dataset_sha256 = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+    resolved_checkpoint = prepare_training_run(
+        output_dir,
+        dataset_sha256=dataset_sha256,
+        base_model=base_model,
+        epochs=epochs,
+        resume_from_checkpoint=resume_from_checkpoint,
+    )
     df = load_training_dataframe(dataset_path)
     dataset_audit = audit_training_dataframe(df)
     split_counts = df["split"].value_counts().to_dict()
@@ -509,7 +669,12 @@ def run_training(
         print(f"DATASET WARNING: {warning}", flush=True)
     print(f"Loading base model: {base_model}", flush=True)
     training_pipeline = DistilBERTPhishingTrainer(base_model)
-    hf_trainer = training_pipeline.train(df, output_dir=output_dir, epochs=epochs)
+    hf_trainer = training_pipeline.train(
+        df,
+        output_dir=output_dir,
+        epochs=epochs,
+        resume_from_checkpoint=resolved_checkpoint,
+    )
     training_pipeline.model.config.fishstop_dataset_sha256 = dataset_sha256
     training_pipeline.model.config.fishstop_split_strategy = (
         "campaign_grouped_random_stratified_70_10_20"
@@ -536,6 +701,26 @@ def run_training(
     print(f"Running final evaluation on {len(test_df)} held-out test emails...", flush=True)
     test_logits, test_labels, test_chunks = training_pipeline.collect_email_logits(test_df)
     test_metrics = evaluate_calibrated(test_logits, test_labels, calibration)
+    test_probabilities = calibrated_probabilities(
+        test_logits,
+        calibration["temperature"],
+    )[:, 1].numpy()
+    test_predictions = (
+        test_probabilities >= float(calibration["threshold"])
+    ).astype(int)
+    test_classification_report = classification_report(
+        test_labels.numpy(),
+        test_predictions,
+        labels=[0, 1],
+        target_names=["LEGITIMATE", "MALICIOUS"],
+        output_dict=True,
+        zero_division=0,
+    )
+    prevalence_scenarios = evaluate_prevalence_scenarios(
+        test_logits,
+        test_labels,
+        calibration,
+    )
     test_metrics_by_source = {}
     if "source" in test_df.columns:
         for source, positions in test_df.reset_index(drop=True).groupby("source").groups.items():
@@ -555,6 +740,9 @@ def run_training(
         "rows": {split: int((df["split"] == split).sum()) for split in sorted(REQUIRED_SPLITS)},
         "labels": ID2LABEL,
         "epochs": int(epochs),
+        "resumed_from_checkpoint": (
+            str(resolved_checkpoint) if resolved_checkpoint is not None else None
+        ),
         "best_validation_email_f1": float(hf_trainer.state.best_metric or 0.0),
         "sources_by_split": {
             split: sorted(df.loc[df["split"].eq(split), "source"].dropna().astype(str).unique().tolist())
@@ -566,6 +754,8 @@ def run_training(
         "test_multi_chunk_emails": int(sum(count > 1 for count in test_chunks)),
         "calibration": calibration,
         "test_metrics": test_metrics,
+        "test_classification_report": test_classification_report,
+        "prevalence_scenarios": prevalence_scenarios,
         "test_metrics_by_source": test_metrics_by_source,
     }
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -581,6 +771,13 @@ def parse_args():
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--base-model", default=DEFAULT_BASE_MODEL)
     parser.add_argument("--epochs", type=int, default=4)
+    parser.add_argument(
+        "--resume-from-checkpoint",
+        nargs="?",
+        const="auto",
+        default=None,
+        help="Resume from a checkpoint path, or use 'auto' to select the latest checkpoint.",
+    )
     return parser.parse_args()
 
 
@@ -592,4 +789,5 @@ if __name__ == "__main__":
         output_dir=arguments.output_dir,
         base_model=arguments.base_model,
         epochs=arguments.epochs,
+        resume_from_checkpoint=arguments.resume_from_checkpoint,
     )

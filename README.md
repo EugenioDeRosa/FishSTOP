@@ -318,10 +318,18 @@ Generated processed datasets include immutable `train`, `validation`, and
 - removes contradictory labels;
 - uses reproducible source-stratified 70/10/20 splits;
 - keeps synthetic data train-only and limits it to 10% of the training split;
+- imports the legitimate hard-negative corpus separately from the balanced
+  synthetic corpus;
 - records versions and checksums in the manifest.
 
 The processed CSV files are tracked with Git LFS. Downloaded source archives
 under `data/training_sources/` are intentionally ignored.
+
+Regenerate the 200 modern legitimate hard negatives deterministically:
+
+```bash
+python scripts/generate_legitimate_hard_negatives.py
+```
 
 ## Model training
 

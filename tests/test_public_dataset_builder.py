@@ -509,3 +509,73 @@ def test_complete_dataset_downsamples_synthetic_rows_to_configured_cap(tmp_path:
     assert result["status"] == "ok"
     assert result["synthetic_rows"] < result["synthetic_rows_available"]
     assert result["synthetic_train_fraction"] <= 0.10
+
+
+def test_complete_dataset_adds_legitimate_hard_negatives_train_only(tmp_path: Path):
+    public_rows = []
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    for label in (0, 1):
+        for index in range(20):
+            split = "train" if index < 12 else "validation" if index < 16 else "test"
+            text = _text(
+                f"public hard negative integration {alphabet[index]} {alphabet[20 + label]} "
+                f"{'routine business message' if label == 0 else 'malicious credential request'}"
+            )
+            public_rows.append(
+                {
+                    "text": text,
+                    "label": label,
+                    "source": "public_real",
+                    "source_file": f"{label}-{index}",
+                    "text_hash": text_hash(text),
+                    "campaign_id": f"campaign-{label}-{index}",
+                    "split": split,
+                }
+            )
+    synthetic_rows = [
+        {
+            "text": _text(
+                f"balanced synthetic {alphabet[index]} {alphabet[20 + label]} class example"
+            ),
+            "label": label,
+            "source": "synthetic_modern_v2",
+            "source_file": f"{label}-{index}",
+        }
+        for label in (0, 1)
+        for index in range(2)
+    ]
+    hard_negative_tokens = ("amber", "birch", "cedar", "dahlia")
+    hard_negative_rows = [
+        {
+            "text": _text(f"legitimate security notice hard negative {token}"),
+            "label": 0,
+            "source": "synthetic_legitimate_hard_negative_v1",
+            "source_file": str(index),
+        }
+        for index, token in enumerate(hard_negative_tokens)
+    ]
+    public_csv = tmp_path / "public.csv"
+    synthetic_csv = tmp_path / "synthetic.csv"
+    hard_negative_csv = tmp_path / "hard-negative.csv"
+    output_csv = tmp_path / "complete.csv"
+    pd.DataFrame(public_rows).to_csv(public_csv, index=False)
+    pd.DataFrame(synthetic_rows).to_csv(synthetic_csv, index=False)
+    pd.DataFrame(hard_negative_rows).to_csv(hard_negative_csv, index=False)
+
+    result = combine_public_and_synthetic_datasets(
+        public_csv=public_csv,
+        synthetic_csv=synthetic_csv,
+        legitimate_hard_negative_csv=hard_negative_csv,
+        output_csv=output_csv,
+        max_synthetic_train_fraction=0.50,
+    )
+
+    assert result["status"] == "ok"
+    complete = pd.read_csv(output_csv)
+    hard_negative = complete[
+        complete["source"].eq("synthetic_legitimate_hard_negative_v1")
+    ]
+    assert len(hard_negative) == 4
+    assert set(hard_negative["label"]) == {0}
+    assert set(hard_negative["split"]) == {"train"}
+    assert result["legitimate_hard_negative_rows"] == 4

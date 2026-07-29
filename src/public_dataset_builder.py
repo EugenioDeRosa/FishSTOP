@@ -48,6 +48,9 @@ PROCESSED_DIR = ROOT / "processed"
 DEFAULT_OUTPUT_CSV = PROCESSED_DIR / "fishstop_train.csv"
 DEFAULT_BALANCED_OUTPUT_CSV = PROCESSED_DIR / "fishstop_train_balanced.csv"
 DEFAULT_SYNTHETIC_CSV = PROCESSED_DIR / "fishstop_synthetic_modern_v2.csv"
+DEFAULT_LEGITIMATE_HARD_NEGATIVE_CSV = (
+    PROCESSED_DIR / "fishstop_synthetic_legitimate_hard_negatives_v1.csv"
+)
 DEFAULT_COMPLETE_OUTPUT_CSV = PROCESSED_DIR / "fishstop_train_complete.csv"
 FINAL_COLUMNS = ["text", "label", "source", "source_file", "text_hash"]
 OUTPUT_COLUMNS = FINAL_COLUMNS + ["campaign_id", "split"]
@@ -1343,6 +1346,7 @@ def build_balanced_public_dataset(
 def combine_public_and_synthetic_datasets(
     public_csv: Path = DEFAULT_BALANCED_OUTPUT_CSV,
     synthetic_csv: Path = DEFAULT_SYNTHETIC_CSV,
+    legitimate_hard_negative_csv: Path | None = None,
     output_csv: Path = DEFAULT_COMPLETE_OUTPUT_CSV,
     max_synthetic_train_fraction: float = MAX_SYNTHETIC_TRAIN_FRACTION,
 ) -> dict:
@@ -1401,6 +1405,46 @@ def combine_public_and_synthetic_datasets(
                 f"legitimate={synthetic_counts.get(0, 0)}, phishing={synthetic_counts.get(1, 0)}."
             ),
         }
+
+    hard_negative = pd.DataFrame(columns=FINAL_COLUMNS)
+    hard_negative_quality = {
+        "template_duplicates": 0,
+        "label_conflicts": 0,
+        "invalid_text": 0,
+        "invalid_label": 0,
+        "too_short": 0,
+        "too_few_words": 0,
+        "too_long": 0,
+        "exact_duplicates": 0,
+        "exact_label_conflicts": 0,
+    }
+    if legitimate_hard_negative_csv is not None:
+        if not legitimate_hard_negative_csv.exists():
+            return {
+                "status": "error",
+                "message": (
+                    "Dataset legitimate hard-negative non trovato: "
+                    f"{legitimate_hard_negative_csv}"
+                ),
+            }
+        hard_negative_raw = pd.read_csv(legitimate_hard_negative_csv)
+        hard_negative, hard_negative_quality = _dedupe_templates(hard_negative_raw)
+        if hard_negative.empty:
+            return {
+                "status": "error",
+                "message": "Il dataset legitimate hard-negative non contiene righe valide.",
+            }
+        if not _synthetic_source_mask(hard_negative).all():
+            return {
+                "status": "error",
+                "message": "Le fonti hard-negative devono usare il prefisso synthetic_.",
+            }
+        if set(hard_negative["label"]) != {0}:
+            return {
+                "status": "error",
+                "message": "Il dataset legitimate hard-negative deve contenere solo label 0.",
+            }
+
     public_train_rows = int(public["split"].eq("train").sum())
     max_synthetic_rows = int(
         np.floor(
@@ -1410,9 +1454,24 @@ def combine_public_and_synthetic_datasets(
         )
     )
     max_synthetic_rows -= max_synthetic_rows % 2
-    available_synthetic_rows = len(synthetic)
-    if len(synthetic) > max_synthetic_rows:
-        per_class = max_synthetic_rows // 2
+    available_balanced_synthetic_rows = len(synthetic)
+    available_hard_negative_rows = len(hard_negative)
+    available_synthetic_rows = (
+        available_balanced_synthetic_rows + available_hard_negative_rows
+    )
+    if available_synthetic_rows > max_synthetic_rows:
+        hard_negative_limit = min(
+            available_hard_negative_rows,
+            max_synthetic_rows // 2,
+        )
+        if len(hard_negative) > hard_negative_limit:
+            hard_negative = hard_negative.sample(
+                n=hard_negative_limit,
+                random_state=84,
+            )
+        remaining_rows = max_synthetic_rows - len(hard_negative)
+        remaining_rows -= remaining_rows % 2
+        per_class = remaining_rows // 2
         if per_class == 0:
             return {
                 "status": "error",
@@ -1428,11 +1487,12 @@ def combine_public_and_synthetic_datasets(
             ],
             ignore_index=True,
         )
-    synthetic["split"] = "train"
-    synthetic["campaign_id"] = "synthetic:" + synthetic["text_hash"].astype(str)
+    augmentation = pd.concat([synthetic, hard_negative], ignore_index=True)
+    augmentation["split"] = "train"
+    augmentation["campaign_id"] = "synthetic:" + augmentation["text_hash"].astype(str)
 
     combined_with_split = pd.concat(
-        [public[OUTPUT_COLUMNS], synthetic[OUTPUT_COLUMNS]],
+        [public[OUTPUT_COLUMNS], augmentation[OUTPUT_COLUMNS]],
         ignore_index=True,
     )
     combined, combined_quality = _dedupe_templates(combined_with_split)
@@ -1493,10 +1553,13 @@ def combine_public_and_synthetic_datasets(
         "stats": dataset_stats(output_csv),
         "synthetic_rows": synthetic_rows,
         "synthetic_rows_available": available_synthetic_rows,
+        "legitimate_hard_negative_rows": int(len(hard_negative)),
+        "legitimate_hard_negative_rows_available": available_hard_negative_rows,
         "synthetic_train_fraction": synthetic_fraction,
         "quality": {
             "public": public_quality,
             "synthetic": synthetic_quality,
+            "legitimate_hard_negative": hard_negative_quality,
             "combined": combined_quality,
         },
     }
@@ -1513,6 +1576,7 @@ def _file_sha256(path: Path) -> str:
 def write_dataset_manifest(
     output_csv: Path,
     synthetic_csv: Path,
+    legitimate_hard_negative_csv: Path | None,
     selected_sources: list[str],
     source_results: list[BuildResult],
     stats: dict,
@@ -1540,6 +1604,8 @@ def write_dataset_manifest(
             SOURCES_DIR / "mixed" / "spaphish" / f"spaphish_v{SPAPHISH_VERSION}.csv"
         )
     artifact_paths.append(synthetic_csv)
+    if legitimate_hard_negative_csv is not None:
+        artifact_paths.append(legitimate_hard_negative_csv)
 
     manifest_path = output_csv.with_suffix(".manifest.json")
     manifest = {
@@ -1576,6 +1642,7 @@ def build_complete_training_dataset(
     output_csv: Path = DEFAULT_COMPLETE_OUTPUT_CSV,
     public_output_csv: Path = DEFAULT_BALANCED_OUTPUT_CSV,
     synthetic_csv: Path = DEFAULT_SYNTHETIC_CSV,
+    legitimate_hard_negative_csv: Path | None = DEFAULT_LEGITIMATE_HARD_NEGATIVE_CSV,
     staging_csv: Path = DEFAULT_OUTPUT_CSV,
     include_hard_ham: bool = True,
     max_enron: int = 10000,
@@ -1598,6 +1665,7 @@ def build_complete_training_dataset(
     complete_result = combine_public_and_synthetic_datasets(
         public_csv=public_output_csv,
         synthetic_csv=synthetic_csv,
+        legitimate_hard_negative_csv=legitimate_hard_negative_csv,
         output_csv=output_csv,
         max_synthetic_train_fraction=max_synthetic_train_fraction,
     )
@@ -1606,6 +1674,7 @@ def build_complete_training_dataset(
         manifest_path = write_dataset_manifest(
             output_csv=output_csv,
             synthetic_csv=synthetic_csv,
+            legitimate_hard_negative_csv=legitimate_hard_negative_csv,
             selected_sources=selected_sources,
             source_results=public_result.get("results", []),
             stats=complete_result.get("stats", {}),

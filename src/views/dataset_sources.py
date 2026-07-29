@@ -10,6 +10,7 @@ from src.ui import page_intro
 from src.public_dataset_builder import (
     DEFAULT_BALANCED_OUTPUT_CSV,
     DEFAULT_COMPLETE_OUTPUT_CSV,
+    DEFAULT_LEGITIMATE_HARD_NEGATIVE_CSV,
     DEFAULT_OUTPUT_CSV,
     DEFAULT_SYNTHETIC_CSV,
     build_balanced_public_dataset,
@@ -223,6 +224,12 @@ def render() -> None:
         st.text_input("Intermediate public-only CSV", value=str(DEFAULT_BALANCED_OUTPUT_CSV))
     )
     synthetic_csv = Path(st.text_input("Synthetic augmentation CSV", value=str(DEFAULT_SYNTHETIC_CSV)))
+    legitimate_hard_negative_csv = Path(
+        st.text_input(
+            "Legitimate hard-negative CSV",
+            value=str(DEFAULT_LEGITIMATE_HARD_NEGATIVE_CSV),
+        )
+    )
     st.caption(
         "Format: `text,label,source,source_file,text_hash,campaign_id,split` con "
         "`0=legitimate`, `1=malicious (phishing/spam)` e split per campagna anti-leakage."
@@ -239,6 +246,17 @@ def render() -> None:
         )
     else:
         st.error(f"Synthetic dataset not found: `{synthetic_csv}`")
+    if legitimate_hard_negative_csv.exists():
+        hard_negative_stats = _ui_stats(legitimate_hard_negative_csv)
+        st.caption(
+            f"Legitimate hard negatives available: {hard_negative_stats['rows']} rows "
+            "(train-only augmentation)."
+        )
+    else:
+        st.error(
+            "Legitimate hard-negative dataset not found: "
+            f"`{legitimate_hard_negative_csv}`"
+        )
 
     st.divider()
     st.subheader("Sources to include")
@@ -267,7 +285,11 @@ def render() -> None:
     if st.button(
         "Generate complete DistilBERT training dataset",
         type="primary",
-        disabled=not selected_sources or not synthetic_csv.exists(),
+        disabled=(
+            not selected_sources
+            or not synthetic_csv.exists()
+            or not legitimate_hard_negative_csv.exists()
+        ),
         use_container_width=True,
     ):
         _run_builder(
@@ -277,6 +299,7 @@ def render() -> None:
             output_csv=output_csv,
             public_output_csv=public_output_csv,
             synthetic_csv=synthetic_csv,
+            legitimate_hard_negative_csv=legitimate_hard_negative_csv,
             staging_csv=DEFAULT_OUTPUT_CSV,
         )
         st.rerun()
