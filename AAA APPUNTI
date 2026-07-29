@@ -3,5 +3,8 @@ su colab quando faccio rerun devo cambiare name ad es
 RUN_NAME = "fishstop-distilbert-hardneg-v2"
 
 CODICE 
-non funziona bene ricerca link malevoli su virustotal
- 
+
+
+
+in futurissimo: mettere account con google sign in tipo, ogni account deve mettere le sue chiavi api per farlo funzionare. e si ha un limite di una analisi mail per sessione. si nascondono ovviamente tutte le altre sezioni come connections e project tools 
+

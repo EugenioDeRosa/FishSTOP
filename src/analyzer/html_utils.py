@@ -66,6 +66,10 @@ _BLOCK_TEXT_TAGS = {
 _HIDDEN_STYLE_RE = re.compile(
     r"(?is)(?:display\s*:\s*none|visibility\s*:\s*hidden|opacity\s*:\s*0(?:\D|$)|font-size\s*:\s*0(?:\D|$))"
 )
+_SIGNATURE_MARKER_RE = re.compile(
+    r"(?:^|[-_])(?:email[-_]?signature|mail[-_]?signature|signature)(?:$|[-_])",
+    re.IGNORECASE,
+)
 
 
 def recover_mislabelled_utf7_html(value: str) -> str:
@@ -220,6 +224,38 @@ def strip_html(html: str) -> str:
     return cleaned.strip()
 
 
+def strip_html_for_intent(html: str) -> str:
+    """Extract visible message text while excluding explicit signature blocks."""
+    if not html or not html.strip():
+        return ""
+    if not _BS4_AVAILABLE:
+        without_signatures = re.sub(
+            r"""(?is)<(?:div|section|table|footer)\b[^>]*(?:id|class)\s*=\s*
+                ["'][^"']*signature[^"']*["'][^>]*>.*?</(?:div|section|table|footer)>""",
+            " ",
+            html,
+            flags=re.VERBOSE,
+        )
+        return strip_html(without_signatures)
+
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        soup = BeautifulSoup(html, "html.parser")
+
+    for tag in list(soup.find_all(True)):
+        if tag.parent is None or tag.attrs is None:
+            continue
+        marker_values = [
+            str(tag.get("id") or ""),
+            *[str(value) for value in (tag.get("class") or [])],
+        ]
+        if any(_SIGNATURE_MARKER_RE.search(value) for value in marker_values):
+            tag.decompose()
+
+    return strip_html(str(soup))
+
+
 def sanitize_html_for_preview(html: str) -> str:
     """
     Restituisce HTML renderizzabile nella dashboard senza contenuti attivi.
@@ -317,4 +353,3 @@ def sanitize_html_for_js_preview(html: str) -> str:
       {body}
     </div>
     """
-

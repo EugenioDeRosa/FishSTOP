@@ -29,7 +29,11 @@ from src.analysis_limits import (
 )
 from .attachment      import analyze_attachment
 from .body_context    import select_body_for_ai
-from .html_utils      import recover_mislabelled_utf7_html, strip_html
+from .html_utils      import (
+    recover_mislabelled_utf7_html,
+    strip_html,
+    strip_html_for_intent,
+)
 from .link_extractor  import extract_links
 from .lookalike       import check_lookalike_domains
 from .received_parser import (
@@ -439,12 +443,32 @@ class EmlSOCAnalyzer:
                         f"Email contains more than {MAX_ATTACHMENTS} attachments."
                     )
                 raw_payload = part.get_payload(decode=True)
-                attachments_info.append(analyze_attachment(
+                attachment_info = analyze_attachment(
                     filename=filename,
                     content_type=ct,
                     encoding=encoding,
                     raw_payload=raw_payload,
-                ))
+                )
+                disposition_type = str(part.get_content_disposition() or "").lower()
+                content_id = str(part.get("Content-ID") or "").strip().strip("<>")
+                is_inline_resource = (
+                    not is_attach
+                    and (
+                        disposition_type == "inline"
+                        or (bool(content_id) and ct.startswith("image/"))
+                    )
+                )
+                attachment_info.update({
+                    "content_disposition": disposition_type,
+                    "content_id": content_id,
+                    "mime_role": (
+                        "inline_resource"
+                        if is_inline_resource
+                        else "attachment"
+                    ),
+                    "actionable": not is_inline_resource,
+                })
+                attachments_info.append(attachment_info)
 
         for part in _iter_body_leaf_parts(msg):
             ct = part.get_content_type()
@@ -490,11 +514,25 @@ class EmlSOCAnalyzer:
         report["body_plain_noise_removed_chars"] = plain_noise_removed_chars
         report["attachments"] = attachments_info
         report.update(select_body_for_ai(report["body_clean"]))
+        plain_body_for_ai = report.get("body_ai") or report["body_clean"]
         report["body_clean_full"] = report["body_clean"]
-        report["body_extracted"] = report.get("body_ai") or report["body_clean"]
-        # multipart/alternative representations describe the same message.
-        # Links remain available from body_html, but BERT receives one canonical
-        # body only so removed signatures/threads are not reintroduced.
+        html_body_for_intent = (
+            strip_html_for_intent(combined_html) if combined_html else ""
+        )
+        report["body_for_intent"] = (
+            html_body_for_intent or plain_body_for_ai
+        ).strip()
+        # Apply reply/signature/footer selection to the structurally cleaned
+        # text when an explicit HTML signature was actually removed. Otherwise
+        # retain the canonical plain alternative, which may contain legitimate
+        # details omitted from a divergent HTML alternative.
+        bert_source = (
+            report["body_for_intent"]
+            if combined_html and html_body_for_intent != html_clean
+            else plain_body_for_ai
+        )
+        report.update(select_body_for_ai(bert_source))
+        report["body_extracted"] = report.get("body_ai") or bert_source
         report["body_for_ai"] = report["body_extracted"].strip()
         report["ai_analysis_supported"] = (
             len(report["body_for_ai"]) <= MAX_AI_BODY_CHARS

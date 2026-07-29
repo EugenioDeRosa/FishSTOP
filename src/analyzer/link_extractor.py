@@ -41,6 +41,14 @@ _BRACKETED_PLACEHOLDER_USERINFO_RE = re.compile(
     r"^(?P<scheme>https?://)\[[^\]/?#@]*\]@(?P<destination>.+)$",
     re.IGNORECASE,
 )
+_SIGNATURE_MARKER_RE = re.compile(
+    r"(?:^|[-_])(?:email[-_]?signature|mail[-_]?signature|signature)(?:$|[-_])",
+    re.IGNORECASE,
+)
+_NON_ACTION_LINK_TEXT_RE = re.compile(
+    r"\b(?:unsubscribe|afmelden|abmelden|désabonner|disiscriv\w*)\b",
+    re.IGNORECASE,
+)
 
 
 def _normalize_malformed_userinfo(value: str) -> str:
@@ -87,6 +95,17 @@ def _with_scheme(value: str) -> str:
     return value
 
 
+def _url_dedupe_key(value: str) -> str:
+    parsed = _safe_urlparse(value)
+    if parsed is None:
+        return value
+    return parsed._replace(
+        scheme=parsed.scheme.lower(),
+        netloc=parsed.netloc.lower(),
+        path=parsed.path or "/",
+    ).geturl()
+
+
 def _registered_domain(host: str) -> str:
     parts = (host or "").lower().rstrip(".").split(".")
     if len(parts) >= 2:
@@ -129,6 +148,31 @@ def _possible_shortener(host: str, path: str) -> tuple[bool, str]:
     return False, ""
 
 
+def _html_node_has_signature_marker(node) -> bool:
+    attrs = getattr(node, "attrs", None)
+    if attrs is None:
+        return False
+    marker_values = [
+        str(node.get("id") or ""),
+        *[str(value) for value in (node.get("class") or [])],
+    ]
+    return any(_SIGNATURE_MARKER_RE.search(value) for value in marker_values)
+
+
+def _html_link_role(anchor) -> str:
+    """Classify links using explicit structural markers, not domain allowlists."""
+    for node in [anchor, *list(anchor.parents)]:
+        attrs = getattr(node, "attrs", None)
+        if attrs is None:
+            continue
+        if _html_node_has_signature_marker(node):
+            return "signature"
+    display_text = anchor.get_text(" ", strip=True)
+    if _NON_ACTION_LINK_TEXT_RE.search(display_text):
+        return "unsubscribe"
+    return "body_action"
+
+
 def extract_links(
     body_plain: str,
     body_html: str,
@@ -144,12 +188,19 @@ def extract_links(
     seen: set[str] = set()
     links: list[dict] = []
 
-    def _add(url: str, display: str, source: str) -> None:
+    def _add(
+        url: str,
+        display: str,
+        source: str,
+        *,
+        role: str = "body_action",
+    ) -> None:
         raw_url = (url or "").strip().rstrip(".,;)")
         if not _is_web_url_candidate(raw_url):
             return
         url = _normalize_malformed_userinfo(_with_scheme(raw_url))
-        if not url or url in seen:
+        dedupe_key = _url_dedupe_key(url)
+        if not url or dedupe_key in seen:
             return
         if len(links) >= max_links:
             raise EmailAnalysisLimitError(
@@ -162,7 +213,7 @@ def extract_links(
         scheme = parsed.scheme.lower()
         if scheme not in _WEB_SCHEMES or not host:
             return
-        seen.add(url)
+        seen.add(dedupe_key)
 
         display_text = (display or "").strip()
         display_url, display_host = _extract_display_destination(display_text)
@@ -177,6 +228,8 @@ def extract_links(
             "host": host,
             "scheme": scheme,
             "source": source,
+            "role": role,
+            "actionable": role == "body_action",
             "is_ip": is_ip_url(host),
             "is_possible_shortener": is_shortener,
             "shortener_reason": shortener_reason,
@@ -198,7 +251,15 @@ def extract_links(
             for anchor in soup.find_all("a", limit=max_links + 1):
                 href = anchor.get("href")
                 if href:
-                    _add(href, anchor.get_text(" ", strip=True), "html_href")
+                    _add(
+                        href,
+                        anchor.get_text(" ", strip=True),
+                        "html_href",
+                        role=_html_link_role(anchor),
+                    )
+            for tag in list(soup.find_all(True)):
+                if tag.parent is not None and _html_node_has_signature_marker(tag):
+                    tag.decompose()
         else:
             matched_spans = []
             for m in _ANCHOR_RE.finditer(body_html):
@@ -209,7 +270,7 @@ def extract_links(
                     continue
                 _add(m.group(1), "", "html_href")
 
-        html_stripped = strip_html(body_html)
+        html_stripped = strip_html(str(soup)) if BeautifulSoup is not None else strip_html(body_html)
         for m in _URL_RE.finditer(html_stripped):
             _add(m.group(0), "", "html_text")
         _add_unicode_bare_domains(html_stripped, "html_domain")

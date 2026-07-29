@@ -43,3 +43,18 @@ def test_unrecoverable_bracketed_host_is_ignored_without_crashing():
     html = '<a href="https://[not-an-ip]/claim">Claim reward</a>'
 
     assert extract_links("", html) == []
+
+
+def test_outlook_signature_link_is_retained_but_not_actionable():
+    html = """
+    <div>Routine message.</div>
+    <div id="Signature">
+      <a href="http://www.example.com/">www.example.com</a>
+    </div>
+    """
+
+    links = extract_links("Routine message.\nwww.example.com<http://www.example.com/>", html)
+
+    assert len(links) == 1
+    assert links[0]["role"] == "signature"
+    assert links[0]["actionable"] is False

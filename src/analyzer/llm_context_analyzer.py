@@ -328,7 +328,14 @@ def _remove_mail_client_signatures(value: str) -> str:
     return "\n".join(lines[:end_index]).strip()
 
 def _body_context_for_llm(soc: dict) -> str:
-    plain_body = soc.get("body_for_ai") or soc.get("body_ai") or soc.get("body_extracted") or soc.get("body_clean") or ""
+    plain_body = (
+        soc.get("body_for_intent")
+        or soc.get("body_for_ai")
+        or soc.get("body_ai")
+        or soc.get("body_extracted")
+        or soc.get("body_clean")
+        or ""
+    )
     if plain_body:
         return plain_body
 
@@ -348,11 +355,38 @@ _NON_ACTION_LINK_TEXT_RE = re.compile(
 )
 
 
+def _actionable_links(soc: dict) -> list[dict]:
+    """Return links that can represent a request, retaining legacy link data."""
+    return [
+        link
+        for link in (soc.get("links") or [])
+        if link.get("actionable") is not False
+        and str(link.get("role") or "body_action") not in {
+            "signature",
+            "unsubscribe",
+            "navigation",
+        }
+        and not _NON_ACTION_LINK_TEXT_RE.search(
+            str(link.get("display_text") or "")
+        )
+    ]
+
+
+def _actionable_attachments(soc: dict) -> list[dict]:
+    """Exclude inline presentation resources from requested-action reasoning."""
+    return [
+        attachment
+        for attachment in (soc.get("attachments") or [])
+        if attachment.get("actionable") is not False
+        and str(attachment.get("mime_role") or "attachment") != "inline_resource"
+    ]
+
+
 def _actionable_link_texts(soc: dict) -> list[str]:
     """Retain meaningful HTML link labels when the selected plain body loses them."""
     values: list[str] = []
     seen: set[str] = set()
-    for link in (soc.get("links") or []):
+    for link in _actionable_links(soc):
         value = re.sub(
             r"\s+",
             " ",
@@ -628,8 +662,9 @@ def _normalized_evidence(value: str) -> str:
 
 _ACTION_EVIDENCE_PATTERNS = {
     "visit_link": re.compile(
-        r"\b(?:click|open|visit|follow|consult\w*|view|klick\w*|öffn\w*|"
-        r"besuch\w*|clic\w*|abr\w*|acced\w*|apri\w*)\b",
+        r"\b(?:read\s+more|learn\s+more|click|open|visit|follow|discover|consult\w*|"
+        r"view|klick\w*|öffn\w*|"
+        r"besuch\w*|clic\w*|abr\w*|acced\w*|apri\w*|scopr\w*)\b",
         re.IGNORECASE,
     ),
     "open_attachment": re.compile(
@@ -773,7 +808,7 @@ def _prepared_email_prompt_parts(
 ) -> tuple[str, str, str]:
     body = _normalize_obfuscated_text(_body_context_for_llm(soc))
     body = _remove_mail_client_signatures(body)
-    attachments = soc.get("attachments") or []
+    attachments = _actionable_attachments(soc)
     subject = compact_ai_body(
         _normalize_obfuscated_text(str(soc.get("subject") or "(no subject)"))
     )
@@ -812,8 +847,8 @@ def _email_prompt_from_body(
     section_number: int = 1,
     section_total: int = 1,
 ) -> str:
-    links = soc.get("links") or []
-    attachments = soc.get("attachments") or []
+    links = _actionable_links(soc)
+    attachments = _actionable_attachments(soc)
     section_meta = (
         f"; section={section_number}/{section_total}"
         if section_total > 1
@@ -1190,8 +1225,8 @@ def _enrich_context_signals(message_text: str, semantic: dict) -> None:
 def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dict:
     """Correct contradictions between semantic output and extracted message structure."""
     semantic = dict(semantic)
-    links = soc.get("links") or []
-    attachments = soc.get("attachments") or []
+    links = _actionable_links(soc)
+    attachments = _actionable_attachments(soc)
     message_body = _body_context_for_llm(soc)
     message_text = _normalize_obfuscated_text(
         _message_evidence_text(soc)
@@ -1529,6 +1564,30 @@ def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dic
         )
         if semantic["evidence_phrase"]:
             semantic["reason"] = semantic["evidence_phrase"]
+    if (
+        semantic["requested_action"] == "visit_link"
+        and (not links or not semantic.get("evidence_phrase"))
+    ):
+        semantic["requested_action"] = "informational"
+        semantic["asks_to_click_link"] = False
+        semantic["action_channel"] = "none"
+        semantic["content_summary"] = (
+            "The subject and body provide information without an explicit "
+            "request to follow a supplied link"
+        )
+        semantic["reason"] = "No explicit link call-to-action was found."
+    if (
+        semantic["requested_action"] == "open_attachment"
+        and (not attachments or not semantic.get("evidence_phrase"))
+    ):
+        semantic["requested_action"] = "informational"
+        semantic["asks_to_open_attachment"] = False
+        semantic["action_channel"] = "none"
+        semantic["content_summary"] = (
+            "The subject and body provide information without an explicit "
+            "request to open an attachment"
+        )
+        semantic["reason"] = "No explicit attachment-opening request was found."
     if not semantic.get("signal_evidence"):
         semantic["signal_evidence"] = _find_signal_evidence(soc, semantic)
 
@@ -1774,7 +1833,7 @@ def _sensitive_link_domain_mismatch(soc: dict, semantic: dict) -> bool:
     return any(
         _registered_domain(link.get("host") or "")
         and _registered_domain(link.get("host") or "") != sender_domain
-        for link in (soc.get("links") or [])
+        for link in _actionable_links(soc)
     )
 
 
@@ -1832,15 +1891,7 @@ def _technical_risk(soc: dict, semantic: dict | None = None) -> tuple[str, list[
         and semantic.get("action_channel") == "supplied_link"
         and "link_reputation" in soc
     ):
-        actionable_links = [
-            link
-            for link in (soc.get("links") or [])
-            if not re.search(
-                r"\b(?:unsubscribe|afmelden|abmelden|désabonner|disiscriv\w*)\b",
-                str(link.get("display_text") or ""),
-                re.IGNORECASE,
-            )
-        ]
+        actionable_links = _actionable_links(soc)
         reputation = soc.get("link_reputation") or {}
         actionable_statuses = {
             str((reputation.get(link.get("url") or "") or {}).get("status") or "").lower()

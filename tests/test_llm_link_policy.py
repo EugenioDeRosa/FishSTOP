@@ -1,7 +1,13 @@
 import inspect
+from pathlib import Path
 
 from src.analyzer import llm_context_analyzer
-from src.analyzer.llm_context_analyzer import build_fast_email_prompt, stream_phi4_email_analysis
+from src.analyzer.llm_context_analyzer import (
+    apply_email_risk_policy,
+    build_fast_email_prompt,
+    stream_phi4_email_analysis,
+)
+from src.analyzer.soc_analyzer import EmlSOCAnalyzer
 
 
 def test_phi4_prompt_says_link_alone_is_not_suspicious():
@@ -118,3 +124,139 @@ def test_extracted_footer_link_is_metadata_not_a_standalone_body_action():
 
     assert "META: links=1" in prompt
     assert "[URL LINK]" not in prompt
+
+
+def test_test4_signature_link_cannot_turn_bert_false_positive_into_phishing():
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "raw"
+        / "custom_legitimate"
+        / "test4.eml"
+    )
+    soc = EmlSOCAnalyzer().analyze(str(fixture))
+    soc["bert_ai_result"] = "phishing"
+    soc["link_reputation"] = {
+        link["url"]: {"status": "clean"}
+        for link in soc["links"]
+    }
+
+    prompt = build_fast_email_prompt(soc)
+    analysis = apply_email_risk_policy(
+        soc,
+        {
+            "action": "visit_link",
+            "channel": "link",
+            "evidence": "www.cefla.com",
+        },
+    )
+
+    assert soc["body_for_intent"] == "Test email per check SPF, DKIM ecc"
+    assert soc["body_for_ai"] == "Test email per check SPF, DKIM ecc"
+    assert len(soc["links"]) == 1
+    assert soc["links"][0]["role"] == "signature"
+    assert soc["links"][0]["actionable"] is False
+    assert "META: links=0" in prompt
+    assert "www.cefla.com" not in prompt
+    assert analysis["requested_action"] == "informational"
+    assert analysis["action_channel"] == "none"
+    assert analysis["content_risk"] == "benign"
+    assert analysis["technical_risk"] == "clean"
+    assert analysis["final_verdict"] == "legitimate"
+
+
+def test_test4_inline_logo_cannot_become_an_open_attachment_request():
+    fixture = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "raw"
+        / "custom_legitimate"
+        / "test4.eml"
+    )
+    soc = EmlSOCAnalyzer().analyze(str(fixture))
+    soc["bert_ai_result"] = "phishing"
+    soc["link_reputation"] = {
+        link["url"]: {"status": "clean"}
+        for link in soc["links"]
+    }
+
+    prompt = build_fast_email_prompt(soc)
+    analysis = apply_email_risk_policy(
+        soc,
+        {
+            "action": "open_attachment",
+            "channel": "attachment",
+            "evidence": "[cid:d4754c29-aa04-4888-93c7-4b8ff339f14e]",
+        },
+    )
+
+    assert len(soc["attachments"]) == 1
+    assert soc["attachments"][0]["mime_role"] == "inline_resource"
+    assert soc["attachments"][0]["actionable"] is False
+    assert soc["attachments"][0]["content_disposition"] == "inline"
+    assert soc["attachments"][0]["content_id"]
+    assert "META: links=0; attachments=0; types=none" in prompt
+    assert analysis["requested_action"] == "informational"
+    assert analysis["action_channel"] == "none"
+    assert analysis["content_risk"] == "benign"
+    assert analysis["technical_risk"] == "clean"
+    assert analysis["final_verdict"] == "legitimate"
+
+
+def test_explicit_request_to_open_real_attachment_remains_actionable():
+    soc = {
+        "subject": "Document attached",
+        "body_for_intent": "Please open the attached document.",
+        "links": [],
+        "attachments": [{
+            "filename": "document.pdf",
+            "mime_role": "attachment",
+            "actionable": True,
+        }],
+        "auth_results": {},
+        "bert_ai_result": "phishing",
+    }
+
+    analysis = apply_email_risk_policy(
+        soc,
+        {
+            "action": "open_attachment",
+            "channel": "attachment",
+            "evidence": "open the attached document",
+        },
+    )
+
+    assert analysis["requested_action"] == "open_attachment"
+    assert analysis["action_channel"] == "supplied_attachment"
+    assert analysis["final_verdict"] == "phishing"
+
+
+def test_explicit_body_call_to_action_remains_actionable():
+    url = "https://example.test/review"
+    soc = {
+        "subject": "Review",
+        "body_for_intent": "Please click here to review the account.",
+        "links": [{
+            "url": url,
+            "host": "example.test",
+            "display_text": "click here",
+            "role": "body_action",
+            "actionable": True,
+        }],
+        "link_reputation": {url: {"status": "clean"}},
+        "auth_results": {},
+        "bert_ai_result": "phishing",
+    }
+
+    analysis = apply_email_risk_policy(
+        soc,
+        {
+            "action": "visit_link",
+            "channel": "link",
+            "evidence": "click here",
+        },
+    )
+
+    assert analysis["requested_action"] == "visit_link"
+    assert analysis["action_channel"] == "supplied_link"
+    assert analysis["final_verdict"] == "phishing"
