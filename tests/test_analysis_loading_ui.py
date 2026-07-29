@@ -2,6 +2,7 @@ from pathlib import Path
 
 from src.views.analyzer import (
     _background_jobs_complete,
+    _render_attachment_intelligence_card,
     _render_url_intelligence_card,
     _verdict_loading_html,
 )
@@ -72,3 +73,34 @@ def test_existing_report_card_is_compact_and_has_no_copy_action(monkeypatch):
     assert "Copy URL &amp; scan" not in rendered["html"]
     assert "Malicious 1" not in rendered["html"]
     assert "Harmless" not in rendered["html"]
+
+
+def test_inline_attachment_card_is_compact_and_marks_missing_hash_report(monkeypatch):
+    rendered = {}
+    monkeypatch.setattr(
+        "src.views.analyzer.st.iframe",
+        lambda html, **kwargs: rendered.update(html=html, **kwargs),
+    )
+
+    _render_attachment_intelligence_card(
+        {
+            "filename": "Outlook-logo.png",
+            "content_type": "image/png",
+            "extension_from_filename": "png",
+            "size_bytes": 16481,
+            "mime_role": "inline_resource",
+            "actionable": False,
+            "extension_match": True,
+        },
+        {
+            "status": "not_found",
+            "permalink": "https://www.virustotal.com/gui/file/hash",
+        },
+        1,
+    )
+
+    assert "NOT FOUND" in rendered["html"]
+    assert "Inline resource" in rendered["html"]
+    assert "Local structure OK" in rendered["html"]
+    assert "VirusTotal: hash not found" in rendered["html"]
+    assert "VirusTotal report" not in rendered["html"]

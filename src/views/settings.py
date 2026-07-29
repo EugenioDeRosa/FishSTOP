@@ -3,7 +3,7 @@ import streamlit as st
 from src.config import MANAGED_API_KEYS, get_secret, get_secret_source, set_user_secret
 from src.views.backend import get_model_source
 from src.analyzer.llm_context_analyzer import active_llm_backend
-from src.ui import page_intro
+from src.ui import page_intro, status_card
 
 
 KEY_LABELS = {
@@ -38,8 +38,12 @@ def render():
     )
 
     model_source = get_model_source()
-    st.success("Content classifier ready")
-    st.caption(f"Active model: {model_source}")
+    status_card(
+        "Content classifier",
+        f"Active model: {model_source}",
+        status="success",
+        badge="READY",
+    )
 
     st.subheader("Service credentials")
     st.caption("Credentials entered here are kept for this session. Leave a field empty to keep its current value.")
@@ -86,14 +90,15 @@ def render():
     }
     for key, col in status_cols.items():
         with col:
-            if get_secret(key):
-                st.success(KEY_LABELS[key])
-            else:
-                st.error(KEY_LABELS[key])
-            st.caption(get_secret_source(key))
+            configured = bool(get_secret(key))
+            status_card(
+                KEY_LABELS[key],
+                f"Source: {get_secret_source(key)}",
+                status="success" if configured else "warning",
+                badge="READY" if configured else "MISSING",
+            )
 
     with st.expander("Model details", expanded=False):
         st.write("**DistilBERT:** Hugging Face content classification")
         st.write(f"**Phi-4 mini:** {active_llm_backend()}")
         st.caption("A reachable local Ollama service is preferred; GitHub Models is used as fallback when configured.")
-

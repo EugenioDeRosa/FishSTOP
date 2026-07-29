@@ -30,7 +30,7 @@ from src.session_context import (
     ANALYSIS_SESSION_STATE_KEY,
     get_analysis_session_id,
 )
-from src.ui import page_intro, risk_banner
+from src.ui import metric_strip, page_intro, risk_banner, status_card
 from src.views.backend import (
     HF_MODEL_REVISION,
     get_core_backend,
@@ -220,15 +220,18 @@ def _severity(
 
 def _render_flag(flag: dict):
     level = flag.get("level", "INFO")
-    label = f"**[{level}] {flag.get('field', 'Signal')}** - {flag.get('message', '')}"
-    if level == "HIGH":
-        st.error(label)
-    elif level == "MEDIUM":
-        st.warning(label)
-    elif level == "LOW":
-        st.info(label)
-    else:
-        st.caption(label)
+    status = {
+        "HIGH": "critical",
+        "MEDIUM": "warning",
+        "LOW": "info",
+        "INFO": "neutral",
+    }.get(level, "neutral")
+    status_card(
+        str(flag.get("field") or "Signal"),
+        str(flag.get("message") or ""),
+        status=status,
+        badge=level,
+    )
 
 
 def _attachment_anomaly_without_pdf_risk(anomaly: str | None) -> str:
@@ -339,10 +342,11 @@ def _render_structured_report(
 
     with security_tab:
         counts = _flag_counts(actionable_flags)
-        c1, c2, c3 = st.columns(3)
-        c1.metric("High", counts["HIGH"])
-        c2.metric("Medium", counts["MEDIUM"])
-        c3.metric("Low", counts["LOW"])
+        metric_strip([
+            ("High", counts["HIGH"]),
+            ("Medium", counts["MEDIUM"]),
+            ("Low", counts["LOW"]),
+        ])
         _report_table(
             [
                 ("SPF", eml_auth.get("spf", {}).get("status")),
@@ -360,9 +364,10 @@ def _render_structured_report(
                 _render_flag(flag)
 
     with evidence_tab:
-        c1, c2 = st.columns(2)
-        c1.metric("Links", len(links))
-        c2.metric("Attachments", len(attachments))
+        metric_strip([
+            ("Links", len(links)),
+            ("Attachments", len(attachments)),
+        ])
         if links:
             st.markdown("##### Links")
             st.dataframe(
@@ -635,6 +640,125 @@ def _render_url_intelligence_card(link: dict, report: dict, index: int) -> None:
     )
 
 
+def _render_attachment_intelligence_card(
+    attachment: dict,
+    report: dict,
+    index: int,
+) -> None:
+    vt_status = str(report.get("status") or "pending").lower()
+    anomaly = _attachment_anomaly_without_pdf_risk(attachment.get("anomaly"))
+    pdf_security = attachment.get("pdf_security") or {}
+    local_suspicious = bool(anomaly or pdf_security.get("suspicious"))
+    status = (
+        vt_status
+        if vt_status in {"malicious", "suspicious"}
+        else "suspicious"
+        if local_suspicious
+        else vt_status
+    )
+    palette = {
+        "malicious": ("#d92d20", "#fef3f2", "MALICIOUS"),
+        "suspicious": ("#dc6803", "#fffaeb", "SUSPICIOUS"),
+        "clean": ("#079455", "#ecfdf3", "CLEAN"),
+        "not_found": ("#667085", "#f2f4f7", "NOT FOUND"),
+        "pending": ("#1570ef", "#eff8ff", "CHECKING"),
+        "skipped": ("#667085", "#f2f4f7", "NOT CHECKED"),
+    }
+    color, tint, label = palette.get(
+        status,
+        ("#667085", "#f2f4f7", "UNAVAILABLE"),
+    )
+
+    filename = str(attachment.get("filename") or "(unnamed)")
+    extension = str(
+        attachment.get("extension_from_filename")
+        or attachment.get("magic_detected_format")
+        or "file"
+    ).upper()
+    content_type = str(attachment.get("content_type") or "unknown type")
+    size_bytes = int(attachment.get("size_bytes") or 0)
+    size_label = (
+        f"{size_bytes / 1024:.1f} KB"
+        if size_bytes >= 1024
+        else f"{size_bytes} B"
+    )
+    mime_role = str(attachment.get("mime_role") or "attachment")
+    role_label = (
+        "Inline resource"
+        if mime_role == "inline_resource"
+        else "Attachment"
+    )
+    local_label = (
+        "Local anomaly detected"
+        if local_suspicious
+        else "Local structure OK"
+        if attachment.get("extension_match") is True
+        else "Local structure undetermined"
+    )
+    ratio = str(report.get("detection_ratio") or "").strip()
+    last_analysis = str(report.get("last_analysis") or "").strip()
+    vt_label = {
+        "malicious": f"VirusTotal: {ratio or 'malicious'}",
+        "suspicious": f"VirusTotal: {ratio or 'suspicious'}",
+        "clean": f"VirusTotal: {ratio or 'clean'}",
+        "not_found": "VirusTotal: hash not found",
+        "pending": "VirusTotal: checking",
+        "skipped": "VirusTotal: not checked",
+    }.get(vt_status, "VirusTotal: unavailable")
+    if last_analysis:
+        vt_label += f" · {last_analysis}"
+
+    permalink = str(report.get("permalink") or "").strip()
+    action_html = ""
+    if permalink and vt_status in {"malicious", "suspicious", "clean"}:
+        action_html = (
+            f'<a class="action" href="{html_escape(permalink, quote=True)}" '
+            'target="_blank" rel="noopener noreferrer">VirusTotal report</a>'
+        )
+
+    st.iframe(
+        f'''
+        <style>
+          * {{ box-sizing:border-box; }}
+          body {{ margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }}
+          .card {{
+            border:1px solid {color}; border-left:5px solid {color}; border-radius:9px;
+            background:#fff; padding:10px 12px;
+          }}
+          .top {{ display:flex; align-items:center; justify-content:space-between; gap:10px; }}
+          .name {{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                   color:#101828; font-size:14px; font-weight:700; }}
+          .badge {{ flex:none; border-radius:999px; padding:3px 8px; background:{tint};
+                    color:{color}; font-size:11px; font-weight:800; }}
+          .meta {{ margin-top:5px; color:#475467; font-size:11px; }}
+          .bottom {{ display:flex; align-items:center; justify-content:space-between;
+                     gap:8px; margin-top:7px; }}
+          .vt {{ min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+                 color:#667085; font-size:11px; }}
+          .action {{ flex:none; padding:5px 9px; border:1px solid {color}; border-radius:6px;
+                     background:{tint}; color:{color}; text-decoration:none;
+                     font-size:11px; font-weight:650; }}
+        </style>
+        <div class="card">
+          <div class="top">
+            <div class="name" title="{html_escape(filename, quote=True)}">{html_escape(filename)}</div>
+            <div class="badge">{label}</div>
+          </div>
+          <div class="meta">
+            {html_escape(extension)} · {html_escape(content_type)} · {size_label} ·
+            {html_escape(role_label)} · {html_escape(local_label)}
+          </div>
+          <div class="bottom">
+            <div class="vt">{html_escape(vt_label)}</div>
+            {action_html}
+          </div>
+        </div>
+        ''',
+        height=105,
+        tab_index=-1,
+    )
+
+
 def _run_phi4_background(
     soc: dict,
     github_token: str = "",
@@ -900,12 +1024,26 @@ def _show_phi4_result(target, result):
 
     verdict = str(result.get("final_verdict") or "review").lower()
     message = format_email_risk_analysis(result)
-    if verdict == "phishing":
-        target.error(message)
-    elif verdict == "review":
-        target.warning(message)
+    status = {
+        "phishing": "critical",
+        "review": "warning",
+        "legitimate": "success",
+    }.get(verdict, "neutral")
+    if hasattr(target, "markdown"):
+        status_card(
+            "Phi-4 semantic assessment",
+            message,
+            status=status,
+            badge=verdict.upper(),
+            target=target,
+        )
     else:
-        target.success(message)
+        legacy_method = {
+            "phishing": "error",
+            "review": "warning",
+            "legitimate": "success",
+        }.get(verdict, "info")
+        getattr(target, legacy_method)(message)
 
 
 def _verdict_loading_html() -> str:
@@ -1065,41 +1203,65 @@ def _analysis_loading_html(*, engine: str, title: str, detail: str) -> str:
 def _render_abuseipdb(rep: dict):
     status = rep.get("status")
     if status == "pending":
-        st.info(rep.get("message", "Reputation analysis in progress"))
+        status_card(
+            "AbuseIPDB",
+            rep.get("message", "Reputation analysis in progress"),
+            status="info",
+            badge="CHECKING",
+        )
     elif status == "ok":
         score = int(rep.get("abuseConfidenceScore") or 0)
         if rep.get("isWhitelisted"):
-            st.success("Whitelisted - known provider")
+            card_status, badge, title = "success", "TRUSTED", "Whitelisted provider"
         elif score == 0:
-            st.success("Score 0/100 - no reports")
+            card_status, badge, title = "success", "CLEAN", "No abuse reports"
         elif score < 25:
-            st.info(f"Score {score}/100 - low risk")
+            card_status, badge, title = "info", "LOW", "Low reputation risk"
         elif score < 75:
-            st.warning(f"Score {score}/100 - moderate risk")
+            card_status, badge, title = "warning", "REVIEW", "Moderate reputation risk"
         else:
-            st.error(f"Score {score}/100 - high risk")
-
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Reports", rep.get("totalReports", 0))
-        c2.metric("Users", rep.get("numDistinctUsers", 0))
-        c3.metric("Country", rep.get("countryCode") or "-")
-        if rep.get("isp"):
-            st.caption(f"ISP: `{rep['isp']}`")
+            card_status, badge, title = "critical", "HIGH", "High reputation risk"
+        status_card(
+            title,
+            f"Abuse confidence {score}/100",
+            status=card_status,
+            badge=badge,
+            meta=(
+                f"Reports {rep.get('totalReports', 0)} · "
+                f"Users {rep.get('numDistinctUsers', 0)} · "
+                f"Country {rep.get('countryCode') or '-'}"
+                + (f" · ISP {rep['isp']}" if rep.get("isp") else "")
+            ),
+        )
         if rep.get("url"):
             st.markdown(f"[Open on AbuseIPDB]({rep['url']})")
     elif status == "skipped":
-        st.info(rep.get("message", "Lookup skipped"))
+        status_card(
+            "AbuseIPDB",
+            rep.get("message", "Lookup skipped"),
+            status="neutral",
+            badge="SKIPPED",
+        )
     else:
-        st.warning(rep.get("message", "Lookup unavailable"))
+        status_card(
+            "AbuseIPDB",
+            rep.get("message", "Lookup unavailable"),
+            status="warning",
+            badge="UNAVAILABLE",
+        )
 
 
 def _render_geo(geo: dict):
     if geo.get("status") == "pending":
-        st.info(geo.get("message", "Geolocation in progress"))
+        status_card(
+            "Geolocation",
+            geo.get("message", "Geolocation in progress"),
+            status="info",
+            badge="CHECKING",
+        )
     elif geo.get("status") == "ok":
         parts = [geo.get("city"), geo.get("region"), geo.get("country")]
         location = ", ".join(p for p in parts if p) or "-"
-        st.markdown(f"**Geo:** {location}")
         meta = []
         if geo.get("isp"):
             meta.append(f"ISP `{geo['isp']}`")
@@ -1109,34 +1271,19 @@ def _render_geo(geo: dict):
             meta.append("proxy/VPN")
         if geo.get("is_hosting"):
             meta.append("hosting/datacenter")
-        if meta:
-            st.caption(" · ".join(meta))
+        status_card(
+            location,
+            " · ".join(meta),
+            status="neutral",
+            badge="GEO",
+        )
     else:
-        st.caption(f"Geo: {geo.get('message', 'unavailable')}")
-
-
-def _render_virustotal(vt: dict):
-    status = vt.get("status")
-    if status == "pending":
-        st.info(vt.get("message", "VirusTotal analysis in progress"))
-        return
-    if status == "malicious":
-        st.error(f"MALICIOUS - {vt.get('detection_ratio', '-')}")
-    elif status == "suspicious":
-        st.warning(f"SUSPICIOUS - {vt.get('detection_ratio', '-')}")
-    elif status == "clean":
-        st.success(f"CLEAN - 0 / {vt.get('total_engines', 0)} engine")
-    elif status == "not_found":
-        st.info("Not found on VirusTotal")
-    elif status == "skipped":
-        st.info(vt.get("message", "Lookup skipped"))
-        return
-    else:
-        st.warning(vt.get("message", "VirusTotal unavailable"))
-        return
-
-    if vt.get("permalink"):
-        st.markdown(f"[Apri report VirusTotal]({vt['permalink']})")
+        status_card(
+            "Geolocation",
+            geo.get("message", "Unavailable"),
+            status="neutral",
+            badge="N/A",
+        )
 
 
 def _auth_status_box(title: str, status: str, show_help: bool = True):
@@ -1687,9 +1834,10 @@ def render():
                 st.session_state["current_eml_hash"] = current_eml_hash
                 st.rerun()
 
-            file_col, size_col = st.columns([2, 1])
-            file_col.metric("File", uploaded_file.name)
-            size_col.metric("Size", f"{len(uploaded_file.getbuffer()) / 1024:.1f} KB")
+            metric_strip([
+                ("File", uploaded_file.name),
+                ("Size", f"{len(uploaded_file.getbuffer()) / 1024:.1f} KB"),
+            ])
 
     with col_results:
         if uploaded_file is None:
@@ -1912,11 +2060,12 @@ def render():
                     else "### Preliminary analysis"
                 )
                 risk_banner(severity, severity_caption)
-                c1, c2, c3, c4 = st.columns(4)
-                c1.metric("Critical signals", counts["HIGH"])
-                c2.metric("Review signals", counts["MEDIUM"])
-                c3.metric("Links", len(links))
-                c4.metric("Attachments", len(attachments))
+                metric_strip([
+                    ("Critical signals", counts["HIGH"]),
+                    ("Review signals", counts["MEDIUM"]),
+                    ("Links", len(links)),
+                    ("Attachments", len(attachments)),
+                ])
             _poll_background_jobs(
                 current_eml_hash,
                 background_plan,
@@ -1958,27 +2107,40 @@ def render():
             with overview:
                 left, right = st.columns([1, 1])
                 with left:
-                    st.markdown("#### Message")
-                    _field_value("From", soc.get("from_"))
-                    _field_value("To", soc.get("to"))
-                    _field_value("Subject", soc.get("subject"))
-                    st.write(f"**Date:** `{soc.get('date') or '-'}`")
+                    with st.container(border=True):
+                        st.markdown("#### Message")
+                        _field_value("From", soc.get("from_"))
+                        _field_value("To", soc.get("to"))
+                        _field_value("Subject", soc.get("subject"))
+                        st.write(f"**Date:** `{soc.get('date') or '-'}`")
                 with right:
-                    st.markdown("#### Trust checks")
-                    _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"), show_help=False)
-                    _auth_status_box("DKIM", eml_auth["dkim"].get("status", "unknown"), show_help=False)
-                    _auth_status_box("DMARC", eml_auth["dmarc"].get("status", "unknown"), show_help=False)
-                    if lookalike_alerts:
-                        st.error(f"Lookalike domains: {len(lookalike_alerts)}")
-                    else:
-                        st.success("Lookalike domains: no match")
+                    with st.container(border=True):
+                        st.markdown("#### Trust checks")
+                        _auth_status_box("SPF", eml_auth["spf"].get("status", "unknown"), show_help=False)
+                        _auth_status_box("DKIM", eml_auth["dkim"].get("status", "unknown"), show_help=False)
+                        _auth_status_box("DMARC", eml_auth["dmarc"].get("status", "unknown"), show_help=False)
+                        status_card(
+                            "Lookalike domains",
+                            (
+                                f"{len(lookalike_alerts)} possible match(es)"
+                                if lookalike_alerts
+                                else "No visual domain matches"
+                            ),
+                            status="critical" if lookalike_alerts else "success",
+                            badge="ALERT" if lookalike_alerts else "CLEAR",
+                        )
 
                 st.markdown("#### All findings")
                 if actionable_flags:
                     for flag in actionable_flags:
                         _render_flag(flag)
                 else:
-                    st.success("No security findings require attention.")
+                    status_card(
+                        "No security findings",
+                        "No signal currently requires attention.",
+                        status="success",
+                        badge="CLEAR",
+                    )
 
             with identity:
                 st.markdown("#### Sender identity")
@@ -2042,10 +2204,11 @@ def render():
                 hops = soc.get("received_hops", [])
                 routing_hops = order_received_hops(hops)
 
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Received hops", len(hops))
-                c2.metric("Injection IP", soc.get("injection_sender_ip") or "-")
-                c3.metric("Closest sender", (soc.get("closest_to_sender") or {}).get("from_host") or "-")
+                metric_strip([
+                    ("Received hops", len(hops)),
+                    ("Injection IP", soc.get("injection_sender_ip") or "-"),
+                    ("Closest sender", (soc.get("closest_to_sender") or {}).get("from_host") or "-"),
+                ])
 
                 with st.expander("Email geographic route", expanded=False):
                     render_email_globe(
@@ -2095,17 +2258,35 @@ def render():
                         "new scans. Unknown URLs can be investigated manually."
                     )
                     if soc.get("link_reputation_summary"):
-                        st.warning(soc["link_reputation_summary"])
+                        has_bad_link = any(
+                            str(report.get("status") or "").lower()
+                            in {"malicious", "suspicious"}
+                            for report in vt_url_results.values()
+                        )
+                        status_card(
+                            "URL reputation summary",
+                            soc["link_reputation_summary"],
+                            status="critical" if has_bad_link else "success",
+                            badge="ALERT" if has_bad_link else "CLEAR",
+                        )
 
                     if lookalike_alerts:
                         st.markdown("##### Lookalike / Typosquatting")
                         for alert in lookalike_alerts:
                             matched_brand = alert.get("matched_brand") or "-"
                             if matched_brand == "-":
-                                st.error(f"`{alert['host']}` - {alert['detail']}")
+                                status_card(
+                                    alert["host"],
+                                    alert["detail"],
+                                    status="critical",
+                                    badge="LOOKALIKE",
+                                )
                             else:
-                                st.error(
-                                    f"`{alert['host']}` looks like `{matched_brand}` - {alert['detail']}"
+                                status_card(
+                                    alert["host"],
+                                    f"Looks like {matched_brand} · {alert['detail']}",
+                                    status="critical",
+                                    badge="LOOKALIKE",
                                 )
 
                     st.markdown("##### Extracted URLs")
@@ -2117,14 +2298,28 @@ def render():
                 st.markdown("#### Attachments")
                 if not attachments:
                     st.info("No attachments detected.")
-                for att in attachments:
-                    with st.container(border=True):
-                        st.markdown(f"##### `{att.get('filename') or '(unnamed)'}`")
-                        c1, c2, c3, c4 = st.columns(4)
-                        c1.metric("Content-Type", att.get("content_type") or "-")
-                        c2.metric("Encoding", att.get("encoding") or "-")
-                        c3.metric("Extension", att.get("extension_from_filename") or "-")
-                        c4.metric("Magic", att.get("magic_detected_format") or "-")
+                for attachment_index, att in enumerate(attachments, start=1):
+                    sha256 = str(att.get("hash_sha256") or "").strip()
+                    file_report = file_results.get(sha256, {
+                        "status": "pending",
+                        "message": "VirusTotal file analysis in progress",
+                    })
+                    _render_attachment_intelligence_card(
+                        att,
+                        file_report,
+                        attachment_index,
+                    )
+
+                    with st.expander(
+                        f"Technical details · {att.get('filename') or '(unnamed)'}",
+                        expanded=False,
+                    ):
+                        metric_strip([
+                            ("Content-Type", att.get("content_type") or "-"),
+                            ("Encoding", att.get("encoding") or "-"),
+                            ("Extension", att.get("extension_from_filename") or "-"),
+                            ("Magic", att.get("magic_detected_format") or "-"),
+                        ])
 
                         non_pdf_anomaly = _attachment_anomaly_without_pdf_risk(att.get("anomaly"))
                         if non_pdf_anomaly:
@@ -2150,19 +2345,12 @@ def render():
                             if indicator_lines:
                                 st.caption("PDF indicators: " + "; ".join(indicator_lines[:6]))
                                 if len(indicator_lines) > 6:
-                                    with st.expander(f"Show {len(indicator_lines) - 6} more PDF indicators"):
-                                        for line in indicator_lines[6:]:
-                                            st.write(f"- {line}")
+                                    for line in indicator_lines[6:]:
+                                        st.write(f"- {line}")
 
-                        if att.get("hash_sha256"):
-                            with st.expander("Hash and VirusTotal"):
-                                st.code(att["hash_sha256"], language="text")
-                                _render_virustotal(
-                                    file_results.get(att["hash_sha256"], {
-                                        "status": "pending",
-                                        "message": "VirusTotal file analysis in progress",
-                                    })
-                                )
+                        if sha256:
+                            st.caption("SHA-256")
+                            st.code(sha256, language="text")
 
 
             with ioc_tab:
@@ -2207,12 +2395,13 @@ def render():
                     for line in ([f"# {label}"] + values + [""] if values else [])
                 ).strip()
 
-                c1, c2, c3, c4, c5 = st.columns(5)
-                c1.metric("URLs", len(url_iocs))
-                c2.metric("Domains", len(domain_iocs))
-                c3.metric("IPs", len(ip_iocs))
-                c4.metric("Hashes", len(hash_iocs))
-                c5.metric("Senders", len(sender_iocs))
+                metric_strip([
+                    ("URLs", len(url_iocs)),
+                    ("Domains", len(domain_iocs)),
+                    ("IPs", len(ip_iocs)),
+                    ("Hashes", len(hash_iocs)),
+                    ("Senders", len(sender_iocs)),
+                ])
 
                 if all_iocs_text:
                     st.download_button(
@@ -2253,9 +2442,11 @@ def render():
                     chunk_count = int(bert_result["chunk_count"])
                     prob_safe = float(bert_result["probability_legitimate"])
                     prob_malicious = float(bert_result["probability_malicious"])
-                    c1, c2 = st.columns(2)
-                    c1.metric("Legitimate", f"{prob_safe:.2f}%")
-                    c2.metric("Malicious (phishing/spam)", f"{prob_malicious:.2f}%")
+                    metric_strip([
+                        ("Legitimate", f"{prob_safe:.2f}%"),
+                        ("Malicious", f"{prob_malicious:.2f}%"),
+                        ("Text blocks", chunk_count),
+                    ])
                     if calibration["source"] == "huggingface":
                         st.caption(
                             f"Calibrated probability from {chunk_count} text block(s). "
@@ -2267,12 +2458,18 @@ def render():
                             "it is not a real-world malicious-email probability."
                         )
                     result = bert_result["classification"]
-                    if result == "phishing":
-                        st.error("AI result: possible malicious email (phishing or spam)")
-                    elif result == "legitimate":
-                        st.success("AI result: email probably legitimate")
-                    else:
-                        st.warning("AI result: inconclusive content signal")
+                    status_card(
+                        "DistilBERT content signal",
+                        {
+                            "phishing": "Possible malicious email (phishing or spam).",
+                            "legitimate": "The content is probably legitimate.",
+                        }.get(result, "The content signal is inconclusive."),
+                        status={
+                            "phishing": "critical",
+                            "legitimate": "success",
+                        }.get(result, "warning"),
+                        badge=str(result).upper(),
+                    )
 
                     with st.expander("Raw logits"):
                         st.json({

@@ -1,5 +1,7 @@
 """Shared visual language for the FishStop Streamlit interface."""
 
+from html import escape
+
 import streamlit as st
 
 
@@ -27,6 +29,14 @@ def inject_global_styles() -> None:
             --fs-canvas: #F4F7FB;
             --fs-surface: #FFFFFF;
             --fs-border: #DCE3EC;
+            --fs-red: #D92D20;
+            --fs-red-bg: #FEF3F2;
+            --fs-amber: #B54708;
+            --fs-amber-bg: #FFFAEB;
+            --fs-blue: #175CD3;
+            --fs-blue-bg: #EFF8FF;
+            --fs-green: #067647;
+            --fs-green-bg: #ECFDF3;
         }
         .stApp { background: var(--fs-canvas); }
         [data-testid="stHeader"] {
@@ -74,23 +84,47 @@ def inject_global_styles() -> None:
             fill: #D7E0EC !important;
             color: #D7E0EC !important;
         }
-        h1, h2, h3 { color: var(--fs-ink); letter-spacing: -.025em; }
+        h1, h2, h3, h4 { color: var(--fs-ink); letter-spacing: -.025em; }
         h1 { font-size: clamp(2rem, 4vw, 3rem) !important; }
+        h3 { font-size: 1.28rem !important; margin: 1rem 0 .45rem !important; }
+        h4 { font-size: 1rem !important; margin: .75rem 0 .35rem !important; }
         p, label { color: var(--fs-muted); }
+        [data-testid="stVerticalBlock"] { gap: .65rem; }
         [data-testid="stVerticalBlockBorderWrapper"] {
             background: var(--fs-surface);
             border-color: var(--fs-border) !important;
-            border-radius: 14px;
-            box-shadow: 0 8px 24px rgba(15, 23, 42, .045);
+            border-radius: 10px;
+            box-shadow: 0 4px 14px rgba(15, 23, 42, .035);
+        }
+        [data-testid="stVerticalBlockBorderWrapper"] > div {
+            padding: .75rem .85rem !important;
         }
         [data-testid="stMetric"] {
             background: #FFFFFF;
             border: 1px solid var(--fs-border);
-            border-radius: 12px;
-            padding: .85rem 1rem;
+            border-radius: 9px;
+            padding: .55rem .7rem;
         }
-        [data-testid="stMetricLabel"] { color: var(--fs-muted); }
-        [data-testid="stMetricValue"] { color: var(--fs-ink); font-weight: 720; }
+        [data-testid="stMetricLabel"] { color: var(--fs-muted); font-size: .72rem; }
+        [data-testid="stMetricValue"] {
+            color: var(--fs-ink); font-size: 1.35rem; font-weight: 720;
+        }
+        [data-testid="stAlert"] {
+            border-radius: 8px;
+            padding: .5rem .65rem;
+        }
+        [data-testid="stAlert"] p { font-size: .82rem; line-height: 1.35; }
+        [data-testid="stExpander"] details {
+            border-color: var(--fs-border) !important;
+            border-radius: 9px !important;
+            background: #FFFFFF;
+        }
+        [data-testid="stExpander"] details summary {
+            min-height: 2.5rem;
+            padding: .45rem .7rem !important;
+        }
+        [data-testid="stExpander"] details summary p { font-size: .82rem; font-weight: 650; }
+        iframe { border: 0 !important; }
         [data-testid="stFileUploaderDropzone"] {
             background: #F8FAFD;
             border: 1.5px dashed #AAB8CB;
@@ -104,11 +138,11 @@ def inject_global_styles() -> None:
             font-weight: 650;
         }
         .stTabs [data-baseweb="tab-list"] {
-            gap: 1.2rem;
+            gap: .85rem;
             border-bottom: 1px solid var(--fs-border);
         }
         .stTabs [data-baseweb="tab"] {
-            height: 3rem;
+            height: 2.55rem;
             padding: 0 .1rem;
             color: var(--fs-muted);
             white-space: nowrap;
@@ -143,6 +177,61 @@ def inject_global_styles() -> None:
         .fs-risk-watch { color: #1E40AF; background: #EFF6FF; border-color: #BFDBFE; }
         .fs-risk-low { color: #065F46; background: #ECFDF5; border-color: #A7F3D0; }
         .fs-section-label { color: var(--fs-ink); font-weight: 720; margin-bottom: .3rem; }
+        .fs-card {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: .8rem;
+            padding: .68rem .78rem;
+            margin: .25rem 0;
+            border: 1px solid var(--fs-border);
+            border-left-width: 5px;
+            border-radius: 9px;
+            background: #FFFFFF;
+        }
+        .fs-card__body { min-width: 0; }
+        .fs-card__title {
+            color: var(--fs-ink); font-size: .86rem; font-weight: 750;
+            line-height: 1.25;
+        }
+        .fs-card__detail {
+            color: var(--fs-muted); font-size: .78rem; line-height: 1.35;
+            margin-top: .18rem;
+        }
+        .fs-card__meta { color: #667085; font-size: .7rem; margin-top: .24rem; }
+        .fs-card__badge {
+            flex: none; border-radius: 999px; padding: .2rem .48rem;
+            font-size: .64rem; font-weight: 800; letter-spacing: .03em;
+        }
+        .fs-card-critical { border-color: var(--fs-red); background: var(--fs-red-bg); }
+        .fs-card-critical .fs-card__badge { color: var(--fs-red); background: #FEE4E2; }
+        .fs-card-warning { border-color: #F79009; background: var(--fs-amber-bg); }
+        .fs-card-warning .fs-card__badge { color: var(--fs-amber); background: #FEF0C7; }
+        .fs-card-info { border-color: #2E90FA; background: var(--fs-blue-bg); }
+        .fs-card-info .fs-card__badge { color: var(--fs-blue); background: #D1E9FF; }
+        .fs-card-success { border-color: #12B76A; background: var(--fs-green-bg); }
+        .fs-card-success .fs-card__badge { color: var(--fs-green); background: #D1FADF; }
+        .fs-card-neutral { border-color: var(--fs-border); background: #FFFFFF; }
+        .fs-card-neutral .fs-card__badge { color: #475467; background: #F2F4F7; }
+        .fs-metric-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(115px, 1fr));
+            gap: 1px;
+            overflow: hidden;
+            margin: .35rem 0 .8rem;
+            border: 1px solid var(--fs-border);
+            border-radius: 9px;
+            background: var(--fs-border);
+        }
+        .fs-metric-strip__item { min-width: 0; padding: .52rem .65rem; background: #FFFFFF; }
+        .fs-metric-strip__label {
+            color: var(--fs-muted); font-size: .67rem; font-weight: 650;
+            text-transform: uppercase; letter-spacing: .04em;
+        }
+        .fs-metric-strip__value {
+            color: var(--fs-ink); font-size: 1.08rem; font-weight: 760;
+            margin-top: .08rem; overflow: hidden; text-overflow: ellipsis;
+        }
         footer { visibility: hidden; }
         @media (max-width: 760px) {
             [data-testid="stMainBlockContainer"] { padding-top: 3.75rem; }
@@ -171,5 +260,57 @@ def risk_banner(severity: str, caption: str) -> None:
     st.markdown(
         f'<div class="fs-risk fs-risk-{css_class}"><div><strong>{label}</strong><span>{caption}</span></div>'
         f'<strong>{severity}</strong></div>',
+        unsafe_allow_html=True,
+    )
+
+
+def status_card(
+    title: str,
+    detail: str = "",
+    *,
+    status: str = "neutral",
+    badge: str = "",
+    meta: str = "",
+    target=None,
+) -> None:
+    """Render a compact semantic card shared by every FishStop view."""
+    normalized = status.lower()
+    if normalized not in {"critical", "warning", "info", "success", "neutral"}:
+        normalized = "neutral"
+    badge_html = (
+        f'<span class="fs-card__badge">{escape(badge)}</span>'
+        if badge
+        else ""
+    )
+    detail_html = (
+        f'<div class="fs-card__detail">{escape(detail)}</div>'
+        if detail
+        else ""
+    )
+    meta_html = (
+        f'<div class="fs-card__meta">{escape(meta)}</div>'
+        if meta
+        else ""
+    )
+    renderer = st if target is None else target
+    renderer.markdown(
+        f'<div class="fs-card fs-card-{normalized}">'
+        f'<div class="fs-card__body"><div class="fs-card__title">{escape(title)}</div>'
+        f'{detail_html}{meta_html}</div>{badge_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
+def metric_strip(items: list[tuple[str, object]]) -> None:
+    """Render dense, visually grouped metrics without separate large cards."""
+    cells = "".join(
+        '<div class="fs-metric-strip__item">'
+        f'<div class="fs-metric-strip__label">{escape(str(label))}</div>'
+        f'<div class="fs-metric-strip__value">{escape(str(value))}</div>'
+        '</div>'
+        for label, value in items
+    )
+    st.markdown(
+        f'<div class="fs-metric-strip">{cells}</div>',
         unsafe_allow_html=True,
     )

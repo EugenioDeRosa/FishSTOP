@@ -5,7 +5,7 @@ import pandas as pd
 import streamlit as st
 
 from src.config import is_production_mode
-from src.ui import page_intro
+from src.ui import metric_strip, page_intro
 
 from src.public_dataset_builder import (
     DEFAULT_BALANCED_OUTPUT_CSV,
@@ -135,13 +135,14 @@ def _render_stats(csv_path: Path) -> None:
         st.info("No generated dataset found at this path yet.")
         return
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Total rows", stats["rows"])
-    c2.metric("Legitimate", stats["legitimate"])
-    c3.metric("Malicious (phishing/spam)", stats["phishing"])
-    c4.metric("Duplicates", stats.get("duplicates", 0))
-    c5.metric("Near duplicates", stats.get("template_duplicates", 0))
-    c6.metric("Label conflicts", stats.get("label_conflicts", 0))
+    metric_strip([
+        ("Total rows", stats["rows"]),
+        ("Legitimate", stats["legitimate"]),
+        ("Malicious", stats["phishing"]),
+        ("Duplicates", stats.get("duplicates", 0)),
+        ("Near duplicates", stats.get("template_duplicates", 0)),
+        ("Label conflicts", stats.get("label_conflicts", 0)),
+    ])
 
     if stats.get("missing_label"):
         st.warning("The existing CSV does not contain the `label` column: regenerate it with the button below.")
