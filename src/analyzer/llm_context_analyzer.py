@@ -52,7 +52,7 @@ OLLAMA_AVAILABILITY_TTL = max(
     0.0,
     float(os.getenv("OLLAMA_AVAILABILITY_TTL", "5")),
 )
-PROMPT_VERSION = "semantic-policy-v28-structured-scam-intent"
+PROMPT_VERSION = "semantic-policy-v29-language-independent-grounding"
 
 _OLLAMA_AVAILABILITY_LOCK = Lock()
 _OLLAMA_AVAILABILITY_CACHE: tuple[float, tuple, bool] | None = None
@@ -153,6 +153,8 @@ TASK_INSTRUCTIONS = (
     "Set coercion=true only when compliance is obtained through a threat. "
     "Classify the threat_type and scam_type from meaning, regardless of language; sextortion means payment demanded under threat of exposing intimate material, which is private_material_exposure. "
     "claimed_brand is the organization the message claims to represent, otherwise empty. "
+    "Set confidence from 0 to 1 for the semantic extraction and ambiguity to none, low, or high. "
+    "Use high ambiguity when the requested action is genuinely unclear; do not guess from isolated words. "
     "Evidence fields must be copied verbatim in the email's original language: never translate or paraphrase them. "
     "signal_evidence is the shortest exact phrase proving the strongest secondary signal, otherwise empty.\n"
     "JSON only:\n"
@@ -164,7 +166,7 @@ TASK_INSTRUCTIONS = (
     "\"payment_asset\":\"currency or asset named in the email, otherwise empty\",\"amount\":\"exact requested amount, otherwise empty\","
     "\"coercion\":false,\"threat_type\":\"none|account_loss|financial_penalty|data_exposure|private_material_exposure|physical_harm|reputation_harm|other\","
     "\"scam_type\":\"none|credential_phishing|business_email_compromise|invoice_fraud|advance_fee|investment_scam|crypto_scam|extortion|sextortion|account_takeover|other\","
-    "\"claimed_brand\":\"organization or empty\"}\n"
+    "\"claimed_brand\":\"organization or empty\",\"confidence\":0.0,\"ambiguity\":\"none|low|high\"}\n"
 )
 
 PHI4_OUTPUT_SCHEMA = {
@@ -234,12 +236,18 @@ PHI4_OUTPUT_SCHEMA = {
             ],
         },
         "claimed_brand": {"type": "string", "maxLength": 80},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "ambiguity": {
+            "type": "string",
+            "enum": ["none", "low", "high"],
+        },
     },
     "required": [
         "action", "channel", "evidence", "signals",
         "signal_evidence", "credential_type", "payment_method",
         "payment_asset", "amount", "coercion",
         "threat_type", "scam_type", "claimed_brand",
+        "confidence", "ambiguity",
     ],
     "additionalProperties": False,
 }
@@ -347,33 +355,8 @@ def _anonymize_for_llm(value: str) -> str:
 
 
 def _remove_mail_client_signatures(value: str) -> str:
-    """Remove only narrow, trailing mail-client/app footers from LLM text."""
-    lines = str(value or "").splitlines()
-    if not lines:
-        return ""
-
-    trailing_client_footer_patterns = [
-        re.compile(r"^\s*sent\s+from\s+my\s+[^\n]{1,80}\s*$", re.IGNORECASE),
-        re.compile(r"^\s*sent\s+from\s+[^\n]{1,80}\s+mail\s*$", re.IGNORECASE),
-        re.compile(r"^\s*get\s+[^\n]{1,80}\s+for\s+(?:ios|android)\s*$", re.IGNORECASE),
-        re.compile(r"^\s*inviato\s+da\s+[^\n]{1,80}\s*$", re.IGNORECASE),
-        re.compile(r"^\s*scarica\s+[^\n]{1,80}\s+per\s+(?:ios|android)\s*$", re.IGNORECASE),
-    ]
-
-    # Only strip isolated client-generated footers at the very end. Ordinary
-    # human signatures and any body text above them are preserved.
-    end_index = len(lines)
-    while end_index > 0 and not lines[end_index - 1].strip():
-        end_index -= 1
-
-    if end_index > 0:
-        last_line = lines[end_index - 1]
-        if any(pattern.match(last_line) for pattern in trailing_client_footer_patterns):
-            end_index -= 1
-            while end_index > 0 and not lines[end_index - 1].strip():
-                end_index -= 1
-
-    return "\n".join(lines[:end_index]).strip()
+    """Keep natural-language footer text available to Phi-4 for semantic handling."""
+    return str(value or "").strip()
 
 def _body_context_for_llm(soc: dict) -> str:
     plain_body = (
@@ -397,12 +380,6 @@ def _body_context_for_llm(soc: dict) -> str:
     return html_body
 
 
-_NON_ACTION_LINK_TEXT_RE = re.compile(
-    r"\b(?:unsubscribe|afmelden|abmelden|désabonner|disiscriv\w*)\b",
-    re.IGNORECASE,
-)
-
-
 def _actionable_links(soc: dict) -> list[dict]:
     """Return links that can represent a request, retaining legacy link data."""
     return [
@@ -414,9 +391,6 @@ def _actionable_links(soc: dict) -> list[dict]:
             "unsubscribe",
             "navigation",
         }
-        and not _NON_ACTION_LINK_TEXT_RE.search(
-            str(link.get("display_text") or "")
-        )
     ]
 
 
@@ -444,7 +418,6 @@ def _actionable_link_texts(soc: dict) -> list[str]:
         if (
             len(value) < 4
             or normalized in seen
-            or _NON_ACTION_LINK_TEXT_RE.search(value)
             or re.fullmatch(r"https?://\S+", value, re.IGNORECASE)
         ):
             continue
@@ -708,80 +681,8 @@ def _normalized_evidence(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().lower()
 
 
-_ACTION_EVIDENCE_PATTERNS = {
-    "visit_link": re.compile(
-        r"\b(?:read\s+more|learn\s+more|click|open|visit|follow|discover|consult\w*|"
-        r"view|klick\w*|öffn\w*|"
-        r"besuch\w*|clic\w*|abr\w*|acced\w*|apri\w*|scopr\w*)\b",
-        re.IGNORECASE,
-    ),
-    "open_attachment": re.compile(
-        r"\b(?:open|review|see|read|download|apri\w*|scaric\w*|öffn\w*|"
-        r"anhang|adjunto|anexo|allegato|attachment)\b",
-        re.IGNORECASE,
-    ),
-    "reply": re.compile(
-        r"\b(?:reply|respond|write\s+back|email\s+(?:us|me|back)|"
-        r"rispond\w*|antwort\w*|responde[rz]?)\b",
-        re.IGNORECASE,
-    ),
-    "provide_information": re.compile(
-        r"\b(?:enter|provide|submit|send|share|fill|inser\w*|fornisc\w*|"
-        r"fornec\w*|envi\w*|eingeb\w*)\b.{0,80}\b(?:data|details|information|"
-        r"address|phone|name|dati|informazioni|indirizzo|daten|adresse|"
-        r"dados|endereço|datos|direcci[oó]n)\b|"
-        r"\b(?:werk|update|vernieuw|vul|bevestig)\w*\b.{0,100}"
-        r"\b(?:betaalgegevens|betalingsgegevens|betaalmethode|persoonlijke\s+gegevens|gegevens)\b|"
-        r"\b(?:remplir|compl[eé]ter|soumettre|envoyer)\b.{0,60}"
-        r"\b(?:la|une|votre)\s+(?:demande|formulaire|dossier)\b",
-        re.IGNORECASE,
-    ),
-    "provide_credentials": re.compile(
-        r"\b(?:enter|provide|submit|send|share|type|inser\w*|fornisc\w*|"
-        r"fornec\w*|envi\w*|eingeb\w*)\b.{0,100}\b(?:password|passwort|"
-        r"contrase(?:ñ|n)a|otp|pin|passcode|recovery\s+code|seed(?:\s+phrase)?|"
-        r"private\s+(?:wallet\s+)?phrase|recovery\s+phrase|credenziali)\b",
-        re.IGNORECASE,
-    ),
-    "pay_or_transfer": re.compile(
-        r"\b(?:pay|payment|transfer|wire|deposit|einzahl\w*|zahl\w*|"
-        r"überweis\w*|pag\w*|deposit\w*|bonifico|versamento)\b",
-        re.IGNORECASE,
-    ),
-    "change_account_settings": re.compile(
-        r"\b(?:create|set|reset|change|choose|crea\w*|imposta\w*|reimposta\w*|"
-        r"cambia\w*|änder\w*|zurücksetz\w*|erstell\w*)\b.{0,60}"
-        r"\b(?:password|passwort|account|settings|impostazioni)\b",
-        re.IGNORECASE,
-    ),
-    "verify_account": re.compile(
-        r"\b(?:verify|confirm|deny|report|review|secure|protect|verific\w*|"
-        r"conferm\w*|segnal\w*|bestätig\w*|prüf\w*)\b",
-        re.IGNORECASE,
-    ),
-    "claim_reward": re.compile(
-        r"\b(?:claim|redeem|collect|obtain|get|withdraw|riscatt\w*|ritir\w*|"
-        r"riscuot\w*|sichern|hol\w*|beanspruch\w*|resgat\w*|reclam\w*)\b",
-        re.IGNORECASE,
-    ),
-    "bypass_procedure": re.compile(
-        r"\b(?:bypass|circumvent|evade|ignore\s+(?:policy|procedure|security)|"
-        r"aggir\w*|elud\w*)\b",
-        re.IGNORECASE,
-    ),
-}
-
-
-def _evidence_supports_action(evidence: str, action: str) -> bool:
-    if action == "context":
-        return bool(evidence)
-    if action in {"none", "informational", "other", ""}:
-        return not evidence
-    pattern = _ACTION_EVIDENCE_PATTERNS.get(action)
-    return bool(pattern and pattern.search(_normalize_obfuscated_text(evidence)))
-
-
 def _validated_evidence(soc: dict, value: str, action: str = "") -> str:
+    """Ground model evidence in the original message without interpreting its language."""
     evidence = _clip_exact_span(_normalize_obfuscated_text(value), 180)
     if not evidence:
         return ""
@@ -799,7 +700,7 @@ def _validated_evidence(soc: dict, value: str, action: str = "") -> str:
     if (
         normalized_evidence in normalized_searchable
         or normalized_evidence in normalized_anonymized
-    ) and _evidence_supports_action(evidence, action):
+    ):
         return evidence
     if action == "context":
         message_segments = _evidence_segments(soc)
@@ -868,37 +769,6 @@ def _evidence_segments(soc: dict) -> list[str]:
         seen.add(normalized)
         segments.append(value)
     return segments
-
-
-def _find_action_evidence(soc: dict, action: str) -> str:
-    pattern = _ACTION_EVIDENCE_PATTERNS.get(action)
-    if not pattern:
-        return ""
-    matches = [
-        segment for segment in _evidence_segments(soc)
-        if pattern.search(segment)
-    ]
-    return _clip_exact_span(min(matches, key=len), 180) if matches else ""
-
-
-def _find_signal_evidence(soc: dict, semantic: dict) -> str:
-    patterns = []
-    if semantic.get("threat_or_consequence_present"):
-        patterns.append(_THREAT_RE)
-    if semantic.get("financial_pretext_present"):
-        patterns.append(_FINANCIAL_PRETEXT_RE)
-    if semantic.get("financial_incentive_present"):
-        patterns.append(_INCENTIVE_RE)
-    if semantic.get("urgency_present"):
-        patterns.append(_URGENCY_RE)
-    for pattern in patterns:
-        matches = [
-            segment for segment in _evidence_segments(soc)
-            if pattern.search(segment)
-        ]
-        if matches:
-            return _clip_exact_span(min(matches, key=len), 180)
-    return ""
 
 
 def _prepared_email_prompt_parts(
@@ -1278,6 +1148,12 @@ def normalize_semantic_extraction(raw: dict, soc: dict | None = None) -> dict:
         "claimed_brand": claimed_brand,
         "model_content_risk": "benign",
         "confidence": _confidence(raw.get("confidence")),
+        "confidence_provided": "confidence" in raw,
+        "ambiguity": _enum(
+            raw.get("ambiguity"),
+            {"none", "low", "high"},
+            "high" if requested_action in {"other", "informational"} else "low",
+        ),
         "reason": _clip(raw.get("reason") or evidence_phrase or "No semantic explanation returned.", 320),
         "evidence_phrase": evidence_phrase,
         "intent_verifier_used": _as_bool(raw.get("intent_verifier_used")),
@@ -1289,72 +1165,26 @@ def normalize_semantic_extraction(raw: dict, soc: dict | None = None) -> dict:
     }
 
 
-_FINANCIAL_PRETEXT_RE = re.compile(
-    r"\b(?:debt|amount\s+due|outstanding|invoice|charge|toll|fine|"
-    r"d[eé]bito|pend[eê]ncia|ped[aá]gio|multa|fattura|debito|"
-    r"schuld|rechnung|zahlung\s+offen|betaalmethode|betaalgegevens|"
-    r"betalingsgegevens|abonnement|verlopen)\b",
-    re.IGNORECASE,
-)
-_INCENTIVE_RE = re.compile(
-    r"\b(?:\w*bonus|reward|prize|refund|cashback|free(?:\s+spins?)?|giveaway|"
-    r"premio|ricompensa|rimborso|freispiele|gewinn|kostenlos|"
-    r"b[oô]nus|pr[eê]mio|reembolso)\b",
-    re.IGNORECASE,
-)
-_THREAT_RE = re.compile(
-    r"\b(?:penalty|fine|points?|restriction|suspend\w*|terminat\w*|"
-    r"removed?|lose\s+(?:your\s+)?access|closed?|blocked?|multa|"
-    r"pontua[cç][aã]o|restri[cç][aã]o|sospes\w*|blocc\w*|perder\w*|"
-    r"entfern\w*|gesperrt|verlier\w*|geschlossen|verwijder\w*|"
-    r"verlie[sz]\w*|dataverlies|geblokkeerd|opgeschort)\b",
-    re.IGNORECASE,
-)
-_URGENCY_RE = re.compile(
-    r"\b(?:urgent|immediately|now|today|expires?|deadline|last\s+chance|"
-    r"limited|only\s+\d+|act\s+now|agora|hoje|imediat\w*|prazo|"
-    r"urgente|subito|oggi|scade|ultima\s+possibilit[aà]|"
-    r"sofort|heute|l[aä]uft\s+ab|nur\s+noch|letzter\s+aufruf|"
-    r"direct|laatste\s+herinnering|v[oó][oó]r\s+\w+|onmiddellijk)\b",
-    re.IGNORECASE,
-)
-_PAYMENT_ACTION_RE = re.compile(
-    r"\b(?:pay|make\s+(?:a\s+)?payment|transfer|wire|"
-    r"deposit\s+(?:now|today|funds|money)|einzahl\w*|überweis\w*|"
-    r"paga\w*|effettua\s+(?:un\s+)?(?:pagamento|bonifico|versamento)|"
-    r"fa[çc]a\s+(?:um\s+)?pagamento)\b",
-    re.IGNORECASE,
-)
-_CREDENTIAL_REQUEST_RE = re.compile(
-    r"\b(?:enter|provide|submit|send|share|type|inser\w*|fornisc\w*|"
-    r"fornec\w*|envi\w*|eingeb\w*)\b.{0,120}\b(?:password|passwort|"
-    r"contrase(?:ñ|n)a|otp|pin|passcode|recovery\s+code|seed(?:\s+phrase)?|"
-    r"private\s+(?:wallet\s+)?phrase|recovery\s+phrase|credenziali)\b",
-    re.IGNORECASE | re.DOTALL,
-)
-
-
-def _enrich_context_signals(message_text: str, semantic: dict) -> None:
+def _derive_structured_signals(semantic: dict) -> None:
+    """Derive stable booleans only from Phi-4's language-independent enum output."""
     signals = set(semantic.get("semantic_signals") or [])
-    financial_pretext = bool(_FINANCIAL_PRETEXT_RE.search(message_text))
-    incentive = bool(_INCENTIVE_RE.search(message_text))
-    threat = bool(_THREAT_RE.search(message_text))
-    urgency = bool(_URGENCY_RE.search(message_text))
-    if financial_pretext:
-        signals.add("financial_pretext")
-    if incentive:
-        signals.add("incentive")
-    if threat:
-        signals.add("threat")
-    if urgency:
-        signals.add("urgency")
-
-    semantic["financial_pretext_present"] = financial_pretext
-    semantic["financial_incentive_present"] = (
-        semantic.get("financial_incentive_present", False) or incentive
+    semantic["financial_pretext_present"] = (
+        semantic.get("financial_pretext_present", False)
+        or "financial_pretext" in signals
     )
-    semantic["threat_or_consequence_present"] = threat
-    effective_urgency = semantic.get("urgency_present", False) or urgency
+    semantic["financial_incentive_present"] = (
+        semantic.get("financial_incentive_present", False)
+        or "incentive" in signals
+    )
+    semantic["threat_or_consequence_present"] = (
+        semantic.get("threat_or_consequence_present", False)
+        or "threat" in signals
+        or semantic.get("coercion", False)
+    )
+    effective_urgency = (
+        semantic.get("urgency_present", False)
+        or "urgency" in signals
+    )
     semantic["urgency_present"] = effective_urgency
     risky_action = semantic.get("requested_action") not in {
         "none", "informational", "other",
@@ -1364,394 +1194,62 @@ def _enrich_context_signals(message_text: str, semantic: dict) -> None:
         or (effective_urgency and risky_action)
     )
     semantic["semantic_signals"] = sorted(signals)
-    signal_evidence = str(semantic.get("signal_evidence") or "")
-    supporting_patterns = []
-    if "financial_pretext" in signals:
-        supporting_patterns.append(_FINANCIAL_PRETEXT_RE)
-    if "incentive" in signals:
-        supporting_patterns.append(_INCENTIVE_RE)
-    if "threat" in signals:
-        supporting_patterns.append(_THREAT_RE)
-    if "urgency" in signals:
-        supporting_patterns.append(_URGENCY_RE)
-    if (
-        signal_evidence
-        and supporting_patterns
-        and not any(pattern.search(signal_evidence) for pattern in supporting_patterns)
-    ):
-        semantic["signal_evidence"] = ""
 
 
 def _correlate_semantic_with_message_structure(soc: dict, semantic: dict) -> dict:
-    """Correct contradictions between semantic output and extracted message structure."""
+    """Validate model facts against parsed structure without re-reading natural language."""
     semantic = dict(semantic)
     links = _actionable_links(soc)
     attachments = _actionable_attachments(soc)
-    message_body = _body_context_for_llm(soc)
-    message_text = _normalize_obfuscated_text(
-        _message_evidence_text(soc)
-    ).lower()
-    if not semantic.get("claimed_brand"):
-        semantic["claimed_brand"] = _infer_known_brand(message_text)
-    _enrich_context_signals(message_text, semantic)
-    if (
-        not semantic.get("claimed_brand")
-        and "impersonation" in (semantic.get("semantic_signals") or [])
+    _derive_structured_signals(semantic)
+
+    channel = semantic["action_channel"]
+    action = semantic["requested_action"]
+    if channel == "supplied_link":
+        if links:
+            semantic["asks_to_click_link"] = True
+        else:
+            semantic["action_channel"] = "unclear"
+            semantic["asks_to_click_link"] = False
+            semantic["ambiguity"] = "high"
+    elif channel == "supplied_attachment":
+        if attachments:
+            semantic["asks_to_open_attachment"] = True
+        else:
+            semantic["action_channel"] = "unclear"
+            semantic["asks_to_open_attachment"] = False
+            semantic["ambiguity"] = "high"
+
+    if action == "visit_link" and not links:
+        semantic["requested_action"] = "informational"
+        semantic["action_channel"] = "none"
+        semantic["asks_to_click_link"] = False
+        semantic["evidence_phrase"] = ""
+        semantic["ambiguity"] = "high"
+    if action == "open_attachment" and not attachments:
+        semantic["requested_action"] = "informational"
+        semantic["action_channel"] = "none"
+        semantic["asks_to_open_attachment"] = False
+        semantic["evidence_phrase"] = ""
+        semantic["ambiguity"] = "high"
+
+    if action not in {"none", "informational", "other"} and not semantic.get(
+        "evidence_phrase"
     ):
-        semantic["claimed_brand"] = _sender_display_name(soc)
-    if _claimed_brand_domain_mismatch(soc, semantic):
+        semantic["ambiguity"] = "high"
+        semantic["confidence"] = min(semantic.get("confidence", 0.5), 0.49)
+        semantic["reason"] = (
+            "The semantic action was not accompanied by a grounded quotation."
+        )
+
+    if semantic.get("claimed_brand") and _claimed_brand_domain_mismatch(
+        soc, semantic
+    ):
         semantic["impersonation_or_deception"] = True
         semantic["semantic_signals"] = sorted({
             *(semantic.get("semantic_signals") or []),
             "impersonation",
         })
-
-    # A small model must not invent a delivery channel that contradicts the
-    # parser. Preserve the requested action, but downgrade the impossible
-    # channel to a known local procedure or to unclear.
-    if semantic["action_channel"] == "supplied_link" and not links:
-        semantic["action_channel"] = (
-            "normal_known_procedure"
-            if semantic["requested_action"] == "change_account_settings"
-            else "unclear"
-        )
-        semantic["asks_to_click_link"] = False
-    if semantic["action_channel"] == "supplied_attachment" and not attachments:
-        semantic["action_channel"] = "unclear"
-        semantic["asks_to_open_attachment"] = False
-    if semantic["action_channel"] == "external_form" and not re.search(
-        r"\b(?:form|modulo|formular|formulario|questionnaire|survey)\b",
-        message_text,
-        re.IGNORECASE,
-    ):
-        semantic["action_channel"] = "supplied_link" if links else "unclear"
-    if semantic["action_channel"] == "email_reply" and not re.search(
-        r"\b(?:reply|respond|write\s+back|email\s+(?:us|me|back)|"
-        r"rispond\w*|antwort\w*|responde[rz]?)\b",
-        message_text,
-        re.IGNORECASE,
-    ):
-        semantic["action_channel"] = "unclear"
-
-    account_change = (
-        semantic["asks_to_change_account_settings"]
-        or semantic["requested_action"] == "change_account_settings"
-    )
-    link_directed_action = semantic["asks_to_click_link"] or semantic["requested_action"] in {
-        "visit_link", "claim_reward",
-    }
-
-    if links and link_directed_action:
-        semantic["asks_to_click_link"] = True
-        semantic["action_channel"] = "supplied_link"
-
-    # A model may call an account-change reminder a normal procedure while
-    # overlooking that the email itself supplies the destination. Correlating
-    # the extracted action with the extracted URL is more reliable than either
-    # isolated model field. This creates review-level content risk, not proof
-    # that the URL is malicious.
-    if account_change and links:
-        semantic["requested_action"] = "change_account_settings"
-        semantic["asks_to_change_account_settings"] = True
-        semantic["asks_to_click_link"] = True
-        semantic["action_channel"] = "supplied_link"
-        semantic["asks_for_credentials"] = False
-
-    if _CREDENTIAL_REQUEST_RE.search(message_text):
-        semantic["requested_action"] = "provide_credentials"
-        semantic["asks_for_credentials"] = True
-        semantic["asks_for_sensitive_information"] = False
-        if re.search(
-            r"\b(?:seed(?:\s+phrase)?|private\s+(?:wallet\s+)?phrase|"
-            r"recovery\s+phrase)\b",
-            message_text,
-            re.IGNORECASE,
-        ):
-            semantic["credential_type"] = "wallet_seed"
-        if links:
-            semantic["asks_to_click_link"] = True
-            if semantic["action_channel"] != "external_form":
-                semantic["action_channel"] = "supplied_link"
-
-    # Account-security lures often present an alleged unusual sign-in, then ask
-    # the recipient to confirm, deny, report or secure it through a supplied
-    # destination. Small models may summarize the alert but miss that requested
-    # response. Require all four elements so a notification without an action
-    # or supplied channel remains informational.
-    # Phi occasionally uses the rare "bypass" label for ordinary advertising
-    # or an unsubscribe link. Keep that high-risk label only when the message
-    # actually asks the recipient to evade a normal control or procedure.
-    bypass_language = bool(re.search(
-        r"\b(?:bypass|circumvent|evade|avoid\s+(?:approval|security|procedure)|"
-        r"ignore\s+(?:policy|procedure|security)|outside\s+(?:the\s+)?process|"
-        r"aggir\w*|elud\w*|saltare\s+(?:la\s+)?procedura)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    if semantic["requested_action"] == "bypass_procedure" and not bypass_language:
-        semantic["requested_action"] = "visit_link" if links else "informational"
-        semantic["asks_to_bypass_procedure"] = False
-        semantic["asks_to_click_link"] = bool(links)
-        semantic["action_channel"] = "supplied_link" if links else "none"
-        semantic["content_summary"] = (
-            "The subject and body present an offer and invite the recipient to visit a linked page"
-            if links
-            else "The subject and body present information without asking the recipient to bypass a procedure"
-        )
-
-    # Correct only explicit create/reset/change-password requests. A mere
-    # mention of passwords must not become an account-change action.
-    password_change = bool(re.search(
-        r"\b(?:create|set|reset|change|choose|crea(?:te)?|imposta|reimposta|"
-        r"camb(?:ia|iare)|cree|crear|restablecer|ändern|zurücksetzen|erstellen)\b"
-        r"[^\n.!?]{0,35}\b(?:password|passwort|contrase(?:ñ|n)a)\b|"
-        r"\b(?:password|passwort|contrase(?:ñ|n)a)\b[^\n.!?]{0,25}"
-        r"\b(?:create|set|reset|change|crea|imposta|cree|erstellen|zurücksetzen)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    if links and password_change:
-        semantic["requested_action"] = "change_account_settings"
-        semantic["asks_to_change_account_settings"] = True
-        semantic["asks_for_credentials"] = False
-        semantic["asks_to_click_link"] = True
-        semantic["action_channel"] = "supplied_link"
-
-    explicit_data_submission = bool(re.search(
-        r"\b(?:enter|provide|submit|confirm|update|fill\s+in|trage\w*|"
-        r"best[aä]tig\w*|inser\w*|fornisc\w*|conferm\w*)\b"
-        r"[^\n.!?]{0,45}\b(?:your|ihre|ihr|tuoi|tua|su)\b"
-        r"[^\n.!?]{0,18}\b(?:data|details|information|address|daten|datein|adresse|"
-        r"informazioni|dati|indirizzo|datos|direcci[oó]n)\b|"
-        r"\b(?:werk|update|vernieuw|vul|bevestig)\w*\b"
-        r"[^\n.!?]{0,100}\b(?:uw|je|jouw)\b[^\n.!?]{0,30}"
-        r"\b(?:betaalgegevens|betalingsgegevens|betaalmethode|persoonlijke\s+gegevens|gegevens)\b|"
-        r"\b(?:remplir|compl[eé]ter|soumettre|envoyer)\b"
-        r"[^\n.!?]{0,60}\b(?:la|une|votre)\s+(?:demande|formulaire|dossier)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    if (
-        links
-        and explicit_data_submission
-        and semantic["requested_action"] != "provide_credentials"
-        and not semantic["asks_for_credentials"]
-    ):
-        semantic["requested_action"] = "provide_information"
-        semantic["asks_for_sensitive_information"] = True
-        semantic["asks_to_click_link"] = True
-        semantic["action_channel"] = "supplied_link"
-        semantic["content_summary"] = (
-            "The subject and body ask the recipient to submit personal information through a linked page"
-        )
-    elif (
-        semantic["requested_action"] == "provide_information"
-        and not explicit_data_submission
-    ):
-        semantic["requested_action"] = "visit_link" if links else "other"
-        semantic["asks_for_sensitive_information"] = False
-        semantic["asks_to_click_link"] = bool(links)
-        semantic["action_channel"] = "supplied_link" if links else "unclear"
-
-    # Reward lures are defined by a benefit plus an explicit obtain/participate
-    # action. This prevents a generic link from becoming a reward while fixing
-    # common "claim airdrop/free spins/bonus/giveaway" misclassifications.
-    reward_context = bool(re.search(
-        r"\b(?:reward|prize|bonus|airdrop|free\s+spins?|giveaway|withdrawal|"
-        r"cashback|refund|won|winner|gewinn|gewinnspiel|gewonnen|premio|ricompensa|"
-        r"rimborso|sorteo|reembolso)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    reward_action = bool(re.search(
-        r"\b(?:claim|redeem|collect|get|secure|receive|withdraw|participat\w*|"
-        r"join|enter|sichern|teilnehm\w*|erhalt\w*|reclam\w*|resgat\w*|"
-        r"partecipa\w*|riscuot\w*|ritira\w*)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    if (
-        links
-        and reward_context
-        and reward_action
-        and semantic["requested_action"] != "provide_information"
-    ):
-        misread_as_payment = semantic["asks_for_payment"]
-        semantic["requested_action"] = "claim_reward"
-        semantic["asks_to_claim_reward"] = True
-        semantic["financial_incentive_present"] = True
-        semantic["asks_for_payment"] = False
-        semantic["asks_to_click_link"] = True
-        semantic["action_channel"] = "supplied_link"
-        if misread_as_payment:
-            semantic["content_summary"] = (
-                "The subject and body offer a financial bonus and ask the recipient to claim it through a supplied link"
-            )
-
-    if _PAYMENT_ACTION_RE.search(message_text):
-        semantic["requested_action"] = "pay_or_transfer"
-        semantic["asks_for_payment"] = True
-        semantic["asks_to_claim_reward"] = False
-        if links:
-            semantic["asks_to_click_link"] = True
-            semantic["action_channel"] = "supplied_link"
-        semantic["content_summary"] = _fallback_content_summary(soc, semantic)
-    account_context = bool(re.search(
-        r"\b(?:account|konto|compte|cuenta|profilo|account\s+microsoft|onlinebanking|online-banking)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    security_event_language = bool(re.search(
-        r"\b(?:unusual|suspicious|unauthori[sz]ed|unknown)\b[^\n.!?]{0,45}"
-        r"\b(?:sign[ .-]?in|login|access|activity|device)\b|"
-        r"\b(?:new\s+(?:device|sign[ .-]?in|login)|logged\s+into|"
-        r"accesso\s+(?:insolito|sospetto|non\s+autorizzato)|"
-        r"attivit[aà]\s+(?:insolita|sospetta)|nuovo\s+dispositivo)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    security_response_language = bool(re.search(
-        r"\b(?:report(?:\s+the)?\s+(?:user|activity)|report\s+(?:it|this)|"
-        r"wasn['’]?t\s+you|not\s+you|deny|review\s+(?:the\s+)?activity|"
-        r"secure\s+(?:your\s+)?account|protect\s+(?:your\s+)?account|"
-        r"segnal\w*|disconosc\w*|non\s+(?:sei|eri)\s+tu|metti\s+in\s+sicurezza)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    security_alert_via_supplied_channel = bool(
-        links and account_context and security_event_language and security_response_language
-    )
-    if security_alert_via_supplied_channel:
-        semantic["requested_action"] = "verify_account"
-        semantic["asks_to_verify_account"] = True
-        semantic["asks_to_click_link"] = True
-        semantic["action_channel"] = "supplied_link"
-        semantic["content_summary"] = (
-            "The subject and body claim suspicious account activity and direct the recipient to respond "
-            "through a supplied link, a common account-security phishing lure"
-        )
-
-    # A bank/account verification through a destination supplied by the
-    # message is also sensitive. Keep it review-level here; independent
-    # technical or identity evidence determines whether it becomes phishing.
-    verification_language = bool(re.search(
-        r"\b(?:verify|verification|confirm|authenticate|authentication|security\s+check|"
-        r"verific\w*|best[aä]tig\w*|authentifiz\w*|sicherheitscheck|pr[uü]fportal)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    financial_account_context = bool(re.search(
-        r"\b(?:bank|banking|account|konto|onlinebanking|online-banking|mobile\s+tan|tan-verfahren)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    if (
-        links
-        and verification_language
-        and financial_account_context
-        and not security_alert_via_supplied_channel
-        and semantic["requested_action"] not in {
-            "claim_reward", "pay_or_transfer", "change_account_settings",
-        }
-    ):
-        semantic["requested_action"] = "verify_account"
-        semantic["asks_to_verify_account"] = True
-        semantic["asks_to_click_link"] = True
-        semantic["action_channel"] = "supplied_link"
-        semantic["content_summary"] = (
-            "The subject and body claim to be from a bank and ask the recipient to verify an account "
-            "through a supplied link, a common credential-phishing pattern"
-        )
-
-    # Small models can mistake terse marketplace notifications for purely
-    # informational mail (for example: an NFT/crypto offer followed by an
-    # "inspect proposal" button).  Require the conjunction of a concrete
-    # crypto amount, offer/proposal language, a call to inspect/accept it, and
-    # an actually extracted link.  This is deliberately narrower than a broad
-    # keyword heuristic: ordinary financial discussion or an isolated currency
-    # name must not be promoted to a risky action.
-    crypto_amount = bool(re.search(
-        r"\b\d+(?:[.,]\d+)?\s*(?:eth|weth|btc|bitcoin|usdt|usdc|sol|bnb|matic)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    offer_context = bool(re.search(
-        r"\b(?:offer(?:ed)?|bid|proposal|offert[ae]|proposta)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    offer_action = bool(re.search(
-        r"\b(?:inspect|view|review|open|accept|claim|redeem|collect|visualizza|controlla|apri|accetta)\b"
-        r"[^\n.!?]{0,50}\b(?:offer|bid|proposal|offert[ae]|proposta)\b",
-        message_text,
-        re.IGNORECASE,
-    ))
-    if links and crypto_amount and offer_context and offer_action:
-        semantic["requested_action"] = "claim_reward"
-        semantic["asks_to_claim_reward"] = True
-        semantic["financial_incentive_present"] = True
-        semantic["asks_to_click_link"] = True
-        semantic["action_channel"] = "supplied_link"
-
-    if (
-        message_body.strip()
-        and semantic["requested_action"] == "pay_or_transfer"
-        and not semantic.get("structured_extortion")
-        and not _PAYMENT_ACTION_RE.search(message_text)
-    ):
-        semantic["requested_action"] = "visit_link" if links else "informational"
-        semantic["asks_for_payment"] = False
-        semantic["asks_to_click_link"] = bool(links)
-        semantic["action_channel"] = "supplied_link" if links else "none"
-        semantic["evidence_phrase"] = ""
-        semantic["content_summary"] = _fallback_content_summary(soc, semantic)
-    if (
-        message_body.strip()
-        and semantic["requested_action"] == "claim_reward"
-        and not (reward_context and reward_action)
-        and not (crypto_amount and offer_context and offer_action)
-    ):
-        semantic["requested_action"] = "visit_link" if links else "informational"
-        semantic["asks_to_claim_reward"] = False
-        semantic["asks_to_click_link"] = bool(links)
-        semantic["action_channel"] = "supplied_link" if links else "none"
-        semantic["evidence_phrase"] = ""
-        semantic["content_summary"] = _fallback_content_summary(soc, semantic)
-
-    if not semantic.get("evidence_phrase"):
-        semantic["evidence_phrase"] = _find_action_evidence(
-            soc,
-            semantic["requested_action"],
-        )
-        if semantic["evidence_phrase"]:
-            semantic["reason"] = semantic["evidence_phrase"]
-    if (
-        semantic["requested_action"] == "visit_link"
-        and (not links or not semantic.get("evidence_phrase"))
-    ):
-        semantic["requested_action"] = "informational"
-        semantic["asks_to_click_link"] = False
-        semantic["action_channel"] = "none"
-        semantic["content_summary"] = (
-            "The subject and body provide information without an explicit "
-            "request to follow a supplied link"
-        )
-        semantic["reason"] = "No explicit link call-to-action was found."
-    if (
-        semantic["requested_action"] == "open_attachment"
-        and (not attachments or not semantic.get("evidence_phrase"))
-    ):
-        semantic["requested_action"] = "informational"
-        semantic["asks_to_open_attachment"] = False
-        semantic["action_channel"] = "none"
-        semantic["content_summary"] = (
-            "The subject and body provide information without an explicit "
-            "request to open an attachment"
-        )
-        semantic["reason"] = "No explicit attachment-opening request was found."
-    if not semantic.get("signal_evidence"):
-        semantic["signal_evidence"] = _find_signal_evidence(soc, semantic)
-
     return semantic
 
 
@@ -1877,49 +1375,13 @@ def _sender_domain(soc: dict) -> str:
     return (match.group(1) if match else "").lower().rstrip(".")
 
 
-_GENERIC_BRAND_WORDS = {
-    "the", "team", "support", "service", "services", "security", "official",
-    "digital", "online", "customer", "customers", "mail", "email", "noreply",
-    "no", "reply", "account", "wallet", "casino", "vip",
-}
-
-_KNOWN_BRAND_DOMAINS = {
+_AUTHORITATIVE_BRAND_DOMAINS = {
     "iCloud": {"apple.com", "icloud.com"},
     "Trust Wallet": {"trustwallet.com"},
     "Microsoft": {"microsoft.com"},
     "PayPal": {"paypal.com"},
     "Netflix": {"netflix.com"},
 }
-
-
-def _infer_known_brand(message_text: str) -> str:
-    normalized = _normalize_obfuscated_text(message_text).casefold()
-    checks = (
-        ("iCloud", r"\bicloud\b"),
-        ("Trust Wallet", r"\btrust\s+wallet\b"),
-        ("Microsoft", r"\bmicrosoft\b"),
-        ("PayPal", r"\bpaypal\b"),
-        ("Netflix", r"\bnetflix\b"),
-    )
-    for brand, pattern in checks:
-        if re.search(pattern, normalized, re.IGNORECASE):
-            return brand
-    return ""
-
-
-def _brand_tokens(value: str) -> set[str]:
-    value = unicodedata.normalize(
-        "NFKD",
-        _normalize_obfuscated_text(value).casefold(),
-    )
-    ascii_value = "".join(
-        char for char in value if not unicodedata.combining(char)
-    )
-    return {
-        token
-        for token in re.findall(r"[a-z0-9]{3,}", ascii_value)
-        if token not in _GENERIC_BRAND_WORDS
-    }
 
 
 def _sender_display_name(soc: dict) -> str:
@@ -1937,29 +1399,20 @@ def _claimed_brand_domain_mismatch(soc: dict, semantic: dict) -> bool:
         return False
     brand = str(semantic.get("claimed_brand") or "").strip()
     if not brand:
-        display_name = _sender_display_name(soc)
-        if not re.search(
-            r"\b(?:wallet|bank|casino|security|digital|microsoft|paypal|"
-            r"apple|icloud|amazon|netflix|account)\b",
-            display_name,
-            re.IGNORECASE,
-        ):
-            return False
-        brand = display_name
-        semantic["claimed_brand"] = brand
-    tokens = _brand_tokens(brand)
-    sender_domain = _sender_domain(soc)
-    if not tokens or not sender_domain:
         return False
-    for known_brand, allowed_domains in _KNOWN_BRAND_DOMAINS.items():
-        if known_brand.casefold() in brand.casefold():
+    sender_domain = _sender_domain(soc)
+    if not sender_domain:
+        return False
+    for known_brand, allowed_domains in _AUTHORITATIVE_BRAND_DOMAINS.items():
+        if known_brand.casefold() == brand.casefold():
             return not any(
                 sender_domain == allowed
                 or sender_domain.endswith("." + allowed)
                 for allowed in allowed_domains
             )
-    compact_domain = re.sub(r"[^a-z0-9]", "", sender_domain.casefold())
-    return not any(token in compact_domain for token in tokens)
+    # Unknown brand/domain relationships require an external authoritative
+    # registry. Do not guess from language-dependent brand tokens.
+    return False
 
 
 def _sensitive_link_domain_mismatch(soc: dict, semantic: dict) -> bool:
@@ -2198,6 +1651,7 @@ def apply_email_risk_policy(soc: dict, semantic: dict) -> dict:
         "urgency_present": semantic["urgency_present"],
         "urgency_targets_risky_action": semantic["urgency_targets_risky_action"],
         "confidence": semantic["confidence"],
+        "ambiguity": semantic["ambiguity"],
         "explanation": explanation,
         "semantic_reason": semantic["reason"],
         "content_summary": semantic["content_summary"],
@@ -2424,16 +1878,6 @@ def _valid_content_summary(value: str) -> bool:
     return 4 <= len(summary.split()) <= 35
 
 
-_TARGETED_TRIGGER_RE = re.compile(
-    r"\b(?:password|passwort|contrase(?:ñ|n)a|otp|one[ -]?time\s+(?:password|code)|"
-    r"pin|passcode|recovery\s+code|credentials?|login\s+details|personal\s+(?:data|information)|"
-    r"bank\s+details|payment|pay|transfer|invoice|unusual\s+(?:sign[ -]?in|login|activity)|"
-    r"unknown\s+(?:device|login)|secure\s+(?:your\s+)?account|claim|reward|prize|refund|bonus|"
-    r"reimposta|password|credenziali|dati\s+personali|pagamento|bonifico|fattura|"
-    r"accesso\s+(?:insolito|sospetto)|premio|rimborso|ricompensa)\b",
-    re.IGNORECASE,
-)
-
 TARGETED_INTENT_INSTRUCTIONS = (
     "The primary classifier returned a generic action. Check only whether the email explicitly asks the recipient for one of these sensitive actions: "
     "provide_credentials=enter/send a password, OTP, PIN or recovery code; "
@@ -2498,10 +1942,30 @@ def _needs_targeted_intent_verifier(soc: dict, semantic: dict) -> bool:
         }
         and not semantic.get("evidence_phrase")
     )
-    if not generic_action and not unsupported_sensitive_action:
-        return False
-    message = f"{soc.get('subject') or ''}\n{_body_context_for_llm(soc)}"
-    return bool(_TARGETED_TRIGGER_RE.search(message))
+    structurally_impossible_channel = (
+        semantic.get("action_channel") == "supplied_link"
+        and not _actionable_links(soc)
+    ) or (
+        semantic.get("action_channel") == "supplied_attachment"
+        and not _actionable_attachments(soc)
+    )
+    uncertain = (
+        semantic.get("ambiguity") == "high"
+        or (
+            semantic.get("confidence_provided", False)
+            and semantic.get("confidence", 0.5) < 0.65
+        )
+    )
+    has_message = bool(
+        str(soc.get("subject") or "").strip()
+        or _body_context_for_llm(soc).strip()
+    )
+    return has_message and (
+        generic_action
+        or unsupported_sensitive_action
+        or structurally_impossible_channel
+        or uncertain
+    )
 
 
 def _request_targeted_intent(
@@ -2610,10 +2074,17 @@ def _merge_semantic_candidates(candidates: list[dict], soc: dict) -> dict:
         )
         if normalized.get("evidence_phrase"):
             score += 8
+        elif normalized["requested_action"] not in {
+            "none", "informational", "other",
+        }:
+            score -= 120
         if normalized.get("action_channel") in {
             "supplied_link", "external_form", "supplied_attachment", "email_reply",
         }:
             score += 3
+        score += round(normalized.get("confidence", 0.5) * 10)
+        if normalized.get("ambiguity") == "high":
+            score -= 10
         ranked.append((score, -index, candidate, normalized))
 
     _, _, winner, winner_normalized = max(ranked, key=lambda item: (item[0], item[1]))

@@ -3,6 +3,9 @@ su colab quando faccio rerun devo cambiare name ad es
 RUN_NAME = "fishstop-distilbert-hardneg-v2"
 
 CODICE 
+ricontrollare se nel codice ci sono controlli hard coded per capire le cose , come fare un codice robusto per tutto le lingue senza doversi basare su campi semantici di parole probabili. 
+
+
 
 
 

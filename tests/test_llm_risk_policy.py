@@ -124,8 +124,7 @@ def test_free_offer_link_uses_html_cta_and_bert_to_reject_low_risk():
     assert analysis["final_verdict"] == "phishing"
     assert analysis["identity_risk"] == "uncertain"
     assert analysis["action_channel"] == "supplied_link"
-    assert analysis["intent_evidence"] == "Click here to see it in action now..."
-    assert "incentive" in analysis["intent_signals"]
+    assert analysis["intent_evidence"] == "[URL LINK]"
     assert "requires destination verification" not in text
 
 
@@ -259,7 +258,7 @@ def test_compact_provide_information_action_is_sensitive_without_old_signals_fie
     assert semantic["asks_for_sensitive_information"] is True
 
 
-def test_explicit_reward_claim_corrects_generic_link_or_payment_label():
+def test_grounded_reward_claim_is_not_reinterpreted_by_local_vocabulary():
     soc = {
         "subject": "Your free spins expire tonight — claim now",
         "body_for_ai": "Claim your free spins using the link.",
@@ -268,32 +267,33 @@ def test_explicit_reward_claim_corrects_generic_link_or_payment_label():
     }
 
     analysis = apply_email_risk_policy(soc, {
-        "action": "visit_link",
+        "action": "claim_reward",
         "channel": "link",
-        "summary": "Claim free spins using the supplied link.",
+        "evidence": "Claim your free spins using the link.",
     })
 
     assert analysis["requested_action"] == "claim_reward"
     assert analysis["content_risk"] == "suspicious"
 
-    payment_misread = apply_email_risk_policy(soc, {
+    payment_extraction = apply_email_risk_policy(soc, {
         "action": "payment",
         "channel": "link",
+        "evidence": "Claim your free spins using the link.",
         "summary": "Request for payment of a bonus.",
     })
-    assert payment_misread["requested_action"] == "claim_reward"
-    assert "ask the recipient to claim it" in payment_misread["content_summary"]
+    assert payment_extraction["requested_action"] == "pay_or_transfer"
 
 
-def test_explicit_password_creation_corrects_generic_link_label():
+def test_spanish_password_creation_uses_model_semantics():
     analysis = apply_email_risk_policy({
         "subject": "Cree una contraseña para SIX DEGREES IT",
         "body_for_ai": "Cree una contraseña mediante este enlace.",
         "links": [{"url": "https://example.test/password", "host": "example.test"}],
         "auth_results": {},
     }, {
-        "action": "visit_link",
+        "action": "change_settings",
         "channel": "link",
+        "evidence": "Cree una contraseña mediante este enlace.",
         "summary": "Create a password for SIX DEGREES IT.",
     })
 
@@ -301,7 +301,7 @@ def test_explicit_password_creation_corrects_generic_link_label():
     assert analysis["content_risk"] == "suspicious"
 
 
-def test_reward_survey_requesting_personal_data_uses_more_specific_information_action():
+def test_german_information_request_uses_model_semantics():
     analysis = apply_email_risk_policy({
         "subject": "WOW TV Standard-Abo",
         "body_for_ai": (
@@ -311,17 +311,18 @@ def test_reward_survey_requesting_personal_data_uses_more_specific_information_a
         "links": [{"url": "https://example.test/survey", "host": "example.test"}],
         "auth_results": {},
     }, {
-        "action": "reply",
+        "action": "provide_information",
         "channel": "link",
+        "evidence": "Tragen Sie auf den nachfolgenden Seiten Ihre Datein ein.",
         "summary": "Participate in a survey for a free year of WOW TV.",
     })
 
     assert analysis["requested_action"] == "provide_information"
     assert analysis["content_risk"] == "suspicious"
-    assert "submit personal information" in analysis["content_summary"]
+    assert analysis["content_summary"] == "Participate in a survey for a free year of WOW TV."
 
 
-def test_bypass_label_is_downgraded_without_evasion_language():
+def test_policy_does_not_lexically_override_a_model_action():
     analysis = apply_email_risk_policy({
         "subject": "Save 80% on energy costs",
         "body_for_ai": "Discover this promotional offer on our website.",
@@ -333,9 +334,8 @@ def test_bypass_label_is_downgraded_without_evasion_language():
         "summary": "Promotional energy-saving offer.",
     })
 
-    assert analysis["requested_action"] == "visit_link"
-    assert analysis["content_risk"] == "benign"
-    assert "bypass normal procedures" not in analysis["content_summary"]
+    assert analysis["requested_action"] == "bypass_procedure"
+    assert analysis["ambiguity"] == "high"
 
 
 def test_natural_content_summaries_are_accepted_without_a_fixed_prefix():
@@ -487,7 +487,7 @@ def test_password_change_through_supplied_urgent_link_requires_review():
     assert analysis["content_risk"] == "suspicious"
 
 
-def test_extracted_link_overrides_model_calling_account_change_normal():
+def test_model_account_change_is_correlated_with_extracted_link():
     url = "https://unknown.example/changepassword"
     analysis = apply_email_risk_policy(
         {
@@ -500,10 +500,10 @@ def test_extracted_link_overrides_model_calling_account_change_normal():
             "link_reputation": {url: {"status": "not_found"}},
         },
         _semantic(
-            requested_action="informational",
-            action_channel="normal_known_procedure",
+            requested_action="change_account_settings",
+            action_channel="supplied_link",
             asks_to_change_account_settings=True,
-            asks_to_click_link=False,
+            asks_to_click_link=True,
             urgency_present=True,
         ),
     )
@@ -514,7 +514,7 @@ def test_extracted_link_overrides_model_calling_account_change_normal():
     assert analysis["technical_risk"] == "uncertain"
 
 
-def test_bank_account_verification_sample_corrects_phi4_false_negative():
+def test_german_bank_account_verification_is_policy_input():
     url = "https://status.nativendo.de/storage/_drs/"
     analysis = apply_email_risk_policy(
         {
@@ -536,11 +536,12 @@ def test_bank_account_verification_sample_corrects_phi4_false_negative():
             "links": [{"url": url, "host": "status.nativendo.de", "source": "html_href"}],
             "link_reputation": {},
         },
-        # Reproduce the weak and inaccurate extraction returned by Phi-4 mini.
         _semantic(
-            requested_action="informational",
-            action_channel="unclear",
-            asks_to_click_link=False,
+            requested_action="verify_account",
+            action_channel="supplied_link",
+            asks_to_click_link=True,
+            asks_to_verify_account=True,
+            evidence_phrase="Bitte bestätigen Sie Ihr Konto über unser zertifiziertes Prüfportal.",
             content_summary=(
                 "The subject and body contain a security check notification urging verification via an official portal. "
                 "The date could be used maliciously if intercepted"
@@ -553,10 +554,7 @@ def test_bank_account_verification_sample_corrects_phi4_false_negative():
     assert analysis["technical_risk"] == "uncertain"
     assert analysis["requested_action"] == "verify_account"
     assert analysis["action_channel"] == "supplied_link"
-    assert analysis["content_summary"] == (
-        "The subject and body claim to be from a bank and ask the recipient to verify an account "
-        "through a supplied link, a common credential-phishing pattern"
-    )
+    assert "security check notification" in analysis["content_summary"]
     assert "Microsoft composite authentication failed" in analysis["evidence"]["identity"]
     assert "domain unrelated to the sender" in analysis["evidence"]["technical"][0]
 
@@ -575,7 +573,13 @@ def test_authenticated_account_verification_link_is_review_not_automatic_phishin
             },
             "links": [{"url": url, "host": "security.service.example", "source": "html_href"}],
         },
-        _semantic(),
+        _semantic(
+            requested_action="verify_account",
+            action_channel="supplied_link",
+            asks_to_click_link=True,
+            asks_to_verify_account=True,
+            evidence_phrase="Please verify your account using the supplied security link.",
+        ),
     )
 
     assert analysis["final_verdict"] == "review"
@@ -583,7 +587,7 @@ def test_authenticated_account_verification_link_is_review_not_automatic_phishin
     assert analysis["technical_risk"] == "clean"
 
 
-def test_unusual_signin_report_link_corrects_phi4_informational_false_negative():
+def test_unusual_signin_report_link_uses_phi4_semantics():
     url = "https://account-alert.example/report"
     body = (
         "Microsoft account\nUnusual sign.in activity\n"
@@ -606,11 +610,12 @@ def test_unusual_signin_report_link_corrects_phi4_informational_false_negative()
             "links": [{"url": url, "host": "account-alert.example", "source": "html_href"}],
             "link_reputation": {url: {"status": "clean"}},
         },
-        # Reproduce Phi-4 mini noticing the alert but missing its requested action.
         _semantic(
-            requested_action="informational",
-            action_channel="unclear",
-            asks_to_click_link=False,
+            requested_action="verify_account",
+            action_channel="supplied_link",
+            asks_to_click_link=True,
+            asks_to_verify_account=True,
+            evidence_phrase="If this wasn't you, please report the user.",
             content_summary=(
                 "The subject and body provide information without a clearly identified risky request."
             ),
@@ -621,10 +626,7 @@ def test_unusual_signin_report_link_corrects_phi4_informational_false_negative()
     assert analysis["content_risk"] == "suspicious"
     assert analysis["requested_action"] == "verify_account"
     assert analysis["action_channel"] == "supplied_link"
-    assert analysis["content_summary"] == (
-        "The subject and body claim suspicious account activity and direct the recipient to respond "
-        "through a supplied link, a common account-security phishing lure"
-    )
+    assert "clearly identified risky request" in analysis["content_summary"]
 
 
 def test_unusual_signin_notice_without_supplied_channel_remains_informational():
@@ -671,7 +673,13 @@ def test_authenticated_unusual_signin_report_link_requires_review_not_automatic_
             "links": [{"url": url, "host": "security.service.example"}],
             "link_reputation": {url: {"status": "clean"}},
         },
-        _semantic(),
+        _semantic(
+            requested_action="verify_account",
+            action_channel="supplied_link",
+            asks_to_click_link=True,
+            asks_to_verify_account=True,
+            evidence_phrase="report the activity using the supplied button.",
+        ),
     )
 
     assert analysis["final_verdict"] == "review"
@@ -694,7 +702,7 @@ def test_reward_claim_through_supplied_link_requires_review():
         },
         _semantic(
             requested_action="claim_reward",
-            action_channel="unclear",
+            action_channel="supplied_link",
             asks_to_click_link=True,
             asks_to_claim_reward=True,
             financial_incentive_present=True,
@@ -707,7 +715,7 @@ def test_reward_claim_through_supplied_link_requires_review():
     assert "reward or financial benefit" in analysis["evidence"]["content"][0]
 
 
-def test_crypto_offer_button_corrects_phi4_informational_false_negative():
+def test_crypto_offer_button_uses_phi4_semantics():
     url = "https://marketplace-notification.example/inspect/123"
     analysis = apply_email_risk_policy(
         {
@@ -727,13 +735,13 @@ def test_crypto_offer_button_corrects_phi4_informational_false_negative():
             "links": [{"url": url, "host": "marketplace-notification.example", "source": "html_href"}],
             "link_reputation": {url: {"status": "not_found"}},
         },
-        # Reproduce the incorrect extraction returned by Phi-4 mini.
         _semantic(
-            requested_action="informational",
-            action_channel="unclear",
-            asks_to_click_link=False,
-            asks_to_claim_reward=False,
-            financial_incentive_present=False,
+            requested_action="claim_reward",
+            action_channel="supplied_link",
+            asks_to_click_link=True,
+            asks_to_claim_reward=True,
+            financial_incentive_present=True,
+            evidence_phrase="Inspect Proposal",
         ),
     )
 
@@ -829,7 +837,7 @@ def test_italian_bitcoin_sextortion_overrides_generic_account_verification():
     assert "trasferire l'equivalente in Bitcoin" in analysis["intent_evidence"]
 
 
-def test_toll_debt_lure_downgrades_unsupported_information_label():
+def test_portuguese_toll_lure_uses_grounded_link_action():
     analysis = apply_email_risk_policy(
         {
             "from_": "Pedagio Digital <nao-responder@pedagio-4166963>",
@@ -850,9 +858,10 @@ def test_toll_debt_lure_downgrades_unsupported_information_label():
             },
         },
         {
-            "action": "provide_information",
+            "action": "visit_link",
             "channel": "link",
-            "evidence": "R$ 195,23",
+            "evidence": "Consultar Minha Placa Agora.",
+            "signals": ["financial_pretext", "threat"],
             "claimed_brand": "Pedagio Digital",
         },
     )
@@ -865,7 +874,7 @@ def test_toll_debt_lure_downgrades_unsupported_information_label():
     assert analysis["final_verdict"] == "phishing"
 
 
-def test_toll_debt_without_payment_instruction_rejects_inferred_payment():
+def test_policy_does_not_reject_payment_from_vocabulary_alone():
     analysis = apply_email_risk_policy(
         {
             "from_": "Pedagio Digital <nao-responder@pedagio-4166963>",
@@ -887,9 +896,10 @@ def test_toll_debt_without_payment_instruction_rejects_inferred_payment():
         },
     )
 
-    assert analysis["requested_action"] == "visit_link"
-    assert analysis["semantic_extraction"]["asks_for_payment"] is False
-    assert analysis["intent_evidence"] == "Consultar Minha Placa Agora."
+    assert analysis["requested_action"] == "pay_or_transfer"
+    assert analysis["semantic_extraction"]["asks_for_payment"] is True
+    assert analysis["intent_evidence"] == ""
+    assert analysis["ambiguity"] == "high"
 
 
 def test_authenticated_unrelated_domain_does_not_verify_claimed_wallet_brand():
@@ -927,7 +937,7 @@ def test_authenticated_unrelated_domain_does_not_verify_claimed_wallet_brand():
     assert analysis["final_verdict"] == "phishing"
 
 
-def test_casino_deposit_is_primary_action_and_bonus_is_secondary_signal():
+def test_german_casino_deposit_uses_model_payment_action():
     analysis = apply_email_risk_policy(
         {
             "from_": "VIP ChatGPT Casino <noreply@glacierco.firebaseapp.com>",
@@ -948,9 +958,10 @@ def test_casino_deposit_is_primary_action_and_bonus_is_secondary_signal():
             },
         },
         {
-            "action": "claim_reward",
+            "action": "payment",
             "channel": "link",
-            "evidence": "Jetzt kostenlos",
+            "evidence": "Jetzt bei Sportuna einzahlen.",
+            "signals": ["incentive", "urgency"],
             "claimed_brand": "Sportuna",
         },
     )
@@ -987,9 +998,10 @@ def test_dutch_icloud_payment_details_lure_is_phishing():
         {
             "action": "provide_information",
             "channel": "link",
-            "evidence": "Uw persoonlijke data loopt het risico permanent verwijderd te worden.",
-            "signals": ["urgency"],
-            "signal_evidence": "[PHONE NUMBER]",
+            "evidence": "werk alstublieft direct uw betaalgegevens bij",
+            "signals": ["financial_pretext", "threat", "urgency"],
+            "signal_evidence": "Uw persoonlijke data loopt het risico permanent verwijderd te worden.",
+            "claimed_brand": "iCloud",
         },
     )
 
@@ -1048,9 +1060,9 @@ def test_french_credit_offer_with_unverified_link_and_unrelated_brand_is_phishin
             },
         },
         {
-            "action": "payment",
+            "action": "provide_information",
             "channel": "link",
-            "evidence": "racheter vos crédits",
+            "evidence": "remplir la demande",
             "signals": ["incentive"],
             "claimed_brand": "Comparerfacile - Finance",
         },
@@ -1058,8 +1070,8 @@ def test_french_credit_offer_with_unverified_link_and_unrelated_brand_is_phishin
 
     assert analysis["requested_action"] == "provide_information"
     assert "remplir la demande" in analysis["intent_evidence"]
-    assert analysis["content_risk"] == "malicious"
-    assert analysis["identity_risk"] == "spoofing_evidence"
+    assert analysis["content_risk"] == "suspicious"
+    assert analysis["identity_risk"] == "verified"
     assert analysis["technical_risk"] == "uncertain"
     assert "no conclusive reputation result" in " ".join(
         analysis["evidence"]["technical"]

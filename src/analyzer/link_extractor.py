@@ -41,12 +41,8 @@ _BRACKETED_PLACEHOLDER_USERINFO_RE = re.compile(
     r"^(?P<scheme>https?://)\[[^\]/?#@]*\]@(?P<destination>.+)$",
     re.IGNORECASE,
 )
-_SIGNATURE_MARKER_RE = re.compile(
-    r"(?:^|[-_])(?:email[-_]?signature|mail[-_]?signature|signature)(?:$|[-_])",
-    re.IGNORECASE,
-)
-_NON_ACTION_LINK_TEXT_RE = re.compile(
-    r"\b(?:unsubscribe|afmelden|abmelden|désabonner|disiscriv\w*)\b",
+_NON_ACTION_CONTAINER_MARKER_RE = re.compile(
+    r"(?:^|[-_])(?:email[-_]?signature|mail[-_]?signature|signature|footer)(?:$|[-_])",
     re.IGNORECASE,
 )
 
@@ -148,28 +144,36 @@ def _possible_shortener(host: str, path: str) -> tuple[bool, str]:
     return False, ""
 
 
-def _html_node_has_signature_marker(node) -> bool:
+def _html_node_has_non_action_marker(node) -> bool:
     attrs = getattr(node, "attrs", None)
     if attrs is None:
         return False
+    if str(getattr(node, "name", "") or "").lower() == "footer":
+        return True
     marker_values = [
         str(node.get("id") or ""),
         *[str(value) for value in (node.get("class") or [])],
     ]
-    return any(_SIGNATURE_MARKER_RE.search(value) for value in marker_values)
+    return any(
+        _NON_ACTION_CONTAINER_MARKER_RE.search(value)
+        for value in marker_values
+    )
 
 
 def _html_link_role(anchor) -> str:
-    """Classify links using explicit structural markers, not domain allowlists."""
+    """Classify links using HTML structure, never visible-language keywords."""
+    rel_values = {
+        str(value).strip().lower()
+        for value in (anchor.get("rel") or [])
+    }
+    if "unsubscribe" in rel_values:
+        return "unsubscribe"
     for node in [anchor, *list(anchor.parents)]:
         attrs = getattr(node, "attrs", None)
         if attrs is None:
             continue
-        if _html_node_has_signature_marker(node):
+        if _html_node_has_non_action_marker(node):
             return "signature"
-    display_text = anchor.get_text(" ", strip=True)
-    if _NON_ACTION_LINK_TEXT_RE.search(display_text):
-        return "unsubscribe"
     return "body_action"
 
 
@@ -258,7 +262,7 @@ def extract_links(
                         role=_html_link_role(anchor),
                     )
             for tag in list(soup.find_all(True)):
-                if tag.parent is not None and _html_node_has_signature_marker(tag):
+                if tag.parent is not None and _html_node_has_non_action_marker(tag):
                     tag.decompose()
         else:
             matched_spans = []

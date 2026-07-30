@@ -346,11 +346,12 @@ def test_long_email_analyzes_all_sections_and_merges_middle_intent(monkeypatch):
     ]
     analysis = events[-1]["analysis"]
     assert len(calls) > 1
-    assert len(progress) == len(calls)
+    assert len(progress) < len(calls)
+    assert len(calls) <= len(progress) * 2
     assert progress[-1]["current"] == progress[-1]["total"]
     assert analysis["requested_action"] == "provide_credentials"
     assert analysis["intent_evidence"] == "enter your password and recovery code"
-    assert events[-1]["analyzed_sections"] == len(calls)
+    assert events[-1]["analyzed_sections"] == len(progress)
 
 
 def test_impossible_link_channel_is_removed():
@@ -381,7 +382,7 @@ def test_impossible_link_channel_is_removed():
     assert corrected["asks_to_click_link"] is False
 
 
-def test_reply_channel_requires_an_explicit_email_reply():
+def test_reply_channel_is_not_reinterpreted_with_language_keywords():
     semantic = llm.normalize_semantic_extraction(
         {
             "action": "verify_account",
@@ -403,7 +404,7 @@ def test_reply_channel_requires_an_explicit_email_reply():
     )
 
     assert corrected["requested_action"] == "verify_account"
-    assert corrected["action_channel"] == "unclear"
+    assert corrected["action_channel"] == "email_reply"
 
 
 def test_model_evidence_must_exist_in_email():

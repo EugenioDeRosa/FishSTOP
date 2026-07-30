@@ -58,3 +58,26 @@ def test_outlook_signature_link_is_retained_but_not_actionable():
     assert len(links) == 1
     assert links[0]["role"] == "signature"
     assert links[0]["actionable"] is False
+
+
+def test_link_role_does_not_depend_on_visible_language():
+    html = '<a href="https://example.test/preferences">إلغاء الاشتراك</a>'
+
+    links = extract_links("", html)
+
+    assert links[0]["role"] == "body_action"
+    assert links[0]["actionable"] is True
+
+
+def test_structural_footer_and_rel_unsubscribe_are_not_actionable():
+    html = """
+    <footer>
+      <a href="https://example.test/preferences">任意のテキスト</a>
+    </footer>
+    <a rel="unsubscribe" href="https://example.test/opt-out">任意のテキスト</a>
+    """
+
+    links = extract_links("", html)
+
+    assert {link["role"] for link in links} == {"signature", "unsubscribe"}
+    assert all(link["actionable"] is False for link in links)
