@@ -1,9 +1,6 @@
 .DS_Store
-.venv/
 .env
-.streamlit/secrets.toml
 __pycache__/
-data/custom_dataset.csv
-models/saved_models/
-models/
-data/training_sources/
+*.py[cod]
+data/
+resources/
