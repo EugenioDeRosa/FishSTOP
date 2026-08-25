@@ -1,0 +1,30 @@
+FishSTOP - valutazione batch DistilBERT
+===========================================
+Cartella email: C:\Users\DEROSAEU\Downloads\email_test
+Modello: eugenioderodev/fishstop-bert @ 67d2a3b4de475ecfb127f0bb076df210306edeaf
+Dispositivo: cpu
+
+File .eml trovati: 8614
+File validi (parsing OK): 20
+Errori parsing: 0
+Inferenze riuscite: 20
+Errori inferenza/post-processing: 0
+
+Classificati phishing: 20 (100.0000%)
+Non classificati phishing / falsi negativi: 0 (0.0000%)
+Distribuzione etichette: {"phishing": 20}
+
+Temperatura: 1.0
+Soglia centrale: 0.5
+Legitimate <= 0.35
+Phishing >= 0.65
+Uncertain tra le due soglie
+Calibrazione: default (nessun calibration.json pubblicato)
+
+Distribuzione probabilita malicious (0-1):
+  media=0.9999995946884155 deviazione_standard=1.479348378895623e-07
+  percentili={"p00": 0.9999991655349731, "p01": 0.9999991881847382, "p05": 0.9999992787837982, "p10": 0.9999993920326233, "p25": 0.999999612569809, "p50": 0.9999996423721313, "p75": 0.9999996423721313, "p90": 0.9999997615814209, "p95": 0.9999997615814209, "p99": 0.9999997615814209, "p100": 0.9999997615814209}
+  istogramma={"90-100%": 20}
+
+Durata: 7.00 secondi
+CSV dettagliato: C:\Users\DEROSAEU\Documents\Progetti\FishSTOP\reports\bert_email_eval_smoke\email_results.csv

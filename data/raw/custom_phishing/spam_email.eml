@@ -1,0 +1,209 @@
+Delivered-To: laura.digregorio@cefla.it
+Received: by 2002:a05:6400:4011:b0:2cf:4a3a:7d6c with SMTP id k17csp235195eci;
+        Fri, 29 May 2026 04:59:30 -0700 (PDT)
+X-Received: by 2002:a17:907:2d87:b0:bdc:aca4:8d3f with SMTP id a640c23a62f3a-be9c94399b0mr117307766b.13.1780055970655;
+        Fri, 29 May 2026 04:59:30 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1780055970; cv=none;
+        d=google.com; s=arc-20240605;
+        b=acbMNNlSsKDl/js10QrOZbSq/keu2AwFm2kCQj1Mk3SlScOVcu8i+C9dRlRFraz+5P
+         Nt/TuTA9f0aLAx74vMxz/QBaf+C/CCkTzc995ezvY2/vK6bAspz8tXwf8KywfH6gFEvm
+         rZXZbcLdBOMJrZfwUeU6sZz6KLPatbjhHZUkjFJNAMbB/dqCMG5lSY2cKFo7kC4gNJGA
+         ZThg2aERMCfI16Oa9GScTtz/FZYxHIEwsIA6nA9d3Dhz5Bm7ZBreGC5eT/r83BeBfiCD
+         ycjUEjmj+VQs4EhT/qOq3+EfwlbgzU/eK8jTiqD0tZeAORQwGU7GylDoLvtKycJzgFJO
+         7xzA==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:from:subject:date:message-id:references:reply-to:mime-version
+         :dkim-signature;
+        bh=KKHFJvDziCpuv6xium2N991JJXORdXQAUd9Lm3vGRvs=;
+        fh=ZO1064/wS8FwiaWpjEmc1lXud1Aug4wOemExUr7GN6o=;
+        b=MDkz0oTzDlSy8w53BY+mp/0mmZAD/N7YUaQruKkniiZNeFiCW7TXtpdNoD/k9cffhh
+         S+Huj0qKuSJ5OfWj32Scvw9EDAY7q08E+i8C0zkMDFB8inqAP3cOsEFhlBsWSTM0Zad0
+         OamAgTVTGJNhwjeWcrkWJjz1UVPKew0+7fxC2pXHioD6wjaDDunM+UC++l+1NCtS79AX
+         Sz6FKkkzdPHSSh1Ku7hG3RdZDhAcnYagnBzC1A4MVNmREjKbB32jYWDjbD5aWldkKpNl
+         kGA487iFKNWpYEQSZ6n0TCaisUpND8t5RkrSPIfHTfjCoYwh2qWZNDo6IjNVti1Mb5WR
+         HgSw==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@google.com header.s=20251104 header.b=n2hP1Upz;
+       spf=pass (google.com: domain of 3ox8zahqkaf49nera-od6nao-jknalhuckkcha.8ki@doclist.bounces.google.com designates 209.85.220.69 as permitted sender) smtp.mailfrom=3oX8ZahQKAF49NERA-OD6NAO-JKNALHUCKKCHA.8KI@doclist.bounces.google.com;
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=google.com;
+       dara=neutral header.i=@cefla.it
+Return-Path: <3oX8ZahQKAF49NERA-OD6NAO-JKNALHUCKKCHA.8KI@doclist.bounces.google.com>
+Received: from mail-sor-f69.google.com (mail-sor-f69.google.com. [209.85.220.69])
+        by mx.google.com with SMTPS id a640c23a62f3a-be9d2ee5eebsor44879066b.2.2026.05.29.04.59.30
+        for <laura.digregorio@cefla.it>
+        (Google Transport Security);
+        Fri, 29 May 2026 04:59:30 -0700 (PDT)
+Received-SPF: pass (google.com: domain of 3ox8zahqkaf49nera-od6nao-jknalhuckkcha.8ki@doclist.bounces.google.com designates 209.85.220.69 as permitted sender) client-ip=209.85.220.69;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@google.com header.s=20251104 header.b=n2hP1Upz;
+       spf=pass (google.com: domain of 3ox8zahqkaf49nera-od6nao-jknalhuckkcha.8ki@doclist.bounces.google.com designates 209.85.220.69 as permitted sender) smtp.mailfrom=3oX8ZahQKAF49NERA-OD6NAO-JKNALHUCKKCHA.8KI@doclist.bounces.google.com;
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=google.com;
+       dara=neutral header.i=@cefla.it
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=google.com; s=20251104; t=1780055970; x=1780660770; darn=cefla.it;
+        h=to:from:subject:date:message-id:references:reply-to:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=KKHFJvDziCpuv6xium2N991JJXORdXQAUd9Lm3vGRvs=;
+        b=n2hP1UpzRalOTmr74IvbLi+d2Qiku1GJtWl2u8Eid/yaP6ZFN1Mpb0avjxcalM6jwu
+         nHokWaoMv8SPrbNkia59naQVWrAueR53a4WlZkzsRWeFnHTQNerTd/G58c7R/HaX4r/g
+         G884sBvWBNFBLPaqXd5+ZyDLAh2teKa9gne/5FiUySz2/viXS/rSStRsoG4GpWn5Ru0x
+         SkfhH/E94OumBNGELOwlh3+xVXdeGEWkMwCI3/MvCvfXhKhHWrJL3hz0C8I5TD2wFpOd
+         yhAu7b+dcN2hG0DCMQWzf9cyxaftE7uSE157fZH6DsSoQ3qBNcNQemmK46wdfKcR6e+c
+         +DHw==
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1780055970; x=1780660770;
+        h=to:from:subject:date:message-id:references:reply-to:mime-version
+         :x-gm-message-state:from:to:cc:subject:date:message-id:reply-to;
+        bh=KKHFJvDziCpuv6xium2N991JJXORdXQAUd9Lm3vGRvs=;
+        b=BiGjuBxBwbbr/VtBBIAR8C/ZBM7PwAVyOHRG4WzPQvtuzeLed+n8y6jhzycnGAU8vp
+         AljfT/YNFLQuMRo/eYx5u3411FaW5jE+ooR02AquW5wvjOmPFRwbeqlUErfY4Be7EuMU
+         mWOECAZ3bJ5ypdsTvStMnLxT663uORnGexzyIB8lIKp9SybMkdUWZa+iv9LSPRG/m626
+         o/+WZn1g6ZlUuaMRz3q65jJbcy1yoJmXLtALmvrImjmLYHRf2DHucAyBLYzPDXNhfnjz
+         Yz83wP/k2eHARcSg/7DNawCjZb8BuN+G7suUNbH9y1o16ZMLTzfZ2GHhmhqkY++mZNBF
+         kZpA==
+X-Gm-Message-State: AOJu0YxFSmxtXYW8tm+LdduyO2pSVGeD5te2w4MPZtfOzW0gxihzn1X0
+	8Sd6Jv+pb1iw6d3L3lrQucziOmo5vypUHQeztGOi+QlQsoaj66l+FlXiJT/Rk3qY4UsjPSzqpqn
+	fyyqhyteTX4jBRSqNyQsSPBIKFXD3
+MIME-Version: 1.0
+X-Received: by 2002:a17:907:3e15:b0:be5:2bc0:5370 with SMTP id
+ a640c23a62f3a-be9cb6df79fmr159878266b.36.1780055969560; Fri, 29 May 2026
+ 04:59:29 -0700 (PDT)
+Reply-To: Formazione Cefla <formazione@cefla.it>
+X-No-Auto-Attachment: 1
+References: <1ce6a470-c9a2-456b-8838-a62cb7f5a568@docs-share.google.com>
+Message-ID: <autogen-java-504554d5-bccf-4e4f-9794-ad2ac1c0f3f6@google.com>
+Date: Fri, 29 May 2026 11:59:29 +0000
+Subject: Rispondi al modulo "QUESTIONARIO FEEDBACK FORMAZIONE"
+From: "Formazione Cefla (tramite Moduli Google)" <drive-shares-noreply@google.com>
+To: laura.digregorio@cefla.it
+Content-Type: multipart/alternative; boundary="000000000000bf15790652f3939e"
+
+--000000000000bf15790652f3939e
+Content-Type: text/plain; charset="UTF-8"; format=flowed; delsp=yes
+Content-Transfer-Encoding: base64
+
+SG8gY29uZGl2aXNvIHVuIGNvbnRlbnV0byBjb24gdGU6DQoNClFVRVNUSU9OQVJJTyBGRUVEQkFD
+SyBGT1JNQVpJT05FDQpodHRwczovL2RvY3MuZ29vZ2xlLmNvbS9mb3Jtcy9kLzFrd3czWEZ6aEQ0
+VlZTVHItRUNVRlNDckttb2VJVUFlaHQ2Qk9BREJkUGdBL2VkaXQ/dXNwPXNoYXJpbmcmdHM9NmEx
+OTdmYTENCg0KTm9uIMOoIHVuIGFsbGVnYXRvLCBtYSDDqCBtZW1vcml6emF0byBvbmxpbmUuIFBl
+ciBhcHJpcmUgaWwgZG9jdW1lbnRvLCBmYWkgIA0KY2xpYyBzdWwgbGluayBxdWkgc29wcmEuDQoN
+CkdlbnRpbGUgY29sbGVnYSwgdGkgY2hpZWRpYW1vIHVuIGZlZWRiYWNrIHN1bCBjb3JzbyBhbCBx
+dWFsZSBoYWkgIA0KcmVjZW50ZW1lbnRlIHBhcnRlY2lwYXRvLiBMZSAgdmFsdXRhemlvbmkgZWQg
+aSBjb21tZW50aSBjaGUgY2kgZm9ybmlyYWkgIA0KYXR0cmF2ZXJzbyBxdWVzdG8gYnJldmlzc2lt
+byBxdWVzdGlvbmFyaW8gc2FyYW5ubyBtb2x0byB1dGlsaSBwZXIgIA0KbWlnbGlvcmFyZSBxdWFu
+dG8gZmluIHF1aSBzdm9sdG8uIFRpIHJpbmdyYXppYW1vIHBlciBsYSBjb2xsYWJvcmF6aW9uZQ0K
+--000000000000bf15790652f3939e
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<html><head></head><body><table style=3D"border-collapse: collapse; width: =
+100%; background-color: white; text-align: center;" role=3D"presentation"><=
+tr><td style=3D"padding: 24px 0 16px 0;"><table style=3D"border-collapse: c=
+ollapse;font-family: Roboto, Arial, Helvetica, sans-serif;hyphens: auto; ov=
+erflow-wrap: break-word; word-wrap: break-word; word-break: break-word;widt=
+h: 90%; margin: auto;min-width: 280px; text-align: left;" role=3D"presentat=
+ion"><tr><td style=3D"padding: 0;"><table style=3D"width:100%; border: 1px =
+solid #dadce0; border-radius: 8px; border-spacing: 0; table-layout:fixed; b=
+order-collapse: separate;" role=3D"presentation"><tr><td style=3D"padding: =
+4.5%;" dir=3D"ltr"><div style=3D"margin-bottom:32px;font-family: Google San=
+s, Roboto, Arial, Helvetica, sans-serif; font-style: normal; font-size: 28p=
+x; line-height: 36px; color: #3c4043;">Formazione Cefla ha pubblicato un mo=
+dulo</div><table style=3D"border-collapse: collapse;font-family: Roboto, Ar=
+ial, Helvetica, sans-serif; font-size:16px; line-height:24px; color:#202124=
+; letter-spacing:0.1px; table-layout:fixed; width:100%; overflow-wrap: brea=
+k-word;" role=3D"presentation"><tr><td style=3D"padding: 0; vertical-align:=
+top; width:50px;"><!--[if mso]><v:oval xmlns:v=3D"urn:schemas-microsoft-com=
+:vml" xmlns:w=3D"urn:schemas-microsoft-com:office:word" style=3D"height:50p=
+x;width:50px;" fill=3D"t" stroke=3D"f"><v:fill type=3D"frame" src=3D"https:=
+//lh3.googleusercontent.com/a/ACg8ocJygJqKzFlT2FX8NoQ_Oryueu8D6yH0PoTXm8Q_z=
+6eqp73hYw=3Ds64" alt=3D"Foto del profilo nell&#39;intestazione" style=3D"he=
+ight:50px;width:50px;"/></v:oval><![endif]--><div style=3D"mso-hide:all;"><=
+img style=3D"border-radius:50%; display:block;" width=3D"50" height=3D"50" =
+src=3D"https://lh3.googleusercontent.com/a/ACg8ocJygJqKzFlT2FX8NoQ_Oryueu8D=
+6yH0PoTXm8Q_z6eqp73hYw=3Ds64" alt=3D"Foto del profilo nell&#39;intestazione=
+"></div></td><td style=3D"padding: 0; vertical-align:top; padding-left:12px=
+;"><div style=3D"padding-top:12px;">Formazione Cefla (<a href=3D"mailto:for=
+mazione@cefla.it" style=3D"color:inherit;text-decoration:none">formazione@c=
+efla.it</a>) ti ha invitato a <b>rispondere</b> al seguente modulo:</div><d=
+iv style=3D"margin-top:24px; color:#5F6368">Gentile collega, ti chiediamo u=
+n feedback sul corso al quale hai recentemente partecipato. Le  valutazioni=
+ ed i commenti che ci fornirai attraverso questo brevissimo questionario sa=
+ranno molto utili per migliorare quanto fin qui svolto. Ti ringraziamo per =
+la collaborazione</div></td></tr></table><table style=3D"border-spacing:0 4=
+px; table-layout:fixed; width:100%; overflow-wrap: break-word;" role=3D"pre=
+sentation"><tr style=3D"height:28px;"></tr><tr><td style=3D"padding: 0;"><a=
+ href=3D"https://docs.google.com/forms/d/e/1FAIpQLSfTtOlBxJN6qiLMgURBzTHJSa=
+sk-SgrXnfcXLcmHSwZvQuhIQ/viewform" target=3D"_blank" style=3D"color: #3c404=
+3; display: inline-block; max-width: 100%; text-decoration: none; vertical-=
+align: top;border: 1px solid #DADCE0; border-radius: 16px; white-space: now=
+rap;"><div style=3D"align-items: center; display: inline-flex; max-width: 9=
+8%; padding-right: 12px;"><div style=3D"line-height: 18px; overflow: hidden=
+; text-overflow: ellipsis;padding: 6px 12px;"><span style=3D"display: inlin=
+e-block; vertical-align: middle; min-width: 26px; width: 26px;"><img src=3D=
+"https://ssl.gstatic.com/docs/doclist/images/mediatype/icon_2_form_x64.png"=
+ width=3D"18" height=3D"18" style=3D"vertical-align: top;" role=3D"presenta=
+tion"></span><span style=3D"font: 500 14px/18px Google Sans, Roboto, Arial,=
+ Helvetica, sans-serif; display: inline; letter-spacing: 0.2px; vertical-al=
+ign: middle;">QUESTIONARIO FEEDBACK FORMAZIONE</span></div><div style=3D"ba=
+ckground-color: #fcbd00; border: 1px solid #fcbd00; border-radius: 4px; dis=
+play: inline-block; height: 13px; padding: 2px; margin: auto; text-align: c=
+enter; width: 13px;"><img src=3D"https://ssl.gstatic.com/docs/documents/sha=
+re/images/domain_disabled_14.png" width=3D"14px" height=3D"14px"></div></di=
+v></a></td></tr></table><div style=3D"height: 16px;"></div><div style=3D"he=
+ight: 1px; background-color: #eee;"></div><div style=3D"height: 24px;"></di=
+v><div style=3D"font-style: italic;">Ecco un'istantanea del contenuto:</div=
+><div style=3D"padding: 10px 0;"><table border=3D"0" cellpadding=3D"0" cell=
+spacing=3D"0" style=3D"background-color:rgb(87,70,227)" width=3D"100%" role=
+=3D"presentation"><tbody><tr height=3D"64px"><td style=3D"padding:0 24px"><=
+img alt=3D"Moduli Google" height=3D"26px" style=3D"display:inline-block;mar=
+gin:0;vertical-align:middle" width=3D"143px" src=3D"https://www.gstatic.com=
+/docs/forms/google_forms_logo_lockup_white_2x.png"></td></tr></tbody></tabl=
+e><div style=3D"padding:24px;background-color:rgb(237,231,246)">.<div align=
+=3D"center" style=3D"background-color:#fff;border-bottom:1px solid #e0e0e0;=
+margin:0 auto;max-width:624px;min-width:154px;padding:0 24px"><table align=
+=3D"center" cellpadding=3D"0" cellspacing=3D"0" style=3D"background-color:#=
+fff" width=3D"100%" role=3D"presentation"><tbody><tr height=3D"24px"><td></=
+td></tr><tr><td></td></tr><tr height=3D"20px"><td></td></tr><tr style=3D"fo=
+nt-size:20px;line-height:24px"><td><a href=3D"https://docs.google.com/forms=
+/d/e/1FAIpQLSfTtOlBxJN6qiLMgURBzTHJSask-SgrXnfcXLcmHSwZvQuhIQ/viewform?usp=
+=3Dmail_form_link" style=3D"color:rgb(87,70,227);text-decoration:none;verti=
+cal-align:middle;font-weight:500">QUESTIONARIO FEEDBACK FORMAZIONE</a><div>=
+</div></td></tr><tr height=3D"16px"></tr><tr><td style=3D"display:table-cel=
+l;vertical-align:top;font-size:13px;line-height:18px;color:#424242">CORSO F=
+NC_ADIUTO_Gr.1 - 13/10/2025 - 4/5/2026 (Docenza esterna + interna)</td></tr=
+><tr height=3D"24px"></tr><tr><td><table border=3D"0" cellpadding=3D"0" cel=
+lspacing=3D"0" width=3D"100%"><tbody><tr><td><a href=3D"https://docs.google=
+.com/forms/d/e/1FAIpQLSfTtOlBxJN6qiLMgURBzTHJSask-SgrXnfcXLcmHSwZvQuhIQ/vie=
+wform?usp=3Dmail_form_link" style=3D"border-radius:3px;box-sizing:border-bo=
+x;display:inline-block;font-size:13px;font-weight:700;height:40px;line-heig=
+ht:40px;padding:0 24px;text-align:center;text-decoration:none;text-transfor=
+m:uppercase;vertical-align:middle;color:#fff;background-color:rgb(87,70,227=
+)" target=3D"_blank" rel=3D"noopener">Compila in Moduli Google</a></td></tr=
+></tbody></table></td></tr><tr><td><div style=3D"margin-top:2em"><span>Powe=
+red by</span><a href=3D"https://www.google.com/forms/about/?utm_source=3Dpr=
+oduct&amp;utm_medium=3Dforms_logo&amp;utm_campaign=3Dforms"><div><img src=
+=3D"https://ssl.gstatic.com/docs/forms/forms_logo_2_small_dark_2x.png" heig=
+ht=3D"21px" width=3D"108px" alt=3D"Google Forms"></div></a></div></td></tr>=
+<tr height=3D"24px"></tr></tbody></table></div><table align=3D"center" cell=
+padding=3D"0" cellspacing=3D"0" style=3D"max-width:672px;min-width:154px;bo=
+rder-collapse:separate;border-spacing:0 0.2em" width=3D"100%" role=3D"prese=
+ntation"><tbody><tr height=3D"24px"><td></td></tr><tr><td><a href=3D"https:=
+//docs.google.com/forms?usp=3Dmail_form_link" style=3D"color:#424242;font-s=
+ize:13px">Crea il tuo modulo Google</a></td></tr></tbody></table></div></di=
+v></td></tr></table><table style=3D"border-collapse: collapse; width: 100%;=
+" role=3D"presentation"><tr><td style=3D"padding: 24px 4.5%"><table style=
+=3D"border-collapse: collapse; width: 100%;" dir=3D"ltr"><tr><td style=3D"p=
+adding: 0;font-family: Roboto, Arial, Helvetica, sans-serif; color: #5F6368=
+; width: 100%; font-size: 12px; line-height: 16px; min-height: 40px; letter=
+-spacing: .3px;">Google LLC, 1600 Amphitheatre Parkway, Mountain View, CA 9=
+4043, USA<br/> Hai ricevuto questa email perch=C3=A9 <a href=3D"mailto:form=
+azione@cefla.it" style=3D"color:inherit;text-decoration:none">formazione@ce=
+fla.it</a> ha condiviso con te un file o una cartella su Google Drive.</td>=
+<td style=3D"padding: 0;padding-left: 20px; min-width: 96px"><a href=3D"htt=
+ps://workspace.google.com/" target=3D"_blank" style=3D"text-decoration: non=
+e"><img src=3D"https://www.gstatic.com/docs/documents/share/images/googlewo=
+rkspace_logo_192x80.png" width=3D"96" height=3D"40" alt=3D"Google" style=3D=
+"font-size:16px;font-weight:500;color:#5F6368"></a></td></tr></table></td><=
+/tr></table></td></tr></table></td></tr></table></body></html>
+--000000000000bf15790652f3939e--

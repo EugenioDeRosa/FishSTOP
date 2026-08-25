@@ -1,0 +1,1195 @@
+Delivered-To: eugeniomariaderosa@gmail.com
+Received: by 2002:a05:6504:1d05:b0:307:5bd3:ae48 with SMTP id eg5csp934397ltb;
+        Sun, 12 Jul 2026 12:06:24 -0700 (PDT)
+X-Received: by 2002:a17:90b:4ac7:b0:37f:ac93:df8b with SMTP id 98e67ed59e1d1-38dc74c2df5mr5927875a91.9.1783883184591;
+        Sun, 12 Jul 2026 12:06:24 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1783883184; cv=none;
+        d=google.com; s=arc-20260327;
+        b=MlShA2kC1qGCSXNF5HlNOOdCXhDFTT9Pc6xq3hmYcTJWXl+BEW+ksWn7yKGv9k8Lh0
+         kix2LfAzTK75VN9+QAwLCwhmiRPx7dLyEPQpwB5Jb4jMEcuviA1h6CnXQZaITRaBW6y1
+         IYRc3sbVLTUi/iqjxwG5gamszNIeSwra7owMnar/5dWTM63SmgAyNI/DXZa9F8Y9huX1
+         T7pLQt7uTvywJirRlCTxFVQbxlNd8L2Bn3wgSRyvPBsLiFxdszUMfhMtAAugyvCCWuci
+         xClBBVCdObq7RoR776FiRTonWomazG28x7Rr/INPDJ9B4O76p8AP/TE7fWM0zdUswpGA
+         ZI4g==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=to:list-unsubscribe-post:list-unsubscribe:subject:message-id
+         :mime-version:from:date:dkim-signature:dkim-signature;
+        bh=gkZbKFgOI/q3k3omdTvf1FP5N/xS5H0XkCXgostVgcw=;
+        fh=sSVZsJhw2SK4RHEzM3aKk64DPevdbtg7Yu5c+unywGg=;
+        b=ZtSp026ccHtFNzC2QoSPBBGT8FogFtF0+JvzOh6JyRgvkr148GonzWqtSL2GkfHmjQ
+         xi4IoVDw3VGqdFbuyDaJw3cdxVDSK41/Tx7xwK8BsUUPvRywEoz7chNzVT4fqixrcx8Y
+         bK4dIF+nw7Lwo1oZ23t/rMSYJhhsohygLPVVQehvORji8FuuYoAuPVJ+qJppZJmOxOJk
+         aV2Ijl8vdtNen3HFB93RsqxpMy/etDRORFb44wAGWMvBA544RyVCCmMyIIFPKMkM39gB
+         UJqMFhSpiwnrGkS+WMkx9LJrJPHP9QEvQlEi1MOtuaSDpKpuZdNJF75+YsprsznLIYPQ
+         jzmg==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       dkim=pass header.i=@artists.spotify.com header.s=s1 header.b=g9FJ75zC;
+       dkim=pass header.i=@sendgrid.info header.s=smtpapi header.b=YRnIotkP;
+       spf=pass (google.com: domain of bounces+27221316-4247-eugeniomariaderosa=gmail.com@e.artists.spotify.com designates 223.165.115.145 as permitted sender) smtp.mailfrom="bounces+27221316-4247-eugeniomariaderosa=gmail.com@e.artists.spotify.com";
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=spotify.com
+Return-Path: <bounces+27221316-4247-eugeniomariaderosa=gmail.com@e.artists.spotify.com>
+Received: from o4150.e.artists.spotify.com (o4150.e.artists.spotify.com. [223.165.115.145])
+        by mx.google.com with ESMTPS id 98e67ed59e1d1-38aa31aa688si20436585a91.9.2026.07.12.12.06.23
+        for <eugeniomariaderosa@gmail.com>
+        (version=TLS1_3 cipher=TLS_AES_128_GCM_SHA256 bits=128/128);
+        Sun, 12 Jul 2026 12:06:24 -0700 (PDT)
+Received-SPF: pass (google.com: domain of bounces+27221316-4247-eugeniomariaderosa=gmail.com@e.artists.spotify.com designates 223.165.115.145 as permitted sender) client-ip=223.165.115.145;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@artists.spotify.com header.s=s1 header.b=g9FJ75zC;
+       dkim=pass header.i=@sendgrid.info header.s=smtpapi header.b=YRnIotkP;
+       spf=pass (google.com: domain of bounces+27221316-4247-eugeniomariaderosa=gmail.com@e.artists.spotify.com designates 223.165.115.145 as permitted sender) smtp.mailfrom="bounces+27221316-4247-eugeniomariaderosa=gmail.com@e.artists.spotify.com";
+       dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=spotify.com
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=artists.spotify.com;
+	h=content-type:date:from:mime-version:subject:list-unsubscribe:
+	list-unsubscribe-post:to:cc:content-type:date:feedback-id:from:subject:to;
+	s=s1; t=1783883183;
+	bh=gkZbKFgOI/q3k3omdTvf1FP5N/xS5H0XkCXgostVgcw=;
+	b=g9FJ75zCrCDtqcSm2VTzn8/mK+k1Eidl4qf5c1rBVvAmAUDGbTzJWD0aHozgc1BZ5YWg
+	/akrRpVv7vTDTwxp1yoEDEU0owrwhL1VtQKX6SiQDuDNxz3om/gZGijAhzX+XzcrzyJFDh
+	x4tDsr+KeBbu6t08qDSqn2J8gLkKjELCmuUKvyCF+sT0c+DXQIy50b9eeQSM32kQCwKb9g
+	JwJNiZIZ9dz+bIiGkiTpw0nXlOAKONKRQd6D94RT8CVMfnjLL9NhbsPAdaFjH6nUmxyJpJ
+	7h5SFACO/S1BoHelilbzHLIC07Y8zOJrhR+o0PNhZuyDc1rCXqlC0/GISugmggeg==
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed; d=sendgrid.info;
+	h=content-type:date:from:mime-version:subject:list-unsubscribe:
+	list-unsubscribe-post:to:cc:content-type:date:feedback-id:from:subject:to;
+	s=smtpapi; t=1783883183;
+	bh=gkZbKFgOI/q3k3omdTvf1FP5N/xS5H0XkCXgostVgcw=;
+	b=YRnIotkPCEozke7TR3MRxDm6VRDH1IA8EtkoB4j9MYMSEew8OvU+Rl2Pwl2Qt4apKo3l
+	G7v1CNsACOHQGq8RfCtheTFyl1jTmmPy9v3Hn2Mc+5O1dn4o3cQM2BXTGZnlN+41/n0nmE
+	/ltvgn5mhkQoB8Al4vAikjYdRvGqtublg=
+Received: by recvd-7bbf98b59b-82tdx with SMTP id recvd-7bbf98b59b-82tdx-1-6A53E5AF-23
+	2026-07-12 19:06:23.224019259 +0000 UTC m=+246247.011623771
+Received: from MjcyMjEzMTY (unknown)
+	by geopod-ismtpd-31 (SG) with HTTP
+	id KLx_3iT-R_Klgr0-T-91kQ
+	Sun, 12 Jul 2026 19:06:23.176 +0000 (UTC)
+Content-Type: multipart/alternative; boundary=8fce43694ee341b3d93d37a56b1e868a197de8305f5230a4401c4f03bfe2
+Date: Sun, 12 Jul 2026 19:06:23 +0000 (UTC)
+From: Spotify for Artists <no-reply@artists.spotify.com>
+Mime-Version: 1.0
+Message-ID: <KLx_3iT-R_Klgr0-T-91kQ@geopod-ismtpd-31>
+Subject: Your music is live: See how it's performing
+List-Unsubscribe:
+ <https://partners.wg.spotify.com/brazeling/unsubscribe/008d0a32ac5f8abc360b293f98309c6dd80183cb5305fa63ca4a7a>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+X-SG-EID: 
+ =?us-ascii?Q?u001=2EZD5aH33R6V7weoiTHIdZyI7YIcxm51dCCmtKR6smPDGOLQk4PnJ=2FyHdzS?=
+ =?us-ascii?Q?EE5A1IYki4W11+MFPqVfn3kgUyJoyOEgsTP4K5N?=
+ =?us-ascii?Q?e=2FtsAKXlms6xCJnydbmmf3kioQIKMtgns2cyd+z?=
+ =?us-ascii?Q?F2s7f7Xj95jeFMbu9mRfUu33MqvDSxOws2SOidV?=
+ =?us-ascii?Q?0I=2FNcP9aJrFuWwxFp29uFvcYqduAEdv2=2FstB3fy?=
+ =?us-ascii?Q?+=2F4=2F=2FvYikB0zdraupXnU8jK4LyeEmcD488aJ3TV?=
+ =?us-ascii?Q?F+kFn45yRCzRo7uK0pX0Drj+jg=3D=3D?=
+X-SG-ID: 
+ =?us-ascii?Q?u001=2ESdBcvi+Evd=2FbQef8eZF3BpTL9BgbK5wfSJMJGMsmprDrjDW6011yC6XOo?=
+ =?us-ascii?Q?3uya5MX13ifNUE+JW2uyh3s7+DdxBcryCMGg7dT?=
+ =?us-ascii?Q?pC0HNdAilqRO0w5nIEHwkmkvMm7B1QKcavcB2lR?=
+ =?us-ascii?Q?WzJ05UPZrquEsIvR8JWq1jXUc6p7JEX+3hgrywB?=
+ =?us-ascii?Q?KJqXXpFRamOwUe1v2ycZjeqfO4Om5cyY1+PGPJV?=
+ =?us-ascii?Q?EJYf38dlEa7rTEycYI86FM9ZMqHq53rBi9lUf9f?=
+ =?us-ascii?Q?9rzZl5hCNF7CJbAn8M7w44gWjA2tm7d0rz9U+aH?=
+ =?us-ascii?Q?WWmFpVMX=2FyNj70viiOSn5IyD7dF6WvlwNaAmrUw?=
+ =?us-ascii?Q?8wXPLLQr4h=2FImEiY82HQlz2onamQbTAAuz1ZOEO?=
+ =?us-ascii?Q?Xb2G4r33NKm8jj3CbmkV8e6iyKMg9gVrA6wDAZU?=
+ =?us-ascii?Q?XakJ4uZv7ulkyUDThChl1b+0ecTpejieSugWYv3?=
+ =?us-ascii?Q?pfJy361Wdw98TcTtVI9fnX8nGnC7fTnRS+60sqi?=
+ =?us-ascii?Q?lTU27Y11bywaLhcrqt+ou9DBlVSARgyxm7Ubu=2Fc?=
+ =?us-ascii?Q?tnaid4WcS9GrlS+L+MQgRMmNEq=2F6niMrTszVdQG?=
+ =?us-ascii?Q?rDNsedKndScXQSCGX+RpVppiV36U7tajcuXMHru?=
+ =?us-ascii?Q?BUnSPOgi7L9sxt1g=3D?=
+To: eugeniomariaderosa@gmail.com
+X-Entity-ID: u001.DH/PalV4OY5vTPzU4qyJXQ==
+
+--8fce43694ee341b3d93d37a56b1e868a197de8305f5230a4401c4f03bfe2
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/plain; charset=utf-8
+Mime-Version: 1.0
+
+Keep the momentum going  =20
+
+Your new music is live=20
+( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G=
+4kw-2BSko4523wXOjl2gjSkKPrwYpAtdZR6LEWRsgkChYOAs1J8ZltTsmr1MVJ6H8Mfz-2F39Xf=
+XBE437mg-2BhA6C5RDUdmE1cSGEcubrmwUeIBU0Zi04k6njU-2B8tldVV5B4zdTjTw1H6AIQxbm=
+4sQgj5ixOfZhtFjhnfkxjN3sd4BnG67rLeoMnrr6Yntk7HOxNNdJrILoJa-2FN-2B72-2BFRT58=
+r08-2FXf8g40VnhuHd5zofyX3l3yAvI7t_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2Foi=
+KXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL=
+2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-=
+2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dS=
+uqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJ=
+zn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n=
+1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASI=
+x4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNnd=
+DMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-=
+2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UuOYosJuih=
+PBZRILNpKLlzogtMgYTsobpCCzc49Qym8MtfapjHirwOlng0vmJW-2FDH5y1ke9HwVZNrm5ajUB=
+mx5ShTOcIeDG3g8HRC5RQxYRQDV9pBEYcPdUo5LaX2tpdVbIybHMtRDDAglsAxE94AOA-3D )
+
+
+
+Don't Feel A Thing=20
+( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G=
+4kw-2BSko4523wXOjl2gjSkKPrwYpAtdZR6LEWRsgkChYOAs1J8ZltTsmr1MVJ6H8Mfz-2F39Xf=
+XBE437mg-2BhA6C5RDUfQKm-2BDFBqlqQqs5Ro5PNlvxywmsg3k2pofUqo72msj9iq-2FMqBidn=
+uWadFd40Ln3UQsP3c2Bve-2BM8NzoZZkKcnKlgKT7uVfxaS8IuB7saV9Bzi3B6p6w-2Blqc3-2B=
+-2B7jGIh8h-2FUwcQLHQPMUl015HmbjLBI4-2F0Mi7cws-2BxYgUzM9o-2FEw-3D-3DNYJY_HdT=
+NCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLi=
+xJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAw=
+cZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7=
+owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZ=
+nJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOT=
+nbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO=
+9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60bor=
+uINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO0=
+6tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-=
+2B-2BD11wLbDqoh9oqhKdsRgS052Un5R1Q746bD2Y9EyYCEnpYPWgxxsVU-2FMmYirk9YgoDW16=
+gSyChIOQXoxYfjvB92ykNVuonb0jzPai4BsvBHqp1b4D92Xr-2BfKmaXx2bK1taU-2FZNXKbZT0=
+Qxhdarb4o-2BrfqIKdPIjKk7ZC3D2zAc88WpQ-3D )
+
+
+Geg=C3=A8=20
+( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G=
+4kw-2BSko4523wXOjl2gjSkKPrwYpAtdZR6LEWRsgkChYOAs1J8ZltTsmr1MVJ6H8Mfz-2F39Xf=
+XBE437mg-2BhA6C5RDUchp6NUroD7NS9bcdteWwcUXZ6GiZQol7fOZAR0-2BTnqlDqOUk4TLoh2=
+5zbuNf8pE4HxjE3jFcJNeXkJR0pseWkYQo0iekZqIIWqnWEe7mXHWGd5Z806v0kH3pEJQ2sXUCY=
+Z398tGQK7wHJ8pFJV4G1a4NrlAkN5rWXBIHLBFop2VA-3D-3Du83c_HdTNCtZoRKLpwgC0oJa0l=
+vYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6c=
+J7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2B=
+VCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BC=
+PVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5B=
+qk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivj=
+X9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQk=
+jgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBr=
+FMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3Tst=
+eyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oq=
+hKdsRgS052Uuhwyv6jtmzupESsFBXdpfp7V-2BKSD-2FXvxm3dUjulXAfL560Rtgtv-2BcGXMzF=
+OAbR4jc3U9i8VIT-2FzkpKrxPo4AB-2Fgjy2ZfxkjU6LziRLiKDTNNetlkhl6whC6PXm-2FEbCr=
+lBV1m67FfXmH0equ10R1yKE-3D )
+
+
+
+
+Go to Spotify for Artists to see how, where, and when
+people are listening to your music.
+
+Keep the momentum going:
+
+* Use Artist Pick to highlight your new release.
+* Optimize your Now Playing View=20
+( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G=
+4kw-2BSko4523wXOjl2gjSkKPryMlhX0gpeBegGwuG1JFZzSbmmbOIuRFdLEgebLW2221GvrNCf=
+3D4rW2iSRw8oreB23EdmBYuqMGcqz7gGX9bcg4IiafIZMlzIZoomni-2FlrlBbcqXt1t-2Fjbvc=
+2bwdWe1abf0faAw5HTRn1PZPyRLRk9Le2Nnn3p0e3m-2FSFFwZio-2FTsfuGb82xUnOoBmQXDsr=
+UVpbftR4X3zSlP9x0-2FxFq01-2FeQf8zor2Kwqemn23A92BgOBGA-2F1fNH68EK95hGA6g8-3D=
+k96Q_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junG=
+GWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubW=
+EjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGj=
+gJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE=
+1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSk=
+eTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f=
+1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-=
+2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGm=
+WTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA2=
+4v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052Uq3eGCZDCXJZkBb37LoHp2YAqVsk80Yag7bLolY=
+WjyBmW8-2Fn5K0KtW9NpmwHjOgGf7dGwYP2OkO8OxL939eLSy6HBMY9zMFfcb81bDz9aL3Iui8S=
+nCsGy2jwBJ02tr0Q42uVoY8Lj0f-2BCbTt3KbvrFA-3D )
+ by uploading a Canvas, tagging merch, and connecting your
+tickets and lyrics.
+* Share your new release directly to socials, or use Promo Cards
+
+( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G=
+4kw-2BSko4523wXOjl2gjSkKPryf22PXtRI0-2BkYCoT3SYmCduacpaSNnm96L0SNBvr-2BzDKS=
+0Mgz0tDprYbT-2BqWtLH-2BR2FO2b8DH3tU-2Fj5ZqLIEtsqIeaCjDMeXLrLTbvqNdZ-2FYE7CA=
+XJzRWE1rFeAH-2BZ1Bd0M7Rc-2FBFpeS1BHc3RaYDse9-2B-2FsnXYIUcYyhfdKQspHjeJOs4lg=
+DvFWBcy-2BDrbQ1JI-2FVjdpsX467zkl27LH-2FGf0PS9_HdTNCtZoRKLpwgC0oJa0lvYAqySch=
+F2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOF=
+SfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-=
+2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2B=
+B4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4a=
+ES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042=
+Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQ=
+CSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDY=
+iBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0=
+e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS0=
+52Usq3YH-2FhJudpzmIvt9lHfvBifoMLwVIxJF6AlVU3KE-2FRqdPPC9wmtqX9S6ZvLv6qmiv7P=
+I9XyqUT3rNPWbbawZbbKy3uFINAD4dayShFrCe5fy2YTkj0mSiiQc7QaCOdpEGfLUvLiRxXBKd6=
+MplLyFA-3D )
+ to create professional shareable assets.
+
+
+Check out our New Release Guide=20
+( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G=
+4kw-2BSko4523wXOjl2gjSkKPry2nckZ7cogNHOWceyf5aaQG0rVni-2BxEorxH2U6qMRiqVata=
+jTohu-2B9lUMs9pNMJuSDUIEx1ENgh-2FcLXSe0MmwbCtCc-2BtYORj91DGDSBA9dhepWtiFq5M=
+MzUdGAJG99pGBfiTjs5ODT5FDiDU8nhDR2R3NIOCLDlNrH6c1QUU99CEKEGqZUg9y4wD9DB9YIs=
+x0-3D0Bqt_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ=
+0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2=
+FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrH=
+SHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADsc=
+yvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDS=
+OqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1=
+D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0w=
+mPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPv=
+GduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBV=
+g3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UlBg2hNJE7NQ11tbxNoHT4SfXeT-2B6oUg=
+QzwSxT80nWWMTR91CfZyqy0NtuJFywiaRoYg9J3K4i7w2pLanYFG9qheoEKqZM1CQoxoJIxcpn1=
+PVsjw9BLQYhWxrgxC0RZsC4ZkbngevFNUIdaPKPm6Lmk-3D )
+ to make sure you=E2=80=99ve done it all.
+
+EXPLORE NOW =20
+( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G=
+4kw-2BSko4523wXOjl2gjSkKPrwYpAtdZR6LEWRsgkChYOAs1J8ZltTsmr1MVJ6H8Mfz-2F39Xf=
+XBE437mg-2BhA6C5RDUfW6ABbvZ1Wd5vxPTUJ8qtJg0-2Bdd1dt4hNL2BCWmGavgzkuFA6UWu3V=
+Axq-2B2Bt39To-2Bcb4uDOwR-2B-2FwlhP30bw0Hi5cOyUR7XEiQi7zGf3srLmR-2FeMeND3RKq=
+UosqN4wReKxDGniKIa213rK7Wrg0yrLUjwt_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2F=
+oiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1Ruv=
+yL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8Flgs=
+J-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0=
+dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8=
+UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh=
+9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselA=
+SIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwN=
+ndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4G=
+m-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UgfMeXcB=
+iF-2F4D-2FTM1UuNMX9O1HIvNO47-2BMgO8s7-2Fj5-2BiDm0GgUt0zRrk5uTGUMZssqHjxJSTa=
+vl9Rerz7e0OoQZoTAnJAc-2FBAmBM2vNHeFY4sBQwlouLaEXEMwrsv1yO-2BGcRmc50qI3MjMPq=
+iKJp634-3D )
+
+
+
+Download the Spotify for Artists app!         Visit us on:
+artists.spotify.com ( https://clicks.artists.spotify.com/ls/click?upn=3Du00=
+1.sHr8UTRaQhJTFa6A8G4kw-2BSko4523wXOjl2gjSkKPry5xT-2FMubY4J5Te7GEsNrUOORAp_=
+HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTC=
+CLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIV=
+aAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1u=
+FV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBP=
+LlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzz=
+lOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZ=
+UBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60=
+boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87=
+LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50u=
+iu-2B-2BD11wLbDqoh9oqhKdsRgS052Ul7hLQUUr9s92wFJ-2F4Ql8EUXXUbrWwPB-2B-2B0twP=
+ATjDUlT-2FptJdZSxofGQBTgdatp-2FbXIXoV6XE2SSC1mh-2FqW-2BM5NBKPXn1zL21Gy2XJWy=
+uyoN-2B3I0aagApVp10ZB8d4XDNFjlGf7s1XkSAsldO6qJr4-3D )
+This message was sent to eugeniomariaderosa@gmail.com. If
+you don't want to receive these emails from Spotify for Artists
+in the future, you can unsubscribe (
+https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4k=
+w-2BSko4523wXOjl2gjSkKPrzIiHJA04Y-2FplYALTJXfZ0c6TY3xP3uBU1yvby-2FHo8-2BD5F=
+VGhT8Hv0REBcNT6z7FpzvRpOTStD4uzKWhfNGFXPaDXY9qN2h99KeGC3-2BL3AGGYrk3U-2Byw7=
+QmeyiOYEyukhg-3D-erG_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2=
+FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2=
+BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtD=
+FwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH=
+-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBu=
+Q0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2h=
+qZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6=
+WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTk=
+ALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg7=
+6uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UhbUkRffSu46YsnG4VkytKX=
+IlejUwYFwsM-2FDSYLIf9FJX4jU2ai3Z4MzDxXUGStGM-2FptJqCw9yHa-2FhQr43Y5tWFxy27o=
+pbVhVjQHFlj-2BCt0VSg4B3tW3UtVX0GUGGOrDiuGb4q8lUmuW64N4SwZ5iRE-3D ) or manag=
+e your settings=20
+( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G=
+4kw-2BSko4523wXOjl2gjSkKPrzTUfJRiZgHv-2BFNdkvdEtenuHd34FR2XpLAA22-2Fscujww-=
+3D-3DwGrw_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ=
+0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2=
+FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrH=
+SHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADsc=
+yvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDS=
+OqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1=
+D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0w=
+mPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPv=
+GduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBV=
+g3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UiLABvlumIS43s4Aacj6-2BSf3Wxn4MT5W=
+JMJkWM3XS0rDXvEPLcZ-2FkmWetKFe6QyJ0-2B4AKeNDyn0UhZahfMJC8apAln5eNfqf0eRdn3o=
+gmpEMFQnJr-2FN-2BgGG1PfBShFhPRMl171z-2FOyMbx1PdWqdNk9Q-3D ).
+Terms of Use ( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8U=
+TRaQhJTFa6A8G4kwzTP9J5MjLzLS0GBE9DkjbAd5MUUm8Unx2ifI7KIzC5BImUMBH1Yhf1ZOItn=
+PAL-2F3Q-3D-3Dch5-_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2Fv=
+Tq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2Bz=
+imnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFw=
+HZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2=
+BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0=
+cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZ=
+lFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6Wo=
+pbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkAL=
+W6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76u=
+I6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052Uif93l-2BJrpovXIGk-2Be0gD=
+Ew4sB7ykmHMRQBHrKEfFIpUlccJmWKtM5-2FDnH5H5uvAmcKoeA-2Fu-2F-2Fo13-2BC93lzrSc=
+svVwfkp-2F-2BD4pM5viLz46QI1Z-2FXkiQESaQWBtPfM7IsXwqDwMBTKLZaZhUjeNDYbmY-3D =
+)  Privacy Policy ( https://clicks.artists.spotify.com/ls/click?upn=3Du001.=
+sHr8UTRaQhJTFa6A8G4kwzTP9J5MjLzLS0GBE9DkjbBGA81YXr38sX1OZdeqOy6RcsoT6vNA2Mc=
+smqa4VTxpow-3D-3D5B-m_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-=
+2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-=
+2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZt=
+DFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsb=
+H-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWB=
+uQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2=
+hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh=
+6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FT=
+kALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg=
+76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UjJ-2BAJfQ8V9NvUiGkTti=
+Hc2krW5cUwcqokufgNPePXXEWwoe0ZL0Pw-2BJmKZ6ILBULAu1Niz-2BpeyqkVoyQxyOWsa8NJB=
+Ft2MaEfzcwfyYIxDL9-2Bmzwz0khvztuMOCMK-2BNzs8mdriKQIyjyKz3E-2BR44k8-3D )  Co=
+ntact Us ( https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQ=
+hJTFa6A8G4kwzTP9J5MjLzLS0GBE9DkjbDAeJ9clWzSdYEAgb7-2Fbabk-2BSGtfS2MR26wElpY=
+3YQ9YQ-3D-3DgsDf_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq=
+1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2Bzim=
+nTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZ=
+TqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BX=
+WOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cM=
+Qm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlF=
+ejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6Wopb=
+Gz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6=
+ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6=
+Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052Urr-2BL-2FFVYO5i-2F1LzwCRxW=
+0k6NLlzzHSsIlzmZLDC9gyHpEEBrqr64kGsPUACRUKBD8lQPr33Y1S-2FIqiuydIiMZaHOchaGi=
+RZ8KuqGckyx9VwuNUX7qXIJhhrB3ctxswmboB95oj3umP2sgKdodxOQXY-3D )
+Spotify AB, Regeringsgatan
+19, 111 53, Stockholm, Sweden
+
+--8fce43694ee341b3d93d37a56b1e868a197de8305f5230a4401c4f03bfe2
+Content-Transfer-Encoding: quoted-printable
+Content-Type: text/html; charset=utf-8
+Mime-Version: 1.0
+
+<!DOCTYPE html>
+<html xmlns:v=3D"urn:schemas-microsoft-com:vml" xmlns:o=3D"urn:schemas-micr=
+osoft-com:office:office" lang=3D"en">
+<head>
+<title></title>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Dutf-8">
+<meta name=3D"viewport" content=3D"width=3Ddevice-width,initial-scale=3D1">
+<!--[if mso]>
+<xml><w:WordDocument xmlns:w=3D"urn:schemas-microsoft-com:office:word"><w:D=
+ontUseAdvancedTypographyReadingMail/></w:WordDocument>
+<o:OfficeDocumentSettings><o:PixelsPerInch>96</o:PixelsPerInch><o:AllowPNG/=
+></o:OfficeDocumentSettings></xml>
+<![endif]--><!--[if !mso]><!--><!--<![endif]--><style>
+*{box-sizing:border-box}body{margin:0;padding:0}a[x-apple-data-detectors]{c=
+olor:inherit!important;text-decoration:inherit!important}#MessageViewBody a=
+{color:inherit;text-decoration:none}p{line-height:inherit}.desktop_hide,.de=
+sktop_hide table{mso-hide:all;display:none;max-height:0;overflow:hidden}.im=
+age_block img+div{display:none}sub,sup{font-size:75%;line-height:0}#convert=
+ed-body .list_block ol,#converted-body .list_block ul,.body [class~=3Dx_lis=
+t_block] ol,.body [class~=3Dx_list_block] ul,u+.body .list_block ol,u+.body=
+ .list_block ul{padding-left:20px} @media (max-width:620px){.image_block di=
+v.fullWidth{max-width:100%!important}.mobile_hide{display:none}.row-content=
+{width:100%!important}.stack .column{width:100%;display:block}.mobile_hide{=
+min-height:0;max-height:0;max-width:0;overflow:hidden;font-size:0}.desktop_=
+hide,.desktop_hide table{display:table!important;max-height:none!important}=
+.row-1 .column-1 .block-2.image_block td.pad,.row-4 .column-1{padding:0!imp=
+ortant}.row-1 .column-1 .block-3.spacer_block,.row-4 .column-1 .block-17.sp=
+acer_block{height:25px!important}.row-2 .column-1 .block-1.paragraph_block =
+td.pad>div,.row-2 .column-1 .block-2.paragraph_block td.pad>div{text-align:=
+center!important}.row-4 .column-1 .block-15.paragraph_block td.pad,.row-4 .=
+column-1 .block-2.paragraph_block td.pad{padding:0 25px!important}.row-4 .c=
+olumn-1 .block-11.list_block td.pad,.row-4 .column-1 .block-12.list_block t=
+d.pad,.row-4 .column-1 .block-5.list_block td.pad,.row-4 .column-1 .block-6=
+.list_block td.pad{padding:20px 25px 20px 35px!important}.row-4 .column-1 .=
+block-11.list_block ul,.row-4 .column-1 .block-12.list_block ul,.row-4 .col=
+umn-1 .block-5.list_block ul,.row-4 .column-1 .block-6.list_block ul{line-h=
+eight:auto!important}.row-4 .column-1 .block-16.button_block td.pad{padding=
+:25px!important}.row-4 .column-1 .block-16.button_block span{font-size:20px=
+!important;line-height:36px!important}}
+</style>
+<!--[if mso ]><style>sup, sub { font-size: 100% !important; } sup { mso-tex=
+t-raise:10% } sub { mso-text-raise:-10% }</style> <![endif]--><!--[if true]=
+><style>.forceBgColor{background-color: white !important}</style><![endif]-=
+->
+</head>
+<body class=3D"body forceBgColor" style=3D"background-color:transparent;mar=
+gin:0;padding:0;-webkit-text-size-adjust:none;text-size-adjust:none">
+<div style=3D"display:none !important;visibility:hidden;mso-hide:all;font-s=
+ize:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:=
+0;overflow:hidden;">Keep the momentum going</div>
+<div style=3D"display:none !important;visibility:hidden;mso-hide:all;font-s=
+ize:1px;color:#ffffff;line-height:1px;max-height:0px;max-width:0px;opacity:=
+0;overflow:hidden;">=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =
+=E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =
+=E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =
+=E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=
+=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =
+=EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=
+=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =
+=E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=
+=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =
+=E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=
+=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=
+=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=
+=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=
+=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =
+=CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=
+=87 =EF=BB=BF =CD=8F =E2=80=8C =C2=A0 =E2=80=87 =EF=BB=BF =CD=8F =E2=80=8C =
+=C2=A0 =E2=80=87 =EF=BB=BF </div>
+<table class=3D"nl-container" width=3D"100%" border=3D"0" cellpadding=3D"0"=
+ cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;mso-ta=
+ble-rspace:0;background-color:transparent"><tbody><tr><td>
+<table class=3D"row row-1" align=3D"center" width=3D"100%" border=3D"0" cel=
+lpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-l=
+space:0;mso-table-rspace:0"><tbody><tr><td><table class=3D"row-content stac=
+k" align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;background=
+-color:#000;border-radius:0;color:#000;width:600px;margin:0 auto" width=3D"=
+600"><tbody><tr><td class=3D"column column-1" width=3D"100%" style=3D"mso-t=
+able-lspace:0;mso-table-rspace:0;font-weight:400;text-align:left;vertical-a=
+lign:top">
+<table class=3D"paragraph_block block-1" width=3D"100%" border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspa=
+ce:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad"><div s=
+tyle=3D"color:#f59b23;direction:ltr;font-family:Helvetica,Arial,Sans-serif;=
+font-size:14px;font-weight:400;letter-spacing:0;line-height:NaN;text-align:=
+left;mso-line-height-alt:NaNpx"><p style=3D"margin:0"></p></div></td></tr><=
+/table>
+<table class=3D"image_block block-2" width=3D"100%" border=3D"0" cellpaddin=
+g=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0=
+;mso-table-rspace:0"><tr><td class=3D"pad" style=3D"width:100%;padding-righ=
+t:0;padding-left:0"><div class=3D"alignment" align=3D"center">
+<div class=3D"fullWidth" style=3D"max-width:600px"><a href=3D"https://click=
+s.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kw-2BSko4523wX=
+Ojl2gjSkKPrwYpAtdZR6LEWRsgkChYOAs1J8ZltTsmr1MVJ6H8Mfz-2F39XfXBE437mg-2BhA6C=
+5RDUdmE1cSGEcubrmwUeIBU0Zi04k6njU-2B8tldVV5B4zdTjTw1H6AIQxbm4sQgj5ixOfZhtFj=
+hnfkxjN3sd4BnG67rLeoMnrr6Yntk7HOxNNdJrILoJa-2FN-2B72-2BFRT58r08-2FXf8g40Vnh=
+uHd5zofyX3l3yANtoH_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2Fv=
+Tq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2Bz=
+imnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFw=
+HZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2=
+BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0=
+cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZ=
+lFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6Wo=
+pbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkAL=
+W6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76u=
+I6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UhA9e6-2Fbzb48AGvN-2FEb2O=
+c-2FaI-2FDrVvP49ke0DAHNXEkpkU92Yj4JG9-2FXQV00-2Be6Xz2hEBrLsO0eORYbDNLE6DL-2=
+B-2F2jqyAjOFQngS9RHXbCszvI5pQNVQF1niSUdfXIGcobUMuOSwikQlVTBztQRHOsQ-3D" tar=
+get=3D"_blank"><img src=3D"https://braze-images.com/appboy/communication/as=
+sets/image_assets/images/66e4c626a8125500648e70cc/original.gif?1726268966" =
+style=3D"display:block;height:auto;border:0;width:100%" width=3D"600" alt=
+=3D"Your new music is live" title=3D"Your new music is live" height=3D"auto=
+"></a></div>
+</div></td></tr></table>
+<div class=3D"spacer_block block-3" style=3D"height:10px;line-height:10px;f=
+ont-size:1px">=E2=80=8A</div>
+<table class=3D"paragraph_block block-4" width=3D"100%" border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspa=
+ce:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad"><div s=
+tyle=3D"color:#f59b23;direction:ltr;font-family:Helvetica,Arial,Sans-serif;=
+font-size:14px;font-weight:400;letter-spacing:0;line-height:NaN;text-align:=
+left;mso-line-height-alt:NaNpx"><p style=3D"margin:0">
+
+</p></div></td></tr></table>
+</td></tr></tbody></table></td></tr></tbody></table>
+<table class=3D"row row-2" align=3D"center" width=3D"100%" border=3D"0" cel=
+lpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-l=
+space:0;mso-table-rspace:0"><tbody><tr><td><table class=3D"row-content stac=
+k" align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;background=
+-color:#000;border-radius:0;color:#000;width:600px;margin:0 auto" width=3D"=
+600"><tbody><tr><td class=3D"column column-1" width=3D"100%" style=3D"mso-t=
+able-lspace:0;mso-table-rspace:0;font-weight:400;text-align:left;vertical-a=
+lign:top">
+<table class=3D"paragraph_block block-1" width=3D"100%" border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspa=
+ce:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad" style=
+=3D"padding-left:40px;padding-right:40px;padding-top:20px"><div style=3D"co=
+lor:#fff;direction:ltr;font-family:Helvetica,Arial,Sans-serif;font-size:24p=
+x;font-weight:400;letter-spacing:0;line-height:NaN;text-align:center;mso-li=
+ne-height-alt:NaNpx"><p style=3D"margin:0"><strong><a href=3D"https://click=
+s.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kw-2BSko4523wX=
+Ojl2gjSkKPrwYpAtdZR6LEWRsgkChYOAs1J8ZltTsmr1MVJ6H8Mfz-2F39XfXBE437mg-2BhA6C=
+5RDUfQKm-2BDFBqlqQqs5Ro5PNlvxywmsg3k2pofUqo72msj9iq-2FMqBidnuWadFd40Ln3UQsP=
+3c2Bve-2BM8NzoZZkKcnKlgKT7uVfxaS8IuB7saV9Bzi3B6p6w-2Blqc3-2B-2B7jGIh8h-2FUw=
+cQLHQPMUl015HmbjLBI4-2F0Mi7cws-2BxYgUzM9o-2FEw-3D-3DVXGR_HdTNCtZoRKLpwgC0oJ=
+a0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoH=
+X6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx=
+-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG=
+4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2=
+B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27=
+ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482=
+AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7K=
+bBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3=
+TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh=
+9oqhKdsRgS052Uuie8RpHoQFb1OVWT0gIGAqxmjkvle8me2PKL9-2F9hj6xAkVzNd7D8nhPXcIp=
+KGZx-2BwH8L5-2FotcWGciEFxTzu9b2m679Y7PowGSI2IMAhGjb6oFyRq27G2ds4-2Bst6olwpw=
+ZUguPWx0V8wiOB4SRUrBBg-3D" target=3D"_blank" style=3D"text-decoration: none=
+; color: #cff56a;" rel=3D"noopener">Don't Feel A Thing</a></strong></p></di=
+v></td></tr></table>
+<table class=3D"paragraph_block block-2" width=3D"100%" border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspa=
+ce:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad" style=
+=3D"padding-bottom:20px;padding-left:40px;padding-right:40px;padding-top:10=
+px"><div style=3D"color:#939393;direction:ltr;font-family:Helvetica,Arial,S=
+ans-serif;font-size:22px;font-weight:400;letter-spacing:0;line-height:NaN;t=
+ext-align:center;mso-line-height-alt:NaNpx"><p style=3D"margin:0">
+<a href=3D"?lid=3Dvvvbueujw4an&amp;utm_source=3Demail&amp;utm_medium=3Demai=
+lmarketing&amp;utm_campaign=3Ds4a-notif-release-ingestion&amp;utm_content=
+=3Drelease-artist-name" target=3D"_blank" rel=3D"noopener" style=3D"text-de=
+coration: underline; color: #939393;"></a><a href=3D"https://clicks.artists=
+.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kw-2BSko4523wXOjl2gjSkK=
+PrwYpAtdZR6LEWRsgkChYOAs1J8ZltTsmr1MVJ6H8Mfz-2F39XfXBE437mg-2BhA6C5RDUchp6N=
+UroD7NS9bcdteWwcUXZ6GiZQol7fOZAR0-2BTnqlDqOUk4TLoh25zbuNf8pE4HxjE3jFcJNeXkJ=
+R0pseWkYQo0iekZqIIWqnWEe7mXHWGd5Z806v0kH3pEJQ2sXUCYZ398tGQK7wHJ8pFJV4G1a4Nr=
+lAkN5rWXBIHLBFop2VA-3D-3DVEuf_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW=
+4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkw=
+l57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc=
+-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSs=
+Wg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1C=
+PCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22=
+kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5=
+TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs=
+7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x=
+7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UlxUXKdNrDTMxz=
+PS8RUzdlMbNZ-2FVM5d9nbz6b02cL9coMBrqXJBwvJ0ODTkmzySNyJpnBlLG0nMNgMvyXb0me-2=
+FcBKGhAe44nsVK-2FgVCYhnduEP-2FOsYNxOQVEp2TfKNWsY3pgwMWO5z0SPtVlvnyHHXE-3D" =
+target=3D"_blank" style=3D"text-decoration: none; color: #939393;" rel=3D"n=
+oopener">Geg=C3=A8</a></p></div></td></tr></table>
+</td></tr></tbody></table></td></tr></tbody></table>
+<table class=3D"row row-3" align=3D"center" width=3D"100%" border=3D"0" cel=
+lpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-l=
+space:0;mso-table-rspace:0"><tbody><tr><td><table class=3D"row-content stac=
+k" align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;background=
+-color:#000;border-radius:0;color:#000;width:600px;margin:0 auto" width=3D"=
+600">
+<tbody><tr><td class=3D"column column-1" width=3D"100%" style=3D"mso-table-=
+lspace:0;mso-table-rspace:0;font-weight:400;text-align:left;vertical-align:=
+top">
+<table class=3D"divider_block block-1" width=3D"100%" border=3D"0" cellpadd=
+ing=3D"10" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspac=
+e:0;mso-table-rspace:0"><tr><td class=3D"pad"><div class=3D"alignment" alig=
+n=3D"center"><table border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" width=3D"90%" style=3D"mso-table-lspace:0;mso-table-rspac=
+e:0">
+<tr><td class=3D"divider_inner" style=3D"font-size:1px;line-height:1px;bord=
+er-top:1px solid #bbb"><span style=3D"word-break: break-word;">=E2=80=8A</s=
+pan></td></tr>
+</table></div></td></tr></table>
+<table class=3D"paragraph_block block-2" width=3D"100%" border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspa=
+ce:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad"><div s=
+tyle=3D"color:#f59b23;direction:ltr;font-family:Helvetica,Arial,Sans-serif;=
+font-size:14px;font-weight:400;letter-spacing:0;line-height:NaN;text-align:=
+left;mso-line-height-alt:NaNpx"><p style=3D"margin:0"></p></div></td></tr><=
+/table>
+</td></tr></tbody>
+</table></td></tr></tbody></table>
+<table class=3D"row row-4" align=3D"center" width=3D"100%" border=3D"0" cel=
+lpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-l=
+space:0;mso-table-rspace:0"><tbody><tr><td><table class=3D"row-content stac=
+k" align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;background=
+-color:#000;color:#000;width:600px;margin:0 auto" width=3D"600"><tbody><tr>=
+<td class=3D"column column-1" width=3D"100%" style=3D"mso-table-lspace:0;ms=
+o-table-rspace:0;font-weight:400;text-align:left;vertical-align:top">
+<div class=3D"spacer_block block-1" style=3D"height:20px;line-height:20px;f=
+ont-size:1px">=E2=80=8A</div>
+<table class=3D"paragraph_block block-2" width=3D"100%" border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspa=
+ce:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad" style=
+=3D"padding-left:40px;padding-right:40px"><div style=3D"color:#fff;directio=
+n:ltr;font-family:Helvetica,Arial,Sans-serif;font-size:18px;font-weight:400=
+;letter-spacing:0;line-height:1.5;text-align:left;mso-line-height-alt:27px"=
+><p style=3D"margin:0">Go to Spotify for Artists to see how, where, and whe=
+n people are listening to your music.</p></div></td></tr></table>
+<div class=3D"spacer_block block-3" style=3D"height:20px;line-height:20px;f=
+ont-size:1px">=E2=80=8A</div>
+<table class=3D"paragraph_block block-4" width=3D"100%" border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspa=
+ce:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad" style=
+=3D"padding-left:40px;padding-right:40px"><div style=3D"color:#fff;directio=
+n:ltr;font-family:Helvetica,Arial,Sans-serif;font-size:22px;font-weight:700=
+;letter-spacing:0;line-height:NaN;text-align:left;mso-line-height-alt:NaNpx=
+"><p style=3D"margin:0"><strong>Keep the momentum going:</strong></p></div>=
+</td></tr></table>
+<table class=3D"list_block block-5" width=3D"100%" border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;=
+mso-table-rspace:0;word-break:break-word;color:#fff;direction:ltr;font-fami=
+ly:Helvetica,Arial,Sans-serif;font-size:18px;font-weight:400;letter-spacing=
+:0;line-height:1.5;text-align:left;mso-line-height-alt:27px"><tr><td class=
+=3D"pad" style=3D"padding-left:50px;padding-right:40px;padding-top:20px"><d=
+iv style=3D"margin-left:-20px"><ul style=3D"margin-top:0;margin-bottom:0;li=
+st-style-type:revert">
+<li aria-checked=3D"false" aria-level=3D"1" style=3D"Margin:0">
+<span style=3D"word-break: break-word; color: #cff56a;"><strong>Use Artist =
+Pick</strong></span> to highlight your new release.</li>
+<li aria-checked=3D"false" aria-level=3D"1" style=3D"Margin:0">
+<strong><span style=3D"word-break: break-word; color: #cff56a;">Optimize yo=
+ur </span><a href=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du001=
+.sHr8UTRaQhJTFa6A8G4kw-2BSko4523wXOjl2gjSkKPryMlhX0gpeBegGwuG1JFZzSbmmbOIuR=
+FdLEgebLW2221GvrNCf3D4rW2iSRw8oreB23EdmBYuqMGcqz7gGX9bcg4IiafIZMlzIZoomni-2=
+FlrlBbcqXt1t-2Fjbvc2bwdWe1abf0faAw5HTRn1PZPyRLRk9Le2Nnn3p0e3m-2FSFFwZio-2FT=
+sfuGb82xUnOoBmQXDsrUVpbftR4X3zSlP9x0-2FxFq01-2FeQf8zor2Kwqemn23A92BgOBGA-2F=
+1fNH68EK95hGA6g8-3DTq8u_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmw=
+G-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0=
+r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZh=
+ZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BE=
+sbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePW=
+WBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8c=
+O2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmU=
+Wh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2=
+FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOy=
+Kg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052Uqa-2FAWPi7U94dS9f-2=
+FcuiiYDvoSU0bAu-2Bz-2BMiDzgt7tT8wkemOfqeTro90KJ7o-2Bd52KCC1qxIO2kdgBN5x-2Fi=
+l0WwEdSlHKzPB0-2BGX-2BWiEgWTTxf1zvX2OdeHuc4vXez3UKE-2FoqN-2FHOhgogTKzuUIbBv=
+I-3D" target=3D"_blank" data-mce-attributes-count=3D"1" style=3D"text-decor=
+ation: underline; color: #cff56a;" rel=3D"noopener"><span style=3D"word-bre=
+ak: break-word; color: #cff56a; text-decoration: underline;">Now Playing Vi=
+ew</span></a></strong> by uploading a Canvas, tagging merch, and connecting=
+ your tickets and lyrics.</li>
+</ul></div></td></tr></table>
+<table class=3D"list_block block-6" width=3D"100%" border=3D"0" cellpadding=
+=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspace:0;=
+mso-table-rspace:0;word-break:break-word;color:#fff;direction:ltr;font-fami=
+ly:Helvetica,Arial,Sans-serif;font-size:18px;font-weight:400;letter-spacing=
+:0;line-height:1.5;text-align:left;mso-line-height-alt:27px"><tr><td class=
+=3D"pad" style=3D"padding-bottom:20px;padding-left:50px;padding-right:40px"=
+><div style=3D"margin-left:-20px"><ul start=3D"1" style=3D"margin-top:0;mar=
+gin-bottom:0;list-style-type:revert">
+<li aria-checked=3D"false" aria-level=3D"1" style=3D"Margin:0">
+<span style=3D"word-break: break-word; color: #cff56a;"><strong>Share your =
+new release</strong></span> directly to socials, or use <strong><a href=3D"=
+https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4k=
+w-2BSko4523wXOjl2gjSkKPryf22PXtRI0-2BkYCoT3SYmCduacpaSNnm96L0SNBvr-2BzDKS0M=
+gz0tDprYbT-2BqWtLH-2BR2FO2b8DH3tU-2Fj5ZqLIEtsqIeaCjDMeXLrLTbvqNdZ-2FYE7CAXJ=
+zRWE1rFeAH-2BZ1Bd0M7Rc-2FBFpeS1BHc3RaYDse9-2B-2FsnXYIUcYyhfdKQspHjeJOs4lgDv=
+FWBcy-2BDrbQ1JI-2FVjdpsX467zkl27LH-2FGfOXbL_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2=
+ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSf=
+Zteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2B=
+sws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4=
+414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES=
+73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm=
+-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCS=
+m-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiB=
+sM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-=
+2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052=
+Ulaq9-2BjYkxSKwY0EdyN9iv5ka0dSQD8FH16foxsHVKLjC9wJdzIi-2FuWMhf5JUXVeyIduabF=
+s7Sb-2FU2n4Ad-2B-2BEfVkDU8wDfklARE-2Ffy3C4xbrQjVEqyQVLfcHbigUF1maEf-2BK-2Bw=
+amt00nhM8fGDw-2FyI0-3D" target=3D"_blank" data-mce-attributes-count=3D"1" s=
+tyle=3D"text-decoration: underline; color: #cff56a;" rel=3D"noopener">Promo=
+ Cards</a></strong> to create professional shareable assets.</li>
+</ul></div></td></tr></table>
+<table class=3D"paragraph_block block-7" width=3D"100%" border=3D"0" cellpa=
+dding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspa=
+ce:0;mso-table-rspace:0;word-break:break-word">
+<tr><td class=3D"pad"><div style=3D"color:#f59b23;direction:ltr;font-family=
+:Helvetica,Arial,Sans-serif;font-size:14px;font-weight:400;letter-spacing:0=
+;line-height:NaN;text-align:left;mso-line-height-alt:NaNpx"><p style=3D"mar=
+gin:0"></p></div></td></tr></table>
+<div class=3D"spacer_block block-14" style=3D"height:20px;line-height:20px;=
+font-size:1px">=E2=80=8A</div>
+<table class=3D"paragraph_block block-15" width=3D"100%" border=3D"0" cellp=
+adding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lsp=
+ace:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"pad" style=
+=3D"padding-left:40px;padding-right:40px"><div style=3D"color:#fff;directio=
+n:ltr;font-family:Helvetica,Arial,Sans-serif;font-size:18px;font-weight:400=
+;letter-spacing:0;line-height:1.5;text-align:left;mso-line-height-alt:27px"=
+><p style=3D"margin:0">Check out our <strong><a href=3D"https://clicks.arti=
+sts.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kw-2BSko4523wXOjl2gj=
+SkKPry2nckZ7cogNHOWceyf5aaQG0rVni-2BxEorxH2U6qMRiqVatajTohu-2B9lUMs9pNMJuSD=
+UIEx1ENgh-2FcLXSe0MmwbCtCc-2BtYORj91DGDSBA9dhepWtiFq5MMzUdGAJG99pGBfiTjs5OD=
+T5FDiDU8nhDR2R3NIOCLDlNrH6c1QUU99CEKEGqZUg9y4wD9DB9YIsx0-3Dbg7N_HdTNCtZoRKL=
+pwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvp=
+e-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmX=
+G4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt8=
+6XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqL=
+RlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXO=
+WIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP=
+24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ=
+54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf07=
+9tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11=
+wLbDqoh9oqhKdsRgS052Unc5YYSIiR-2Bj1TOVRv8St2gTmQjCMX8NoZ-2B7RNyMO2DsEIShUXI=
+lmg0kdvCNF5E1vQOUMDkuCkFbh-2FMYcs5AMfKqLJAsH4LhqyeoEfS7vebXMCXobpFP6vQNfCce=
+DWYnwgbKEq8MBr9UH9Ng1G2gGkI-3D" target=3D"_blank" style=3D"text-decoration:=
+ underline; color: #cff56a;" rel=3D"noopener">New Release Guide</a></strong=
+> to make sure you=E2=80=99ve done it all.</p></div></td></tr></table>
+<table class=3D"button_block block-16" width=3D"100%" border=3D"0" cellpadd=
+ing=3D"40" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-lspac=
+e:0;mso-table-rspace:0"><tr><td class=3D"pad"><div class=3D"alignment" alig=
+n=3D"center"><a href=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du=
+001.sHr8UTRaQhJTFa6A8G4kw-2BSko4523wXOjl2gjSkKPrwYpAtdZR6LEWRsgkChYOAs1J8Zl=
+tTsmr1MVJ6H8Mfz-2F39XfXBE437mg-2BhA6C5RDUfW6ABbvZ1Wd5vxPTUJ8qtJg0-2Bdd1dt4h=
+NL2BCWmGavgzkuFA6UWu3VAxq-2B2Bt39To-2Bcb4uDOwR-2B-2FwlhP30bw0Hi5cOyUR7XEiQi=
+7zGf3srLmR-2FeMeND3RKqUosqN4wReKxDGniKIa213rK7Wrg0yrL7VAH_HdTNCtZoRKLpwgC0o=
+Ja0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAo=
+HX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKb=
+x-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97O=
+G4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-=
+2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh2=
+7ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx48=
+2AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7=
+KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb=
+3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqo=
+h9oqhKdsRgS052UmjtpKsytPd3BNqUpJyuNGXqZJYyTzGrlJsSzJlmJNU3CNUKVBsqmDfAZ8eov=
+Ds5IUkrPy5-2BrwHOHnHsN51uebr5MoUWIs-2BBWTUgwDtz7dCqdc1nZGzwlNeH9woA-2FXeLNM=
+YcpzO7wYltnJBByK8O7Gc-3D" target=3D"_blank" style=3D"color:#ffffff;text-dec=
+oration:none;"><!--[if mso]>
+<v:roundrect xmlns:v=3D"urn:schemas-microsoft-com:vml" xmlns:w=3D"urn:schem=
+as-microsoft-com:office:word"  href=3D"https://artists.spotify.com/c/en/art=
+ist/0QkB392EyTeD1zfj7UaFPL/music/releases?lid=3Dzcmexhe69sq1&utm_source=3Dt=
+rigger-ab&utm_medium=3Demail&utm_campaign=3Djust-released&utm_content=3Dcta=
+"  style=3D"height:56px;width:270px;v-text-anchor:middle;" arcsize=3D"54%" =
+fillcolor=3D"#5925ff">
+<v:stroke dashstyle=3D"Solid" weight=3D"0px" color=3D"#000000"/>
+<w:anchorlock/>
+<v:textbox inset=3D"0px,0px,0px,0px">
+<center dir=3D"false" style=3D"color:#ffffff;font-family:Arial;font-size:20=
+px">
+<![endif]-->
+<span class=3D"button" style=3D"background-color: #5925ff; mso-shading: tra=
+nsparent; border-bottom: 0px solid #000000; border-left: 0px solid #000000;=
+ border-radius: 30px; border-right: 0px solid #000000; border-top: 0px soli=
+d #000000; color: #ffffff; display: inline-block; font-family: 'Helvetica',=
+ Arial, Sans-serif; font-size: 20px; font-weight: 400; mso-border-alt: none=
+; padding-bottom: 10px; padding-top: 10px; padding-left: 60px; padding-righ=
+t: 60px; text-align: center; width: auto; word-break: keep-all; letter-spac=
+ing: normal;"><span style=3D"word-break: break-word; line-height: 36px;"><s=
+trong>EXPLORE NOW</strong></span></span>
+<!--[if mso]></center></v:textbox></v:roundrect><![endif]--></a></div></td>=
+</tr></table>
+<div class=3D"spacer_block block-17" style=3D"height:10px;line-height:10px;=
+font-size:1px">=E2=80=8A</div>
+</td></tr></tbody></table></td></tr></tbody></table>
+<table class=3D"row row-5" align=3D"center" width=3D"100%" border=3D"0" cel=
+lpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-table-l=
+space:0;mso-table-rspace:0"><tbody><tr><td><table class=3D"row-content stac=
+k" align=3D"center" border=3D"0" cellpadding=3D"0" cellspacing=3D"0" role=
+=3D"presentation" style=3D"mso-table-lspace:0;mso-table-rspace:0;background=
+-color:#000;border-radius:0;color:#000;width:600px;margin:0 auto" width=3D"=
+600"><tbody><tr><td class=3D"column column-1" width=3D"100%" style=3D"mso-t=
+able-lspace:0;mso-table-rspace:0;font-weight:400;text-align:left;vertical-a=
+lign:top"><table class=3D"paragraph_block block-1" width=3D"100%" border=3D=
+"0" cellpadding=3D"0" cellspacing=3D"0" role=3D"presentation" style=3D"mso-=
+table-lspace:0;mso-table-rspace:0;word-break:break-word"><tr><td class=3D"p=
+ad"><div style=3D"color:#f59b23;direction:ltr;font-family:Helvetica,Arial,S=
+ans-serif;font-size:14px;font-weight:400;letter-spacing:0;line-height:NaN;t=
+ext-align:center;mso-line-height-alt:NaNpx">
+<p style=3D"margin:0">
+</p>
+
+
+  <table class=3D"footer-root" dir=3D"auto" style=3D"border-collapse:collap=
+se;padding:0;background-color:#f7f7f7;width:100%">
+  <tbody style=3D"border:none;padding:0;margin:0">
+  <tr style=3D"border:none;margin:0px;padding:0px;height:25px">
+    <td colspan=3D"3" style=3D"border:none;padding:6.25px;margin:0;height:2=
+5px"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px">
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+    <td style=3D"border:none;padding:0;margin:0"><img height=3D"23" src=3D"=
+https://s4a.scdn.co/e/s4a-logo.png" style=3D"display:block;max-width:100%;h=
+eight:23px"></td>
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px;height:25px">
+    <td colspan=3D"3" style=3D"border:none;padding:6.25px;margin:0;height:2=
+5px"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px">
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+    <td style=3D"border:none;padding:0;margin:0">
+      <hr style=3D"height:1px;background-color:#d1d5d9;border:none;margin:0=
+px;padding:0px">
+</td>
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px;height:37px">
+    <td colspan=3D"3" style=3D"border:none;padding:0;margin:0;height:37px">=
+</td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px">
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+    <td style=3D"border:none;padding:0;margin:0">
+      <div class=3D"artists-app" style=3D'border:none;padding:0;margin:0;fo=
+nt-family:"circular", "helvetica neue", "helvetica", "arial", sans-serif;fo=
+nt-weight:400;line-height:1.65em;letter-spacing:0.15px;font-size:11px;text-=
+decoration:none;color:#88898c;margin-bottom:5px'>Download the Spotify for A=
+rtists app!</div>
+      <a href=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr=
+8UTRaQhJTFa6A8G4kwytzy-2Fqgelo37Y1zI7yNleD7ytLsc7XuGvStCT3T9hXh8uojl8pevHsz=
+LwtrBtcCUjVzhLlg2ANXDA-2FNqBIpyNw-3DUH3D_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXM=
+aO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZte=
+u1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws=
+8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414=
+-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U=
+8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2B=
+ZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2=
+BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8=
+B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FH=
+z0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052Umd=
+jsYyQcoX5kQrzplla9dqgo7kceHx6f7cmLjG1RDleu8-2FXuW3GpiTQT1W28KwfdAx2hIK4xs4l=
+DaiGmMB0FP9qGQrTpLBR6VjRVN93TN9-2BcxSwrJYpSiiTkVfzt-2BOZFHVdxGNf8VOeZUMiICP=
+dp-2Fg-3D" style=3D"text-decoration:none;color:#1ed760"><img alt=3D"" class=
+=3D"artist-footer-logo banner-spacing" height=3D"36" src=3D"https://s4a.scd=
+n.co/e/apple-store-download.png" style=3D"display:inline-block;max-width:10=
+0%;height:36px;border:none;margin:0;width:auto;margin-right:16px"></a><a hr=
+ef=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du001.l6EX8VCZLiOXZj=
+YI1WxXNv2NlAK-2FkO5dYA856dU-2FmlrnM7ck2jC-2F9GeM6ILomkIGBtl-2BBr6f6AWL3RvKU=
+GH4zGhwIl9GZzJqR1-2BaoGYNsWI-3Dbt4Y_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2F=
+oiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1Ruv=
+yL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8Flgs=
+J-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0=
+dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8=
+UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh=
+9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselA=
+SIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwN=
+ndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4G=
+m-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UvrYnZ3F=
+ABv6sULwkxNXLm35ECweR1PFyj8e-2BI3JQW78-2F4xUACCIYUYzctZZVOOZukTnkxwi-2BgHeV=
+GUgvh6U1UtuGeylr5hWSKl7lrxD-2Ftk-2FjC4bzhn96vkS7YsQCSAT7AyLWZaF2-2FryHGw9eO=
+YhPAw-3D" style=3D"text-decoration:none;color:#1ed760"><img alt=3D"" class=
+=3D"artist-footer-logo" height=3D"36" src=3D"https://s4a.scdn.co/e/google-p=
+lay-logo.png" style=3D"display:inline-block;max-width:100%;height:36px;bord=
+er:none;margin:0;width:auto;margin-right:16px"></a>
+</td>
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px">
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+    <td style=3D'border:none;padding:0;margin:0;font-family:"circular", "he=
+lvetica neue", "helvetica", "arial", sans-serif;font-weight:400;line-height=
+:1.65em;letter-spacing:0.15px;font-size:11px;text-decoration:none;color:#88=
+898c'>
+<br style=3D"border:none;padding:0;margin:0">
+      Visit us on: <a class=3D"footer-link" href=3D"https://clicks.artists.=
+spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kw-2BSko4523wXOjl2gjSkKP=
+ry5xT-2FMubY4J5Te7GEsNrUOYPwv_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW=
+4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkw=
+l57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc=
+-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSs=
+Wg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1C=
+PCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22=
+kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5=
+TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs=
+7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x=
+7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UsXsou4QFuwwS4=
+qYYeJgrXkovFIcYp2OyNf1vvwq2HiC3WlXwMzoMNjl1xSPVtmr2dgZhgDL47ClO7XEtTGbtOvEP=
+EWTBYrOQyzsnxTc4eOb1vhnBfSNSIcfikbQRoSf1975wkYOkDVAtq-2Bp-2FXEtUE8-3D" styl=
+e=3D"text-decoration:none;color:rgb(109, 109, 109);border:none;margin:0px;p=
+adding:0px;font-weight:bold">artists.spotify.com</a>
+      <div style=3D"border:none;padding:0;margin:0">
+<a href=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQ=
+hJTFa6A8G4kwzpkF-2BfVN3zthiTJyG8FSkPgi6zqVQSds1zU-2FKfjvxoyrXKd4km1d0Flw-2F=
+o9a-2FqUmQ-3D-3DVYot_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2=
+FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2=
+BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtD=
+FwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH=
+-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBu=
+Q0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2h=
+qZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6=
+WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTk=
+ALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg7=
+6uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UnECW1y-2Bhkk6oUxwipobb=
+Vfw3DfbX8OPzfZDm2Hv1gzPLYksBUdQc3H1Z-2FpG4RDgjjyKejmxF3UM1nbzJKVOXM-2FAvBw6=
+boJvSd3vlb3ooAWBrbNim3d8N15b3OQ5x-2FOQiTgAEKWB9d8-2BWIFurh9jmCc-3D" style=
+=3D"text-decoration:none;color:rgb(109, 109, 109);border:none;margin:0px;pa=
+dding:0px;font-weight:bold"><img alt=3D"" class=3D"social-icon" height=3D"4=
+8" src=3D"https://braze-images.com/appboy/communication/assets/image_assets=
+/images/678abaf1231faf006467845c/original.png?1737145072" style=3D"display:=
+inline-block;max-width:100%;border:none;margin:12px 0px 0px;padding:0px;hei=
+ght:48px"></a><a class=3D"right-icon" href=3D"https://clicks.artists.spotif=
+y.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kwxDIa-2FEkL8uIvuKEthC4G0Fydn5=
+aWrwSYmJohq-2Bqbsd7Lp06LiumPMflqeWcwpjSvQ-3D-3Dwq9P_HdTNCtZoRKLpwgC0oJa0lvY=
+AqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7=
+eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVC=
+et3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPV=
+yhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk=
+4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9=
+AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjg=
+ewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFM=
+BR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3Tstey=
+TiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhK=
+dsRgS052UiVJh95bF1lDGlGf0sqDfPre77dJ-2FWgK8uIFcmuLXg-2FYZd9Aq3CsIwt3H7-2FTY=
+hzMZJfataC9xzKNIODTOwSuQ8MwmvOAJOOV7iq2nv2zmzDjW6dZVHk-2FToZkaTBxJJN1Q2NMzS=
+fIemd9QbW0OJjadHs-3D" style=3D"text-decoration:none;color:rgb(109, 109, 109=
+);border:none;margin:0px 0px 0px 16px;padding:0px;font-weight:bold"><img al=
+t=3D"" class=3D"social-icon" height=3D"48" src=3D"https://braze-images.com/=
+appboy/communication/assets/image_assets/images/678abaf0231faf006467845b/or=
+iginal.png?1737145072" style=3D"display:inline-block;max-width:100%;border:=
+none;margin:12px 0px 0px;padding:0px;height:48px"></a><a class=3D"right-ico=
+n" href=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQ=
+hJTFa6A8G4kw7dYYb7NMTYuCgnp7kneySaR1DL14f8Kf-2BqJcKG4LUuS4xkACeQAdfDis9-2Bp=
+JGuLVg-3D-3DF-oa_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq=
+1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2Bzim=
+nTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZ=
+TqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BX=
+WOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cM=
+Qm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlF=
+ejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6Wopb=
+Gz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6=
+ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6=
+Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UhpZH-2BUWEbHq6xVrz45lFJ0DY=
+cl9cN71c0C0ezC4Qir9hOHhtM60wTzXNE8jR3jCH9klovlFt4t8da3kvCsk8B-2BUM-2FtB5yjb=
+72gTq8143GmQ83AgDvoyCTWbF5m-2FPBvBP4kCXs-2FK1Xw4PzusytRho58-3D" style=3D"te=
+xt-decoration:none;color:rgb(109, 109, 109);border:none;margin:0px 0px 0px =
+16px;padding:0px;font-weight:bold"><img alt=3D"" class=3D"social-icon" heig=
+ht=3D"48" src=3D"https://braze-images.com/appboy/communication/assets/image=
+_assets/images/678abaf0231faf006467845a/original.png?1737145071" style=3D"d=
+isplay:inline-block;max-width:100%;border:none;margin:12px 0px 0px;padding:=
+0px;height:48px"></a>
+      <a class=3D"right-icon" href=3D"https://clicks.artists.spotify.com/ls=
+/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kwwLQAoIdQKI9puqWt5kEdX42HA-2Be93W6jFT=
+6ZNf-2BeW30dQmr8sxmf-2F-2FkM69IFqRDuw-3D-3DYEtE_HdTNCtZoRKLpwgC0oJa0lvYAqyS=
+chF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDe=
+OFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3U=
+C-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-=
+2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN=
+4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT0=
+42Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMR=
+rQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2c=
+DYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQd=
+k0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRg=
+S052UqP2blT3rCxZxtzTcE1uPRKYjvSBGHB8X5W-2FgOoJ8JQTKf9rMDoYVPkuxM52si9468Nst=
+BDQstj5BfYyqh5d1IGW-2Bm-2BBOm-2Bh0mlAJWomHvULMGs5s0ddvAxzUJDL9Fpwk3AlRpZXrA=
+nLEctFSty5OlY-3D" style=3D"text-decoration:none;color:rgb(109, 109, 109);bo=
+rder:none;margin:0px 0px 0px 16px;padding:0px;font-weight:bold"><img alt=3D=
+"" class=3D"social-icon" height=3D"48" src=3D"https://braze-images.com/appb=
+oy/communication/assets/image_assets/images/678abaef231faf0064678458/origin=
+al.png?1737145071" style=3D"display:inline-block;max-width:100%;border:none=
+;margin:12px 0px 0px;padding:0px;height:48px"></a>
+      <a class=3D"right-icon" href=3D"https://clicks.artists.spotify.com/ls=
+/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kw4kUKzJtpQAtM1Xoc66rv53LWR3uqvytRYsnT=
+JWlYLEK0fCgxVkG7-2FkOnsMgfWTghQ-3D-3DhC7o_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZX=
+MaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZt=
+eu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsw=
+s8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB441=
+4-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73=
+U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2=
+BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-=
+2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM=
+8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2F=
+Hz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052Uq=
+4yl-2FuEFcQerAqnfZYTss6iCp1SN3qxdXQHc2uaHg8v76iPyXcuQqt6Wcpj5LmCRAxkr-2BOnO=
+-2FxS-2BllYEd-2B9IYSjRC95DR-2FvacGCnnFwBKxrW8atwhSyE0GzzShuQWBAhDyPEPLa7qd8=
+OxM7f6eYVd0-3D" style=3D"text-decoration:none;color:rgb(109, 109, 109);bord=
+er:none;margin:0px 0px 0px 16px;padding:0px;font-weight:bold"><img alt=3D""=
+ class=3D"social-icon" height=3D"48" src=3D"https://braze-images.com/appboy=
+/communication/assets/image_assets/images/678abaef231faf0064678459/original=
+.png?1737145071" style=3D"display:inline-block;max-width:100%;border:none;m=
+argin:12px 0px 0px;padding:0px;height:48px"></a>
+</div>
+    </td>
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px;height:37px">
+    <td colspan=3D"3" style=3D"border:none;padding:0;margin:0;height:37px">=
+</td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px">
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+    <td style=3D"border:none;padding:0;margin:0">
+      <hr style=3D"height:1px;background-color:#d1d5d9;border:none;margin:0=
+px;padding:0px">
+</td>
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px;height:25px">
+    <td colspan=3D"3" style=3D"border:none;padding:6.25px;margin:0;height:2=
+5px"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px">
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+    <td class=3D"font" style=3D'border:none;padding:0;margin:0;font-family:=
+"circular", "helvetica neue", "helvetica", "arial", sans-serif;font-weight:=
+400;line-height:1.65em;letter-spacing:0.15px;font-size:11px;text-decoration=
+:none;color:#88898c'>
+<!-- https://05.emailinboundprocessing.com/enc_user/unsubscribe?d=3D%241%24=
+BDPkrV9He%2F11HxcCTEyO6g%3D%3D%24rbyWE5hT1455wEE%2BeoC79EoldOyEI12Kp8ZiO9dk=
+meiA4tUmLRNi9M2pgBeh%0AwD2xvnUdvg5YzhmY34OHm2EnO6E3NZVLJrAO2s1JGOtYd45XPh6X=
+eKVaVzQ2%0AWPdbkkOQi1DgpMOeNwe0TfbH0P5MOH5jGUfWI1pynVfoprgvUpv3NVz5kbhT%0Aq=
+UwfnYTf5wEBinStVObcqsXX2Fhpv9UUj2UJ2dyFKHJq51gZFgjuCHdpH%2BID%0ApU5MznFfie%=
+2BsA4TlzLZ4U9STUfRzlxf5Rlc2so5x5Jr18MXamYjudFVSKmXZ%0A4qZDi8xa1fcrdy%2BUj9t=
+DkH0yMuSer%2B8oNXnPnD9OHTJNz7Pyy7Z%2FtPI9vOVm%0AWGNhQT%2Bo4AUjUd5%2BdPtgiIf=
+m&1=3D1 --><span style=3D"border:none;padding:0;margin:0">This message was =
+sent to eugeniomariaderosa@gmail.com. If you don't want to receive these em=
+ails from Spotify for Artists in the future, you can <a class=3D"footer-lin=
+k" href=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQ=
+hJTFa6A8G4kw-2BSko4523wXOjl2gjSkKPrzIiHJA04Y-2FplYALTJXfZ0c6TY3xP3uBU1yvby-=
+2FHo8-2BD5FVGhT8Hv0REBcNT6z7FpzvRpOTStD4uzKWhfNGFXPaDXY9qN2h99KeGC3-2BL3AGG=
+Yrk3U-2Byw7QmeyiOYEyukhg-3DCMw__HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKX=
+pW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2B=
+kwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2F=
+Vc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuq=
+SsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn=
+1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E=
+22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4=
+H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDM=
+Ps7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F=
+0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UhHIcEcKPxt2=
+Ptk1hhhr4q4xzSpj8ddJ1-2B4uMVSea6rN9Qd59lKqIUyvwDPT1ZQrspncv62pOcmNweLukdntF=
+6cNKYDa5NcnvC7AqoDctly2BwpUM1W0ravhnf7-2BlAj6EFkhViAzuWZ3Uew8eSMHtoU-3D" st=
+yle=3D"text-decoration:none;color:rgb(109, 109, 109);border:none;margin:0px=
+;padding:0px;font-weight:bold">unsubscribe</a> or <a class=3D"footer-link" =
+href=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJT=
+Fa6A8G4kw-2BSko4523wXOjl2gjSkKPrzTUfJRiZgHv-2BFNdkvdEtenuHd34FR2XpLAA22-2Fs=
+cujww-3D-3D-8LC_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1=
+JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2Bzimn=
+TMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZT=
+qWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXW=
+OLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQ=
+m6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFe=
+jmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbG=
+z2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6Z=
+BuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Z=
+y-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052UpZT1XYTlXh-2FVLdxq-2BmVdk1i=
+jvNGU4sy1V6Qb9Tiatc9NfoMSO0yhGnX7J-2Fb0rmghGUESHaCtQGFK3vdWDGQuNBvU-2F86-2F=
+wbG1ST3T4Vf8OFtw6T2R6JesPknt7PkINa90e-2BVGi814X3eRDuLnA4CsDE-3D" style=3D"t=
+ext-decoration:none;color:rgb(109, 109, 109);border:none;margin:0px;padding=
+:0px;font-weight:bold">manage your settings</a>.</span>
+</td>
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px;height:33px">
+    <td colspan=3D"3" style=3D"border:none;padding:8.25px;margin:0;height:3=
+3px"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px">
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+    <td class=3D"font font-small" style=3D'border:none;padding:0;margin:0;f=
+ont-family:"circular", "helvetica neue", "helvetica", "arial", sans-serif;f=
+ont-weight:400;line-height:1.65em;letter-spacing:0.15px;font-size:11px;text=
+-decoration:none;color:#88898c'>
+<a class=3D"footer-separated-text" href=3D"https://clicks.artists.spotify.c=
+om/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kwzTP9J5MjLzLS0GBE9DkjbAd5MUUm8Un=
+x2ifI7KIzC5BImUMBH1Yhf1ZOItnPAL-2F3Q-3D-3DfxQk_HdTNCtZoRKLpwgC0oJa0lvYAqySc=
+hF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeO=
+FSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC=
+-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2=
+BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4=
+aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT04=
+2Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRr=
+QCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cD=
+YiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk=
+0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS=
+052Uvf0zSq7taREuY8JBhPyhq0ZtKQau1mBHEFk980GjU6-2B6BTrJieR-2BNyp54MVsExlF4vX=
+dhAF-2FdIDypOBnR0vWn11LcX2UfFcOrQ3Ymm-2BFEh-2BUl1jI6TU0c4pabIFyOtuj21b4Vkc3=
+k15Bl1zcgM9kDg-3D" style=3D"text-decoration:none;color:#6d6d6d;display:inli=
+ne-block;font-weight:700">Terms of Use</a><span style=3D"border:none;paddin=
+g:4px 0;margin:0 7px;width:1px;border-left:solid 1px #c3c3c3;border-right:s=
+olid 1px transparent">=C2=A0</span><a class=3D"footer-separated-text" href=
+=3D"https://clicks.artists.spotify.com/ls/click?upn=3Du001.sHr8UTRaQhJTFa6A=
+8G4kwzTP9J5MjLzLS0GBE9DkjbBGA81YXr38sX1OZdeqOy6RcsoT6vNA2Mcsmqa4VTxpow-3D-3=
+DWY4r_HdTNCtZoRKLpwgC0oJa0lvYAqySchF2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0jun=
+GGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFSfZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGub=
+WEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfG=
+jgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfE=
+E1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aES73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlS=
+keTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042Wm-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5=
+f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQCSm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq=
+-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYiBsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduG=
+mWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA=
+24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS052Ug-2BZVXmOhckOm1lwGquWl7oYST2fxQ8DLZc4=
+F0aq9BS4hCdZ7wPfzC2HVSez8a7cSeRRcdCpQ57Bx6UCBVjEB2qKJhp3gUUUbwJDN705-2BmoBg=
+6UQr-2BPLG-2Bqze5ha49Kib4XdSCwXZ2Ykf-2Buy2xC5ooQ-3D" style=3D"text-decorati=
+on:none;color:#6d6d6d;display:inline-block;font-weight:700">Privacy Policy<=
+/a><span style=3D"border:none;padding:4px 0;margin:0 7px;width:1px;border-l=
+eft:solid 1px #c3c3c3;border-right:solid 1px transparent">=C2=A0</span><a c=
+lass=3D"footer-separated-text" href=3D"https://clicks.artists.spotify.com/l=
+s/click?upn=3Du001.sHr8UTRaQhJTFa6A8G4kwzTP9J5MjLzLS0GBE9DkjbDAeJ9clWzSdYEA=
+gb7-2Fbabk-2BSGtfS2MR26wElpY3YQ9YQ-3D-3DBy4k_HdTNCtZoRKLpwgC0oJa0lvYAqySchF=
+2ZXMaO-2FoiKXpW4foWmwG-2FvTq1JwwYrQ0junGGWNTCCLixJqQfLvpe-2BAoHX6cJ7eFDeOFS=
+fZteu1RuvyL2Bkwl57aR0r-2BzimnTMma-2FGubWEjUIVaAwcZKYrfmXG4mDKbx-2BVCet3UC-2=
+Bsws8FlgsJ-2FVc-2FIZhZtDFwHZTqWBLrHSHfGjgJP1uFV7owrVCYt86XS97OG4BCPVyhb-2BB=
+4414-2Fw0dSuqSsWg-2BEsbH-2BXWOLADscyvfEE1bNBPLlZnJgMzDqLRlmaQ-2B5Bqk4AKN4aE=
+S73U8IVY8UJzn1CPCRePWWBuQ0cMQm6MQDSOqlSkeTPzzlOTnbhsNVXOWIFKh27ivjX9AFT042W=
+m-2BZT1vh9n1E22kgxf8cO2hqZlFejmeaF1D3m5f1RPeZUBO9XNnIqMP24zx482AQkjgewMRrQC=
+Sm-2BselASIx4H5TRxZmUWh6WopbGz2us0wmPpq-2FR60boruINrU6IQ54Oby7KbBrFMBR2cDYi=
+BsM8B6SwNndDMPs7uJ6-2FTkALW6ZBuQOPvGduGmWTx87LO06tjHnf079tLhEb3TsteyTiQdk0e=
+-2FHz0N4Gm-2F0x7gioOyKg76uI6Zy-2FBVg3FA24v50uiu-2B-2BD11wLbDqoh9oqhKdsRgS05=
+2Ugd5CXiY-2BedgyUN1-2Bo1d0PXyvYElBpe8DUancbwHMIuUfc972yW3Wbz-2BLoI4GYCAjd7N=
+f0hKEoFfSXf10FrgvYiNvnwlZmCHxRvn2dFE2j3H0xFBh31So25Bi5IxOxM1Bl-2BZXMDgCe2vs=
+d-2BR2-2F5-2BqeI-3D" style=3D"text-decoration:none;color:#6d6d6d;display:in=
+line-block;font-weight:700">Contact Us</a>
+</td>
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px;height:12px">
+    <td colspan=3D"3" style=3D"border:none;padding:3px;margin:0;height:12px=
+"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px">
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+    <td class=3D"font font-small" style=3D'border:none;padding:0;margin:0;f=
+ont-family:"circular", "helvetica neue", "helvetica", "arial", sans-serif;f=
+ont-weight:400;line-height:1.65em;letter-spacing:0.15px;font-size:11px;text=
+-decoration:none;color:#88898c'>Spotify AB, Regeringsgatan 19, 111 53, Stoc=
+kholm, Sweden</td>
+    <td style=3D"border:none;padding:0;margin:0;width:6.25%"></td>
+  </tr>
+  <tr style=3D"border:none;margin:0px;padding:0px;height:25px">
+    <td colspan=3D"3" style=3D"border:none;padding:6.25px;margin:0;height:2=
+5px"></td>
+  </tr>
+  </tbody>
+</table>
+
+</div></td></tr></table></td></tr></tbody></table></td></tr></tbody></table=
+>
+</td></tr></tbody></table>
+<!-- End -->
+<img src=3D"https://clicks.artists.spotify.com/wf/open?upn=3Du001.-2BP-2Ber=
+9OUJP1xHfZqy3PC2DZtBm5SIDdpetkdW-2FgZVQb5CGvMhLhkLhndYIeHDWKnt0lWYwZJYL9O7G=
+pL6wDkxgaLf9ZotUxziwssijDy9vedT1W3FCC265u-2B8RoYqPjGzpzt6c7GT86pvQw59PWeiPC=
+v1h-2F7MJqC8gabmSfqlcUygN7ktcbwBKeszgrTjiyEgt3JFHAY5JLjeeL9xzZSIFXyjz3Vp-2F=
+fZyCdGLK6nDCVnq6VeNdXvCeJQl4EeViPImzOsnTHJtjhLuUgCQgK-2BguqaySlIx069d-2BrCY=
+vzd13bHyG42iqn96ILeWe8owttNFenxAP2nMB47wi6vYn-2BexKHSt1jjtNuMAE7n-2BFTX-2F5=
+lTclGZCQC6wp3MoAvZx5Rl7zJpZChNtQuMwU6qnhcOkZyZjx6wZjgVGeImb0an8gc8EjEWF76M-=
+2Be8MC8LbzvVYhJ1A2gRECxCvGsBDVEEFX2P7mCXmL8DYML-2BzBCrkF5fvt2AL7W6jKlCxwvxD=
+NfUpjYVon6Va6bh4LmARfsDvpTTlyGjTNC95anzs0kXAZ042sgKFZLkwL11m3WGljDLbX7Dk9iu=
+eYQ0l5cGYad6QiCa9cGmWMexhCIu1mgttCe8-2F0hWqOPstjtvxfvWETFnDfhaAIV7jLauJY3vb=
+HiugQ9FPfnCatdziYgZ1tbGt1moletS4JeEZt8atg53PupLgzB1m-2FmUgWaEGDy4irA87qoM7x=
+t-2F-2BbKJ11M6529ISZt4M2IQ93bOxMID-2Fbrp0-2BCyiSOCXjTJnmLSRl43PdjsMvNMI5Wcd=
+n9wbPq4DQKdvvK8-3D" alt=3D"" width=3D"1" height=3D"1" border=3D"0" style=3D=
+"height:1px !important;width:1px !important;border-width:0 !important;margi=
+n-top:0 !important;margin-bottom:0 !important;margin-right:0 !important;mar=
+gin-left:0 !important;padding-top:0 !important;padding-bottom:0 !important;=
+padding-right:0 !important;padding-left:0 !important;"/></body>
+</html>
+
+--8fce43694ee341b3d93d37a56b1e868a197de8305f5230a4401c4f03bfe2--

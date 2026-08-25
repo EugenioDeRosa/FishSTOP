@@ -1,0 +1,2343 @@
+Delivered-To: micaela.mamini.ext@cefla.it
+Received: by 2002:ab3:7408:0:b0:301:50b:626f with SMTP id o8csp278174lte;
+        Tue, 12 May 2026 03:59:54 -0700 (PDT)
+X-Received: by 2002:a2e:880d:0:b0:393:b138:34ac with SMTP id 38308e7fff4ca-3943865ecacmr6441281fa.10.1778583594081;
+        Tue, 12 May 2026 03:59:54 -0700 (PDT)
+ARC-Seal: i=2; a=rsa-sha256; t=1778583594; cv=pass;
+        d=google.com; s=arc-20240605;
+        b=luTHVpCGeY1wvvczM/nHg6LB+rqWFiznGl+z3kVMf6dL5G4I41tWKHVnl7a9D3L925
+         34ApXvpFglJaZBqjKCMuoS8BcNud10CQt2bqoS82KjSsJh2o7CJ+C+6/zglqIqInyfX2
+         a2fvCVo+2yCcAjx6kKPErq3+6dJf3ste+rgmZejo1shDwQ3bbaeYVzdFX52JXPes+a7I
+         +wUlHlP2uR+yVOtB/NZEcjnbIrzVD4yl09QlvqTdojgPUsScKhAzOf2HyU5RGBI7xoXO
+         z2PlCCKKlnR/srVGv0uH5pwbXHZnV/bWv1v1efDx876DNPCuNnIdQhFWbmSIuQA6wP8K
+         Wulw==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=ewr4qFNV6p6UstDzSGxXeknjdVJLyr3Pl6evucmSaRQ=;
+        fh=gbS0NCBQoC5K/Y3iB+jlZpyYVRP38srCoeeh6RuuAOw=;
+        b=KbFX+J2kOQtzWmNzb4B67+yOGCAGlDwJAinkiZa+rbtELbSkRJwrvWVXw+TbHQRUV+
+         CQ4hJGxKP8qszail4w1zd5K35wNyrQUM+ZUeq27KPDqgJm0CuzxWQoIwxxUqyOpueszM
+         bx3dsd1bRzk5jAwH83lJ47yAuypLWdcVyXvldSoDq7T8JrVeqntifQp1m2sFsVXEHGmN
+         38M0giFlWDu//vzRzceP0yLK0wpveE2FtPSM1dQuZaB4fsvnEDe6EmX7J3CXi0F9/Zie
+         gjKPiJugkXgCwTF5z8vvgplU+IPO/1n6x2+vie62voDHoyHmqaqXJ9hx5R0Vh1nTdgXk
+         fdJA==;
+        dara=google.com
+ARC-Authentication-Results: i=2; mx.google.com;
+       dkim=pass header.i=@cefla.it header.s=google header.b=BOuk5Unh;
+       arc=pass (i=1);
+       spf=pass (google.com: domain of vincenzo.degaetano@cefla.it designates 209.85.220.41 as permitted sender) smtp.mailfrom=vincenzo.degaetano@cefla.it;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=cefla.it;
+       dara=fail header.i=@cefla.it
+Return-Path: <vincenzo.degaetano@cefla.it>
+Received: from mail-sor-f41.google.com (mail-sor-f41.google.com. [209.85.220.41])
+        by mx.google.com with SMTPS id 38308e7fff4ca-394081488d9sor14472581fa.7.2026.05.12.03.59.53
+        for <micaela.mamini.ext@cefla.it>
+        (Google Transport Security);
+        Tue, 12 May 2026 03:59:54 -0700 (PDT)
+Received-SPF: pass (google.com: domain of vincenzo.degaetano@cefla.it designates 209.85.220.41 as permitted sender) client-ip=209.85.220.41;
+Authentication-Results: mx.google.com;
+       dkim=pass header.i=@cefla.it header.s=google header.b=BOuk5Unh;
+       arc=pass (i=1);
+       spf=pass (google.com: domain of vincenzo.degaetano@cefla.it designates 209.85.220.41 as permitted sender) smtp.mailfrom=vincenzo.degaetano@cefla.it;
+       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=cefla.it;
+       dara=fail header.i=@cefla.it
+ARC-Seal: i=1; a=rsa-sha256; t=1778583593; cv=none;
+        d=google.com; s=arc-20240605;
+        b=E5Ts0B7pOSv02NshmmZkUQg3/g5kkYgPhbMg2Ryn4mWz0JhrCpS/ncx96jdWD4kS0f
+         Bekj71hQnzIaNDjTNERjmTjekrOvhN0rqHg96FS1kInFZm8PHyM8yj3ehd1c7pxHMTVm
+         VVBHN4fVF3BfUNUtjZyv14TtOtmHdCmec7HiSJvdPbI47j4jWUTteRmYkYn8JIE9WUBO
+         RuxNfbtgoskQ0R0iylt6LDlhyy4+zPTfT14wlGHp1ENysOxrmQnFUPNWBIN/ZnmFGzkk
+         zQnY/6OxuWWpiaHqbbRGxMXVlvbToWw6/BsKxA2XUsnZ/TXEDmHba27s5FO1N4S9ra1k
+         vkzQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20240605;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :dkim-signature;
+        bh=ewr4qFNV6p6UstDzSGxXeknjdVJLyr3Pl6evucmSaRQ=;
+        fh=gbS0NCBQoC5K/Y3iB+jlZpyYVRP38srCoeeh6RuuAOw=;
+        b=B0DgU1ZJUuD4OhV/xHC542+ZmHQVJpWYaXrgyxerTfDJeaId+pZ6OuFlYamgdZDQap
+         8qNnSFehOsbaf6ZP42+ZnHwRF1pF9XIo8axJVHyxaOAz0K6Eye2QLPqwti/ItgZIemAn
+         kPrBkrohY3piLXbOsnMqkhZ0UgZQcCo9ll+tHTgx1g81E0atyW+bJyyQ2F6rJFvQfoNC
+         R7fEpdX1Vu4E1jScxwgKlrojmLZGoUmsODzWyfVxR+PHOcKJFIE1EL5ZK8ZnEZttPd03
+         Sy7+LEuzjr02QLtN66kVWT62iG3bbc7V3uHuqIseir2DcsAL3quE6cHQ+DWbVgTSdBuf
+         2+mA==;
+        darn=cefla.it
+ARC-Authentication-Results: i=1; mx.google.com; arc=none
+DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=cefla.it; s=google; t=1778583593; x=1779188393; darn=cefla.it;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :from:to:cc:subject:date:message-id:reply-to;
+        bh=ewr4qFNV6p6UstDzSGxXeknjdVJLyr3Pl6evucmSaRQ=;
+        b=BOuk5UnhC08fTHhjcVs8lEaCld7e/rV6EXhxSA00A8CHeu5uuQPdTECJSBhUjayQpY
+         MLqryeZW/eF0WCX/P34nlcxpDF9AjbakEKQFQnU8JHxswRtmR4z9TrWaxKddrwXW6YlS
+         CLqn13CK0rdSkzx6v4QEIhGRiaELc6V8SaQp0=
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1778583593; x=1779188393;
+        h=to:subject:message-id:date:from:in-reply-to:references:mime-version
+         :x-gm-gg:x-gm-message-state:from:to:cc:subject:date:message-id
+         :reply-to;
+        bh=ewr4qFNV6p6UstDzSGxXeknjdVJLyr3Pl6evucmSaRQ=;
+        b=RDrxj91EdWwfBXlM2qckxVgXEu3Y57mC2TjsS8ykZnFsTagoKccrCgUNqftfiyyq/B
+         kactfeHSOf8VNMUOyh35s93O8PS2dsA+xH5LPPk2YDWOGT38RzOTzWLpqkSEIsmx+vrQ
+         ezxu7DqGFli8gqp+v1a2Ogk9SDSkrbNQDK/YrXRYFPAcJ1ztBGaUKprWn/bSXK+S/uKb
+         LdPMvo0FnTZ9pvgGhz5UamigMYzmU7/WPz58ho+R4ZaNrjvLwY5oTBXpZj0F/pe+qWO/
+         2vihI3apxNDbxkAFkUlmTUqFM8s5UgsIgYrw0Tt5UAhIVCQXxXuQ4savHEF3ZE2mKjKB
+         5pVw==
+X-Gm-Message-State: AOJu0YwU1SvMGi7Dt5s55vyfx9ranMXd9psgPIGJm5viyyo2Dtp6mmdv
+	g+PGTzWEgtdxoQcn9W49JHWjUnDxbPeXRM9GZVBfdpNrR+HuUyPmzmdwIeS49K8A3JEcmG/B9Ip
+	/s2fHheewVAb85LJKt9EbszsQvYN7fa3Nkt0VSv/gXNIzXF5Z8X/53iM=
+X-Gm-Gg: Acq92OHtAXmScKL9VJTyc0+dkkY4/TWfLvEeUWJnEnIBh1lPGQjDDqL2D4GqiMB4Hpx
+	2yFl29PsKbRBIuCOmiqZux1Q4LgtD5cJmqXYT/6Jn294OguYLjSexgIAZ+N1aEY7MKm1PPvQKgp
+	6+kzNv9vdz+TSkdBYjdgZzsAX/0EoJaUZFsyi2SO5bGhLB9Tv4ksQKAANuKOIcZ6hPgy9DBg4nU
+	C8Jk6ToCvG3GzmB7FIDbBLvjFgOgctS42F7byVf2tFgNGgAehqyh484OPQCK2fs7XXi3RqWMRh5
+	hZFb/NI/
+X-Received: by 2002:a05:651c:3252:b0:38b:f0f0:e39b with SMTP id
+ 38308e7fff4ca-3943861a19bmr11371741fa.10.1778583592860; Tue, 12 May 2026
+ 03:59:52 -0700 (PDT)
+MIME-Version: 1.0
+References: <002a01dc5e04$f53e1940$dfba4bc0$@bucoclinics.com>
+ <CADRXHVAYOFLHN8o6za_VddXDKsdjiNzBEYnRs5e_SZmfOvAbng@mail.gmail.com>
+ <00fa01dc62ae$7d912cd0$78b38670$@bucoclinics.com> <CADRXHVDHUmBSg-gXVVJqYEUmRTHbPU9Vb0m3CwRG+qM9+veyRQ@mail.gmail.com>
+ <016701dc6eae$079a2660$16ce7320$@bucoclinics.com> <CADRXHVC90DUewC4VtJoN6FVuBGWMp2ge7MH5t0NrxfwZjwqCQA@mail.gmail.com>
+ <007101dcb77d$35cec2d0$a16c4870$@bucoclinics.com> <CADRXHVCy2v7P5jR3MMeNdJ+7EGpL1wQvsnO8vWNTE4odDEC-Pg@mail.gmail.com>
+ <CADRXHVCnD5O=j8R04QpbCuJ4qCAZ3zdtjkGuC8haXwBpT5T9sg@mail.gmail.com>
+ <00f101dcbd0e$58b80900$0a281b00$@bucoclinics.com> <CADRXHVCzh1R7b7b3_Toxt-P6c57nVM2pMiX0bTBCsPzV=WYDcg@mail.gmail.com>
+ <02b101dccbe4$185b7060$49125120$@bucoclinics.com> <CADRXHVBj3jBDPmy9XjiziieSExqr+gVFrAO=SESvUs=nmmNHKA@mail.gmail.com>
+ <04d401dcccc7$f4c917d0$de5b4770$@bucoclinics.com> <CADRXHVBAHwWoLUp937=C2P35rYxYAu_k6ZzyMU9Qdn_FGJRHGA@mail.gmail.com>
+ <CADRXHVBMP5QmhFxATdV80Ecev_OUZZO122v9nRZfDYtw7y43TA@mail.gmail.com>
+ <CAKunqUE85Qhx61ZEdccYDX3bWwb+emW-CB8VH4G2vxOQkt9A9w@mail.gmail.com>
+ <0571a15604cfc74159b6452728f0c4be@cefla.it> <0d9f01dce1f4$b733d710$259b8530$@bucoclinics.com>
+ <effc499cb655e51971dd0628e4a09a89@cefla.it> <134b01dce1fd$e8074bc0$b815e340$@bucoclinics.com>
+In-Reply-To: <134b01dce1fd$e8074bc0$b815e340$@bucoclinics.com>
+From: "Degaetano, Vincenzo" <vincenzo.degaetano@cefla.it>
+Date: Tue, 12 May 2026 12:59:39 +0200
+X-Gm-Features: AVHnY4JMhZbX8tTmiNiYdhNSsqmG4NaDe0umvLJQRpA442W1qq6J2nA7GCT-kJw
+Message-ID: <CALNDqNBw3yB+2SDJDfMJp8pVPn9=JqfYioJf=3ReRZm-3_NRfw@mail.gmail.com>
+Subject: Fwd: recogida de pedido
+To: Micaela Mamini <micaela.mamini.ext@cefla.it>
+Content-Type: multipart/alternative; boundary="000000000000418c4706519cc398"
+
+--000000000000418c4706519cc398
+Content-Type: text/plain; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+??????
+
+
+Vincenzo Degaetano
+Area Manager
+Business Unit Medical Equipment
+Email: vincenzo.degaetano@cefla.it
+Mob. +39 366 963 16 51
+
+---------- Forwarded message ---------
+Da: <contabilidad@bucoclinics.com>
+Date: Mar 12 Mag 2026, 12:56
+Subject: RV: recogida de pedido
+To: Degaetano, Vincenzo <vincenzo.degaetano@cefla.it>
+
+
+Este es el email que he recibo vuestro.
+
+
+
+*De:* Mamini, Micaela <micaela.mamini.ext@cefla.it>
+*Enviado el:* martes, 12 de mayo de 2026 12:32
+*Para:* contabilidad@bucoclinics.com
+*Asunto:* RE: recogida de pedido
+
+
+
+Buenos d=C3=ADas Araceli,
+
+Aqu=C3=AD est=C3=A1 la cuenta bancaria:
+
+
+
+*Caixa Geral*
+
+*IBAN: PT50 0035 0701 0000 8660 9300 8*
+
+*BIC: CGDIPTPL*
+
+
+Enviar=C3=A9 la informaci=C3=B3n solicitada tan pronto como recibamos el co=
+mprobante
+de pago.
+
+Espero su pronta respuesta
+
+
+
+
+
+Saludos,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+
+
+Marted=C3=AC 12 maggio 2026 alle 10:51 <contabilidad@bucoclinics.com> ha sc=
+ritto:
+
+Buenos d=C3=ADas
+
+Micaela me puedes facilitar el numero de cuenta para hacer la transferencia
+
+Un saludo
+
+
+
+*De:* Mamini, Micaela <micaela.mamini.ext@cefla.it>
+*Enviado el:* lunes, 11 de mayo de 2026 9:43
+*Para:* contabilidad@bucoclinics.com
+*Asunto:* RE: recogida de pedido
+
+
+
+Buenos d=C3=ADas Araceli:
+
+
+
+
+
+Espero que mi correo anterior le encuentre bien.
+
+
+
+Por favor, espero su confirmaci=C3=B3n para poder facilitarle nuestra cuent=
+a
+bancaria actualizada y as=C3=AD poder proceder con el env=C3=ADo de sus nue=
+vos
+pedidos.
+
+
+
+Quedo a la espera de su respuesta.
+
+
+
+Saludos,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+Venerd=C3=AC 8 maggio 2026 alle 15:42 Mamini, Micaela <
+micaela.mamini.ext@cefla.it> ha scritto:
+
+Buenas tardes Araceli:
+
+
+
+espero que est=C3=A9 muy bien.
+
+
+
+Aqu=C3=AD est=C3=A0 el resumen de los pedidos y de los importes
+
+
+
+pedidos:
+
+26432529 -  EUR 10.970 listo
+
+26434711 - EUR 12.271 listo el 15/05
+26434736 - EUR 7.938  listo el 15/05
+26434770 - EUR 11.479 listo el 15/05
+26434818 - EUR 9.413 listo el 15/05
+
+
+
+facturas en vuestro estado de cuenta:
+
+26342427 - 3.464,40 eur
+26343283 - 7.441,20 eur
+26343584 - 31.693,20 eur
+26343840 - 1.034,70 eur
+
+
+
+credito comercial: 30.000 eur
+
+
+
+Para proceder con el env=C3=ADo de los pedidos, le solicitamos que realice =
+el
+pago de 65.704,50 eur para quedar por debajo del l=C3=ADmite de cr=C3=A9dit=
+o
+comercial.
+
+
+
+Quedo a vuestra disposici=C3=B3n
+
+
+
+Saludos,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+Il giorno gio 7 mag 2026 alle ore 13:31 <contabilidad@bucoclinics.com> ha
+scritto:
+
+Buenas tardes
+
+Espero te encuentres bien
+
+Me puedes verificar las fechas de salida de los equipos pendiente y m=C3=A1=
+ndame
+la tasaci=C3=B3n para el transporte
+
+Un saludo
+
+
+
+*De:* Mamini, Micaela <micaela.mamini.ext@cefla.it>
+*Enviado el:* jueves, 30 de abril de 2026 15:33
+*Para:* contabilidad@bucoclinics.com
+*Asunto:* Re: recogida de pedido
+
+
+
+Hola Araceli:
+
+
+
+Espero que est=C3=A9s muy bien.
+
+
+
+Aqu=C3=AD hay los documentos relativos a esta recogida
+
+
+
+
+
+Saludos,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+
+
+
+Il giorno lun 20 apr 2026 alle ore 16:19 Mamini, Micaela <
+micaela.mamini.ext@cefla.it> ha scritto:
+
+Buenas tardes Araceli:
+
+
+
+Espero que est=C3=A9 muy bien.
+
+
+
+Aqu=C3=AD est=C3=A0n los detalles de los bultos relativo a los
+pedidos 26427932+26429243
+
+
+
+Quedo a disposici=C3=B3n
+
+
+
+Saludos,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+
+
+
+Il giorno mer 15 apr 2026 alle ore 13:06 <contabilidad@bucoclinics.com> ha
+scritto:
+
+Buenas tarde valentina.
+
+
+
+Aqu=C3=AD te adjunto lo que me solicitas.
+
+
+
+   - Vuestra orden N=C2=BA 26422377 de nuestro pedido de fecha 27-02-2026
+   PAP26/00029
+
+
+
+   - Vuestra orden N=C2=BA 26427932 de nuestro pedido de fecha 23-03-2026
+   PAP26/00034
+
+
+
+
+
+   - Vuestra orden N=C2=BA 26429243 de nuestro pedido de fecha 26-03-2026
+   PAP26/00040
+
+
+
+Estos son los equipos pendientes de recoger el 30/04/2026
+
+Un saludo.
+
+
+
+*De:* valentina.porfirio@cefla.it <valentina.porfirio@cefla.it> *En nombre
+de *Mamini, Micaela
+*Enviado el:* martes, 14 de abril de 2026 13:36
+*Para:* contabilidad@bucoclinics.com
+*Asunto:* Re: recogida de pedido
+
+
+
+Buenas tardes,
+
+por favor, pueden decirme nuestro numero de pedido?
+
+gracias
+
+Valentina
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+
+
+
+Il giorno mar 14 apr 2026 alle ore 09:55 <contabilidad@bucoclinics.com> ha
+scritto:
+
+Buenos d=C3=ADas
+
+Micaela me puedes pasar las medidas y peso del pedido que sale para ultimo
+de este mes para que me lo puedan tasar el transporte.
+
+Un saludo.
+
+
+
+*De:* Mamini, Micaela <micaela.mamini.ext@cefla.it>
+*Enviado el:* viernes, 27 de marzo de 2026 8:49
+*Para:* contabilidad@bucoclinics.com
+*Asunto:* Re: recogida de pedido
+
+
+
+Buenos dias Araceli y feliz viernes!
+
+
+
+Aqu=C3=AD est=C3=A0n los documentos relativos a esta recogida
+
+
+
+
+
+Atentamente,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+
+
+
+Il giorno gio 26 mar 2026 alle ore 11:50 <contabilidad@bucoclinics.com> ha
+scritto:
+
+Buenos d=C3=ADas.
+
+Me confirman la empresa de transportes  que se ponen en contacto contigo
+
+Un saludo
+
+
+
+*De:* Mamini, Micaela <micaela.mamini.ext@cefla.it>
+*Enviado el:* mi=C3=A9rcoles, 25 de marzo de 2026 16:23
+*Para:* contabilidad@bucoclinics.com
+*Asunto:* Re: recogida de pedido
+
+
+
+Buenas tardes Araceli,
+
+
+
+Espero que est=C3=A9 muy bien.
+
+
+
+Quedo a la espera de ser contactada por vuestro transportador para
+organizar el env=C3=ADo de vuestro pedido
+
+26421466
+
+
+Saludos,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+
+
+
+Il giorno gio 19 mar 2026 alle ore 11:14 Mamini, Micaela <
+micaela.mamini.ext@cefla.it> ha scritto:
+
+Buenos dias Araceli:
+
+
+
+Espero que est=C3=A9 muy bien.
+
+
+
+Aqu=C3=AD esta=C3=A0n los detalles de los bultos del pedido oc 26421466 lis=
+to el 23/03
+
+
+
+Quedo a disposici=C3=B3n
+
+
+
+Atentamente,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Commercial Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+
+
+
+Il giorno gio 19 mar 2026 alle ore 09:48 <contabilidad@bucoclinics.com> ha
+scritto:
+
+Buenos d=C3=ADas
+
+Micaela la tasaci=C3=B3n que me has dado es del pedido que tiene que salir =
+el
+d=C3=ADa 22-04-2026
+
+Necesito la que sale el d=C3=ADa 20-03-2026
+
+Un saludo
+
+Araceli caballero
+
+
+
+*De:* Mamini, Micaela <micaela.mamini.ext@cefla.it>
+*Enviado el:* jueves, 18 de diciembre de 2025 17:44
+*Para:* contabilidad@bucoclinics.com
+*Asunto:* Re: Modificaci=C3=B3n PEDIDOS
+
+
+
+Estimado Francisco:
+
+
+
+Espero que est=C3=A9 muy bien.
+
+
+
+Aqu=C3=AD est=C3=A1n los pedidos revisados.
+
+
+
+Por favor, comprueba bien
+
+
+
+Atentamente,
+
+*La nostra azienda sar=C3=A0 chiusa per festivit=C3=A0 Natalizie dal 23/12/=
+2025 al
+06/01/2026 inclusi *
+
+*Our company will be closed for Christmas holidays from 23/12/2025 till
+06/01/2026 included*
+
+
+
+
+
+*Micaela Mamini*
+
+*Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | www.ceflamedicalequipment.com
+
+*Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15*
+
+*Friday 08:15 - 12:30 and 13:30 - 16:00*
+
+
+
+
+
+
+
+
+
+
+
+Il giorno mar 16 dic 2025 alle ore 18:04 <contabilidad@bucoclinics.com> ha
+scritto:
+
+Buenas tardes Micaela.
+
+
+
+Referente a los pedidos OC 25475618 y OC 25475627. Ha habido un cambio por
+el cliente del color de las tapicer=C3=ADas tanto de los equipos como de lo=
+s
+taburetes.
+
+
+
+Por favor sustituir las siguientes referencias: * 772Q6121* TAPIZADO A 121
+GRIS ANTR.
+
+
+*77301121* TAPIZADO TAB. 7 SKAI121 GR. A
+
+
+
+*Por las siguientes. REF: 772Q6113 BLUE PACIFIC*
+
+*                                  REF: 77301113 BLUE PACIFIC*
+
+
+
+Un cordial saludo
+
+
+
+*Francisco Leiva*
+
+
+
+*PROYECTOS BUCOLINICS SL*
+
+SOLUCIONES PARA PROFESIONALES
+
+_______________________
+
+
+
+C/ Alcaide de los Donceles 36
+<https://www.g0ogle.com/maps/search/C%2F+Alcaide+de+los+Donceles+36?entry=
+=3Dgmail&source=3Dg>
+/40
+
+14009 C=C3=B3rdoba
+
+Tel. 957 050 110 / 744 463 997
+
+*www.bucolinics.com <http://www.bucolinics.com/>*
+
+*info@bucoclinics.com <info@bucoclinics.com>*
+
+
+
+
+
+
+
+
+
+
+
+*De:* Mamini, Micaela <micaela.mamini.ext@cefla.it>
+*Enviado el:* lunes, 1 de diciembre de 2025 13:42
+*Para:* contabilidad@bucoclinics.com
+*Asunto:* Re: PEDIDOS
+
+
+
+Estimados:
+
+
+
+Envi=C3=A9 las confirmaciones esta ma=C3=B1ana.
+
+
+
+Adjunto nuevamente los pedidos.
+
+
+
+OC 25475618 listo el dia 19/01
+
+OC 25475627 listo el dia 19/12
+
+
+
+Atentamente,
+
+
+
+
+
+
+
+*Micaela Mamini*
+
+*Customer Service Specialist*
+
+Business Unit *Medical Equipment*
+
+Tel. +39 0542 65 4040
+
+Short Code: 4040
+
+www.cefla.com | <http://www.ceflamedicalequipment.com>
+
+--000000000000418c4706519cc398
+Content-Type: text/html; charset="UTF-8"
+Content-Transfer-Encoding: quoted-printable
+
+<div dir=3D"auto"><div><br></div><div>??????</div><div dir=3D"auto"><br></d=
+iv><div dir=3D"auto"><br></div><div data-smartmail=3D"gmail_signature">Vinc=
+enzo Degaetano<br>Area Manager=C2=A0<br>Business Unit=C2=A0Medical Equipmen=
+t<br>Email:=C2=A0<a href=3D"mailto:vincenzo.degaetano@cefla.it">vincenzo.de=
+gaetano@cefla.it</a><br>Mob. +39 366 963 16 51</div></div><br><div class=3D=
+"gmail_quote gmail_quote_container"><div dir=3D"ltr" class=3D"gmail_attr">-=
+--------- Forwarded message ---------<br>Da: <span dir=3D"auto">&lt;<a href=
+=3D"mailto:contabilidad@bucoclinics.com">contabilidad@bucoclinics.com</a>&g=
+t;</span><br>Date: Mar 12 Mag 2026, 12:56<br>Subject: RV: recogida de pedid=
+o<br>To: Degaetano, Vincenzo &lt;<a href=3D"mailto:vincenzo.degaetano@cefla=
+.it">vincenzo.degaetano@cefla.it</a>&gt;<br></div><br><br><div lang=3D"ES" =
+link=3D"blue" vlink=3D"purple" style=3D"word-wrap:break-word"><div class=3D=
+"m_-4003148145577474361WordSection1"><p class=3D"MsoNormal"><span style=3D"=
+font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Este es el ema=
+il que he recibo vuestro.<u></u><u></u></span></p><p class=3D"MsoNormal"><s=
+pan style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif"><=
+u></u>=C2=A0<u></u></span></p><div><div style=3D"border:none;border-top:sol=
+id #e1e1e1 1.0pt;padding:3.0pt 0cm 0cm 0cm"><p class=3D"MsoNormal"><b><span=
+ style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">De:<=
+/span></b><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,s=
+ans-serif"> Mamini, Micaela &lt;<a href=3D"mailto:micaela.mamini.ext@cefla.=
+it" target=3D"_blank" rel=3D"noreferrer">micaela.mamini.ext@cefla.it</a>&gt=
+; <br><b>Enviado el:</b> martes, 12 de mayo de 2026 12:32<br><b>Para:</b> <=
+a href=3D"mailto:contabilidad@bucoclinics.com" target=3D"_blank" rel=3D"nor=
+eferrer">contabilidad@bucoclinics.com</a><br><b>Asunto:</b> RE: recogida de=
+ pedido<u></u><u></u></span></p></div></div><p class=3D"MsoNormal"><u></u>=
+=C2=A0<u></u></p><div id=3D"m_-4003148145577474361editbody1"><div><p class=
+=3D"MsoNormal"><span style=3D"font-size:11.0pt;font-family:&quot;Arial&quot=
+;,sans-serif;color:#111111;background:#f7f7f7">Buenos d=C3=ADas </span><spa=
+n style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif;colo=
+r:#111111;background:#f7f7f7">Araceli</span><span style=3D"font-size:11.0pt=
+;font-family:&quot;Arial&quot;,sans-serif;color:#111111;background:#f7f7f7"=
+>, </span><span style=3D"font-size:13.5pt;font-family:&quot;Arial&quot;,san=
+s-serif;color:#111111"><br><br></span><span style=3D"font-size:11.0pt;font-=
+family:&quot;Arial&quot;,sans-serif;color:#111111;background:#f7f7f7">Aqu=
+=C3=AD est=C3=A1 la cuenta bancaria:</span><span style=3D"font-size:10.0pt;=
+font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p></div>=
+<div><p class=3D"MsoNormal"><span style=3D"font-size:11.0pt;font-family:&qu=
+ot;Arial&quot;,sans-serif">=C2=A0</span><span style=3D"font-size:10.0pt;fon=
+t-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p></div><di=
+v><div><p class=3D"MsoNormal"><strong><span style=3D"font-size:14.0pt;font-=
+family:&quot;Arial&quot;,sans-serif">Caixa Geral</span></strong><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u>=
+</u></span></p></div><div><p class=3D"MsoNormal"><strong><span style=3D"fon=
+t-size:14.0pt;font-family:&quot;Arial&quot;,sans-serif">IBAN: PT50 0035 070=
+1 0000 8660 9300 8</span></strong><span style=3D"font-size:10.0pt;font-fami=
+ly:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p></div><div><p c=
+lass=3D"MsoNormal"><strong><span style=3D"font-size:14.0pt;font-family:&quo=
+t;Arial&quot;,sans-serif">BIC: CGDIPTPL</span></strong><span style=3D"font-=
+size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></spa=
+n></p></div><p class=3D"MsoNormal"><span style=3D"font-size:13.5pt;font-fam=
+ily:&quot;Arial&quot;,sans-serif;color:#111111"><br></span><span style=3D"f=
+ont-size:11.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#111111;back=
+ground:#f7f7f7">Enviar=C3=A9 la informaci=C3=B3n solicitada tan pronto como=
+ recibamos el comprobante de pago. </span><span style=3D"font-size:13.5pt;f=
+ont-family:&quot;Arial&quot;,sans-serif;color:#111111"><br><br></span><span=
+ style=3D"font-size:11.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#=
+111111;background:#f7f7f7">Espero su pronta respuesta</span><span style=3D"=
+font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u>=
+</span></p><div><p class=3D"MsoNormal"><span style=3D"font-size:11.0pt;font=
+-family:&quot;Arial&quot;,sans-serif">=C2=A0</span><span style=3D"font-size=
+:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></=
+p></div><div><p class=3D"MsoNormal"><span style=3D"font-size:11.0pt;font-fa=
+mily:&quot;Arial&quot;,sans-serif">=C2=A0</span><span style=3D"font-size:10=
+.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><=
+/div><div><div><p class=3D"m_-4003148145577474361v1msonormal"><span style=
+=3D"font-size:11.0pt;font-family:&quot;Arial&quot;,sans-serif">Saludos,=C2=
+=A0</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,s=
+ans-serif"><u></u><u></u></span></p></div><div><div><div><p style=3D"margin=
+:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-=
+serif">=C2=A0<u></u><u></u></span></p><table border=3D"0" cellspacing=3D"0"=
+ cellpadding=3D"0" style=3D"border-collapse:collapse;border:currentcolor"><=
+tr style=3D"height:92.25pt"><td valign=3D"top" style=3D"padding:5.0pt 5.0pt=
+ 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"margin:0cm">=C2=A0=
+<u></u><u></u></p><p class=3D"m_-4003148145577474361v1msonormal"><img width=
+=3D"95" height=3D"84" style=3D"width:.9895in;height:.875in" id=3D"m_-400314=
+8145577474361_x0000_i1056" src=3D"https://lh3.googleusercontent.com/cSQ0uyP=
+m2WVdKd0MTNbzE-HWI7TMvXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamBrOsTFy=
+5s5NGXu5IwvHnJXIqcJ0rbPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDfOeOgE6=
+Q7Zk_avvTIYc_5VH8Q6ctxMOQlRVmIsXQ"><u></u><u></u></p><table border=3D"0" ce=
+llspacing=3D"0" cellpadding=3D"0" style=3D"border-collapse:collapse;border:=
+currentcolor"><tr style=3D"height:64.5pt"><td valign=3D"top" style=3D"paddi=
+ng:5.0pt 5.0pt 5.0pt 5.0pt;height:64.5pt;overflow:hidden"><p style=3D"margi=
+n:0cm"><span style=3D"font-size:8.0pt;font-family:Roboto;color:#212121">=C2=
+=A0</span><u></u><u></u></p></td></tr></table></td><td valign=3D"top" style=
+=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p styl=
+e=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;=
+Arial&quot;,sans-serif;color:#333333">Micaela Mamini</span></strong><u></u>=
+<u></u></p><p style=3D"margin:0cm"><em><span style=3D"font-size:10.0pt;font=
+-family:&quot;Arial&quot;,sans-serif;color:#333333">Commercial Customer Ser=
+vice Specialist</span></em><u></u><u></u></p><p style=3D"margin:0cm"><span =
+style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#3=
+33333">Business Unit <strong><span style=3D"font-family:&quot;Arial&quot;,s=
+ans-serif">Medical Equipment</span></strong></span><u></u><u></u></p><p sty=
+le=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&q=
+uot;,sans-serif;color:#333333">Tel. +39 0542 65 4040</span><u></u><u></u></=
+p><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot=
+;Arial&quot;,sans-serif;color:#333333">Short Code: 4040</span><u></u><u></u=
+></p><p style=3D"margin:0cm"><a href=3D"http://www.cefla.com/" target=3D"_b=
+lank" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;=
+Arial&quot;,sans-serif;color:#551a8b">www.cefla.com</span></a><span style=
+=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333=
+"> | </span><a href=3D"http://www.ceflamedicalequipment.com" target=3D"_bla=
+nk" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Ar=
+ial&quot;,sans-serif;color:#551a8b">www.ceflamedicalequipment.com</span></a=
+><u></u><u></u></p><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p></td></t=
+r><tr style=3D"height:39.0pt"><td colspan=3D"2" valign=3D"top" style=3D"pad=
+ding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p style=3D"mar=
+gin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&qu=
+ot;,sans-serif;color:#333333">Monday - Thursday 08:15 - 12:30 and 13:30 - 1=
+7:15</span></strong><u></u><u></u></p><p style=3D"margin:0cm"><strong><span=
+ style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#=
+333333">Friday 08:15 - 12:30 and 13:30 - 16:00</span></strong><u></u><u></u=
+></p><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p></td><td valign=3D"top=
+" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><=
+p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u><u></u></p></td>=
+<td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;o=
+verflow:hidden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u=
+><u></u></p></td></tr></table></div></div></div><p class=3D"m_-400314814557=
+7474361v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verda=
+na&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><p class=3D"=
+MsoNormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,=
+sans-serif"><br>Marted=C3=AC 12 maggio 2026 alle 10:51 &lt;<a href=3D"mailt=
+o:contabilidad@bucoclinics.com" target=3D"_blank" rel=3D"noreferrer">contab=
+ilidad@bucoclinics.com</a>&gt; ha scritto:<u></u><u></u></span></p><div><di=
+v><div><blockquote style=3D"border:none;border-left:solid #1010ff 1.5pt;pad=
+ding:0cm 0cm 0cm 5.0pt;margin-left:0cm;margin-right:0cm"><p class=3D"m_-400=
+3148145577474361v1msonormal"><span style=3D"font-size:11.0pt;font-family:&q=
+uot;Calibri&quot;,sans-serif">Buenos d=C3=ADas</span><span style=3D"font-si=
+ze:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span>=
+</p><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size=
+:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Micaela me puedes facil=
+itar el numero de cuenta para hacer la transferencia</span><span style=3D"f=
+ont-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u><=
+/span></p><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"fon=
+t-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Un saludo</span><=
+span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=
+<u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1msonormal"><sp=
+an style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">=
+=C2=A0</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot=
+;,sans-serif"><u></u><u></u></span></p><div><div style=3D"border:none;borde=
+r-top:solid #e1e1e1 1.0pt;padding:3.0pt 0cm 0cm 0cm"><p class=3D"m_-4003148=
+145577474361v1msonormal"><strong><span style=3D"font-size:11.0pt;font-famil=
+y:&quot;Calibri&quot;,sans-serif">De:</span></strong><span style=3D"font-si=
+ze:11.0pt;font-family:&quot;Calibri&quot;,sans-serif"> Mamini, Micaela &lt;=
+<a href=3D"mailto:micaela.mamini.ext@cefla.it" target=3D"_blank" rel=3D"nor=
+eferrer">micaela.mamini.ext@cefla.it</a>&gt; <br><strong><span style=3D"fon=
+t-family:&quot;Calibri&quot;,sans-serif">Enviado el:</span></strong> lunes,=
+ 11 de mayo de 2026 9:43<br><strong><span style=3D"font-family:&quot;Calibr=
+i&quot;,sans-serif">Para:</span></strong> <a href=3D"mailto:contabilidad@bu=
+coclinics.com" target=3D"_blank" rel=3D"noreferrer">contabilidad@bucoclinic=
+s.com</a><br><strong><span style=3D"font-family:&quot;Calibri&quot;,sans-se=
+rif">Asunto:</span></strong> RE: recogida de pedido</span><span style=3D"fo=
+nt-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></=
+span></p></div></div><p class=3D"m_-4003148145577474361v1msonormal"><span s=
+tyle=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0=
+<u></u><u></u></span></p></blockquote><div id=3D"m_-4003148145577474361v1m_=
+-5000984130389264087editbody1"><div><blockquote style=3D"border:none;border=
+-left:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin-left:0cm;margin-=
+right:0cm"><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"fo=
+nt-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Buenos d=C3=ADas=
+ Araceli: <u></u><u></u></span></p></blockquote><div><div><div><blockquote =
+style=3D"border:none;border-left:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.=
+0pt;margin-left:0cm;margin-right:0cm"><div><div><p class=3D"m_-400314814557=
+7474361v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verda=
+na&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><p class=3D"=
+m_-4003148145577474361v1msonormal"><span style=3D"font-size:10.0pt;font-fam=
+ily:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><d=
+iv><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size:=
+10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Espero que mi correo ant=
+erior le encuentre bien.<u></u><u></u></span></p></div><div><p class=3D"m_-=
+4003148145577474361v1msonormal"><span style=3D"font-size:10.0pt;font-family=
+:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div>=
+<p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size:10.=
+0pt;font-family:&quot;Verdana&quot;,sans-serif">Por favor, espero su confir=
+maci=C3=B3n para poder facilitarle nuestra cuenta bancaria actualizada y as=
+=C3=AD poder proceder con el env=C3=ADo de sus nuevos pedidos.<u></u><u></u=
+></span></p></div><div><p class=3D"m_-4003148145577474361v1msonormal"><span=
+ style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=
+=A0<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1=
+msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,=
+sans-serif">Quedo a la espera de su respuesta.<u></u><u></u></span></p></di=
+v></div><div><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"=
+font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><=
+u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1msonormal">=
+<span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"=
+>Saludos,=C2=A0<u></u><u></u></span></p></div><div><div><div><p style=3D"ma=
+rgin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,s=
+ans-serif">=C2=A0<u></u><u></u></span></p><table border=3D"0" cellspacing=
+=3D"0" cellpadding=3D"0" style=3D"border-collapse:collapse;border:currentco=
+lor"><tr style=3D"height:92.25pt"><td valign=3D"top" style=3D"padding:5.0pt=
+ 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"margin:0cm">=
+=C2=A0<u></u><u></u></p><p class=3D"m_-4003148145577474361v1msonormal"><img=
+ border=3D"0" width=3D"95" height=3D"84" style=3D"width:.9895in;height:.875=
+in" id=3D"m_-4003148145577474361_x0000_i1055" src=3D"https://lh3.googleuser=
+content.com/cSQ0uyPm2WVdKd0MTNbzE-HWI7TMvXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrM=
+cOnO7MwWoPamBrOsTFy5s5NGXu5IwvHnJXIqcJ0rbPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v=
+7ack5IKY8hkDfOeOgE6Q7Zk_avvTIYc_5VH8Q6ctxMOQlRVmIsXQ"><u></u><u></u></p><ta=
+ble border=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"border-collap=
+se:collapse;border:currentcolor"><tr style=3D"height:64.5pt"><td valign=3D"=
+top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:64.5pt;overflow:hidden=
+"><p style=3D"margin:0cm"><span style=3D"font-size:8.0pt;font-family:Roboto=
+;color:#212121">=C2=A0</span><u></u><u></u></p></td></tr></table></td><td v=
+align=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overf=
+low:hidden"><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt=
+;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Micaela Mamini</sp=
+an></strong><u></u><u></u></p><p style=3D"margin:0cm"><em><span style=3D"fo=
+nt-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Comm=
+ercial Customer Service Specialist</span></em><u></u><u></u></p><p style=3D=
+"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,=
+sans-serif;color:#333333">Business Unit <strong><span style=3D"font-family:=
+&quot;Arial&quot;,sans-serif">Medical Equipment</span></strong></span><u></=
+u><u></u></p><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-f=
+amily:&quot;Arial&quot;,sans-serif;color:#333333">Tel. +39 0542 65 4040</sp=
+an><u></u><u></u></p><p style=3D"margin:0cm"><span style=3D"font-size:10.0p=
+t;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Short Code: 4040<=
+/span><u></u><u></u></p><p style=3D"margin:0cm"><a href=3D"http://www.cefla=
+.com/" target=3D"_blank" rel=3D"noreferrer"><span style=3D"font-size:10.0pt=
+;font-family:&quot;Arial&quot;,sans-serif;color:#551a8b">www.cefla.com</spa=
+n></a><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-se=
+rif;color:#333333"> | </span><a href=3D"http://www.ceflamedicalequipment.co=
+m" target=3D"_blank" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;fon=
+t-family:&quot;Arial&quot;,sans-serif;color:#551a8b">www.ceflamedicalequipm=
+ent.com</span></a><u></u><u></u></p><p style=3D"margin:0cm">=C2=A0<u></u><u=
+></u></p></td></tr><tr style=3D"height:39.0pt"><td colspan=3D"2" valign=3D"=
+top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden=
+"><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-fami=
+ly:&quot;Arial&quot;,sans-serif;color:#333333">Monday - Thursday 08:15 - 12=
+:30 and 13:30 - 17:15</span></strong><u></u><u></u></p><p style=3D"margin:0=
+cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,s=
+ans-serif;color:#333333">Friday 08:15 - 12:30 and 13:30 - 16:00</span></str=
+ong><u></u><u></u></p><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p></td>=
+<td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;o=
+verflow:hidden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u=
+><u></u></p></td><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0p=
+t;height:39.0pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1msonor=
+mal">=C2=A0<u></u><u></u></p></td></tr></table></div></div></div><p class=
+=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size:10.0pt;font=
+-family:&quot;Verdana&quot;,sans-serif"><br>Venerd=C3=AC 8 maggio 2026 alle=
+ 15:42 Mamini, Micaela &lt;<a href=3D"mailto:micaela.mamini.ext@cefla.it" t=
+arget=3D"_blank" rel=3D"noreferrer">micaela.mamini.ext@cefla.it</a>&gt; ha =
+scritto:<u></u><u></u></span></p></blockquote><div><blockquote style=3D"bor=
+der:none;border-left:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin-l=
+eft:0cm;margin-right:0cm"><div><blockquote style=3D"border:none;border-left=
+:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin-left:0cm;margin-top:5=
+.0pt;margin-right:0cm;margin-bottom:5.0pt"><div><p class=3D"m_-400314814557=
+7474361v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verda=
+na&quot;,sans-serif">Buenas tardes Araceli:<u></u><u></u></span></p></div><=
+div><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size=
+:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></s=
+pan></p></div><div><p class=3D"m_-4003148145577474361v1msonormal"><span sty=
+le=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">espero q=
+ue est=C3=A9 muy bien.<u></u><u></u></span></p></div><div><p class=3D"m_-40=
+03148145577474361v1msonormal"><span style=3D"font-size:10.0pt;font-family:&=
+quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><p=
+ class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size:10.0p=
+t;font-family:&quot;Verdana&quot;,sans-serif">Aqu=C3=AD est=C3=A0 el resume=
+n de los pedidos y de los importes=C2=A0<u></u><u></u></span></p></div><div=
+><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size:10=
+.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span=
+></p></div><div><p class=3D"m_-4003148145577474361v1msonormal"><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">pedidos:=
+=C2=A0<u></u><u></u></span></p></div><div><p class=3D"m_-400314814557747436=
+1v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quo=
+t;,sans-serif">26432529 -=C2=A0 EUR 10.970 listo<u></u><u></u></span></p></=
+div><div><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font=
+-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">26434711 - EUR 12.=
+271 listo el 15/05<br>26434736 - EUR 7.938=C2=A0 listo el 15/05<br>26434770=
+ - EUR 11.479 listo el 15/05<br>26434818 - EUR 9.413 listo el 15/05<u></u><=
+u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1msonormal">=
+<span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"=
+>=C2=A0<u></u><u></u></span></p></div><div><p class=3D"m_-40031481455774743=
+61v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&qu=
+ot;,sans-serif">facturas en vuestro estado de cuenta:<u></u><u></u></span><=
+/p></div><div><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D=
+"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">26342427 - 3.=
+464,40 eur<br>26343283 -=C2=A07.441,20 eur<br>26343584 -=C2=A031.693,20 eur=
+<br>26343840 -=C2=A01.034,70 eur<u></u><u></u></span></p></div><div><p clas=
+s=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size:10.0pt;fon=
+t-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></d=
+iv><div><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-=
+size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">credito comercial: =
+30.000 eur<u></u><u></u></span></p></div><div><p class=3D"m_-40031481455774=
+74361v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana=
+&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><p class=3D"m_=
+-4003148145577474361v1msonormal"><span style=3D"font-size:10.0pt;font-famil=
+y:&quot;Verdana&quot;,sans-serif">Para proceder con el env=C3=ADo de los pe=
+didos, le solicitamos que realice el pago de 65.704,50 eur para quedar por =
+debajo del l=C3=ADmite de cr=C3=A9dito comercial.<u></u><u></u></span></p><=
+/div><div><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"fon=
+t-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u><=
+/u></span></p></div><div><p class=3D"m_-4003148145577474361v1msonormal"><sp=
+an style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Qu=
+edo a vuestra disposici=C3=B3n<u></u><u></u></span></p></div><div><p class=
+=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size:10.0pt;font=
+-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></di=
+v><div><p class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-s=
+ize:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Saludos,=C2=A0<u></u=
+><u></u></span></p></div><div><div><div><p style=3D"margin:0cm"><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u><=
+/u><u></u></span></p><table border=3D"0" cellspacing=3D"0" cellpadding=3D"0=
+" style=3D"border-collapse:collapse;border:currentcolor"><tr style=3D"heigh=
+t:92.25pt"><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;heig=
+ht:92.25pt;overflow:hidden"><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p=
+><p class=3D"m_-4003148145577474361v1msonormal"><img border=3D"0" width=3D"=
+95" height=3D"84" style=3D"width:.9895in;height:.875in" id=3D"m_-4003148145=
+577474361_x0000_i1054" src=3D"https://lh3.googleusercontent.com/cSQ0uyPm2WV=
+dKd0MTNbzE-HWI7TMvXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamBrOsTFy5s5N=
+GXu5IwvHnJXIqcJ0rbPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDfOeOgE6Q7Zk=
+_avvTIYc_5VH8Q6ctxMOQlRVmIsXQ"><u></u><u></u></p><table border=3D"0" cellsp=
+acing=3D"0" cellpadding=3D"0" style=3D"border-collapse:collapse;border:curr=
+entcolor"><tr style=3D"height:64.5pt"><td valign=3D"top" style=3D"padding:5=
+.0pt 5.0pt 5.0pt 5.0pt;height:64.5pt;overflow:hidden"><p style=3D"margin:0c=
+m"><span style=3D"font-size:8.0pt;font-family:Roboto;color:#212121">=C2=A0<=
+/span><u></u><u></u></p></td></tr></table></td><td valign=3D"top" style=3D"=
+padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D=
+"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Aria=
+l&quot;,sans-serif;color:#333333">Micaela Mamini</span></strong><u></u><u><=
+/u></p><p style=3D"margin:0cm"><em><span style=3D"font-size:10.0pt;font-fam=
+ily:&quot;Arial&quot;,sans-serif;color:#333333">Commercial Customer Service=
+ Specialist</span></em><u></u><u></u></p><p style=3D"margin:0cm"><span styl=
+e=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#33333=
+3">Business Unit <strong><span style=3D"font-family:&quot;Arial&quot;,sans-=
+serif">Medical Equipment</span></strong></span><u></u><u></u></p><p style=
+=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quo=
+t;,sans-serif;color:#333333">Tel. +39 0542 65 4040</span><u></u><u></u></p>=
+<p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;A=
+rial&quot;,sans-serif;color:#333333">Short Code: 4040</span><u></u><u></u><=
+/p><p style=3D"margin:0cm"><a href=3D"http://www.cefla.com/" target=3D"_bla=
+nk" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Ar=
+ial&quot;,sans-serif;color:#551a8b">www.cefla.com</span></a><span style=3D"=
+font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333"> |=
+ </span><a href=3D"http://www.ceflamedicalequipment.com" target=3D"_blank" =
+rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&=
+quot;,sans-serif;color:#551a8b">www.ceflamedicalequipment.com</span></a><u>=
+</u><u></u></p><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p></td></tr><t=
+r style=3D"height:39.0pt"><td colspan=3D"2" valign=3D"top" style=3D"padding=
+:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p style=3D"margin:=
+0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,=
+sans-serif;color:#333333">Monday - Thursday 08:15 - 12:30 and 13:30 - 17:15=
+</span></strong><u></u><u></u></p><p style=3D"margin:0cm"><strong><span sty=
+le=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#3333=
+33">Friday 08:15 - 12:30 and 13:30 - 16:00</span></strong><u></u><u></u></p=
+><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p></td><td valign=3D"top" st=
+yle=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p cl=
+ass=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u><u></u></p></td><td =
+valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overf=
+low:hidden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u><u>=
+</u></p></td></tr></table></div></div></div></blockquote></div></blockquote=
+><blockquote style=3D"border:none;border-left:solid #1010ff 1.5pt;padding:0=
+cm 0cm 0cm 5.0pt;margin-left:0cm;margin-top:5.0pt;margin-right:0cm;margin-b=
+ottom:5.0pt"><div><blockquote style=3D"border:none;border-left:solid #1010f=
+f 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin-left:0cm;margin-right:0cm"><div><p=
+ class=3D"m_-4003148145577474361v1msonormal"><span style=3D"font-size:10.0p=
+t;font-family:&quot;Verdana&quot;,sans-serif">Il giorno gio 7 mag 2026 alle=
+ ore 13:31 &lt;<a href=3D"mailto:contabilidad@bucoclinics.com" target=3D"_b=
+lank" rel=3D"noreferrer">contabilidad@bucoclinics.com</a>&gt; ha scritto:<u=
+></u><u></u></span></p></div></blockquote><blockquote style=3D"border:none;=
+border-left:solid #cccccc 1.0pt;padding:0cm 0cm 0cm 6.0pt;margin-left:4.8pt=
+;margin-top:5.0pt;margin-right:0cm;margin-bottom:5.0pt"><div><div><div><blo=
+ckquote style=3D"border:none;border-left:solid #1010ff 1.5pt;padding:0cm 0c=
+m 0cm 5.0pt;margin-left:0cm;margin-right:0cm"><p class=3D"m_-40031481455774=
+74361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0pt;fo=
+nt-family:&quot;Calibri&quot;,sans-serif">Buenas tardes</span><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u>=
+</u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1m=
+sonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,s=
+ans-serif">Espero te encuentres bien</span><span style=3D"font-size:10.0pt;=
+font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p cla=
+ss=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=
+=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Me puedes =
+verificar las fechas de salida de los equipos pendiente y m=C3=A1ndame la t=
+asaci=C3=B3n para el transporte</span><span style=3D"font-size:10.0pt;font-=
+family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D=
+"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"f=
+ont-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Un saludo</span=
+><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif=
+"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130=
+389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Cal=
+ibri&quot;,sans-serif">=C2=A0</span><span style=3D"font-size:10.0pt;font-fa=
+mily:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><div style=3D=
+"border:none;border-top:solid windowtext 1.0pt;padding:3.0pt 0cm 0cm 0cm;bo=
+rder-color:currentcolor currentcolor"><p class=3D"m_-4003148145577474361v1m=
+-5000984130389264087v1msonormal"><strong><span style=3D"font-size:11.0pt;fo=
+nt-family:&quot;Calibri&quot;,sans-serif">De:</span></strong><span style=3D=
+"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif"> Mamini, Mica=
+ela &lt;<a href=3D"mailto:micaela.mamini.ext@cefla.it" target=3D"_blank" re=
+l=3D"noreferrer">micaela.mamini.ext@cefla.it</a>&gt; <br><strong><span styl=
+e=3D"font-family:&quot;Calibri&quot;,sans-serif">Enviado el:</span></strong=
+> jueves, 30 de abril de 2026 15:33<br><strong><span style=3D"font-family:&=
+quot;Calibri&quot;,sans-serif">Para:</span></strong> <a href=3D"mailto:cont=
+abilidad@bucoclinics.com" target=3D"_blank" rel=3D"noreferrer">contabilidad=
+@bucoclinics.com</a><br><strong><span style=3D"font-family:&quot;Calibri&qu=
+ot;,sans-serif">Asunto:</span></strong> Re: recogida de pedido</span><span =
+style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></=
+u><u></u></span></p></div><p class=3D"m_-4003148145577474361v1m-50009841303=
+89264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verd=
+ana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p><div><div><p class=3D"=
+m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"fo=
+nt-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Hola Araceli:<u>=
+</u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-5000=
+984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&qu=
+ot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><p c=
+lass=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span sty=
+le=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Espero q=
+ue est=C3=A9s muy bien.<u></u><u></u></span></p></div><div><p class=3D"m_-4=
+003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-s=
+ize:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u>=
+</span></p></div><div><p class=3D"m_-4003148145577474361v1m-500098413038926=
+4087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&=
+quot;,sans-serif">Aqu=C3=AD=C2=A0hay los documentos relativos a esta recogi=
+da<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m=
+-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-famil=
+y:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div=
+><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><spa=
+n style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=
+=A0<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1=
+m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-fami=
+ly:&quot;Verdana&quot;,sans-serif">Saludos,=C2=A0<u></u><u></u></span></p><=
+/div><div><div><div><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt=
+;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p=
+><table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"border-co=
+llapse:collapse"><tr style=3D"height:92.25pt"><td valign=3D"top" style=3D"p=
+adding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"=
+margin:0cm">=C2=A0<u></u><u></u></p><p class=3D"m_-4003148145577474361v1m-5=
+000984130389264087v1msonormal"><img border=3D"0" width=3D"95" height=3D"84"=
+ style=3D"width:.9895in;height:.875in" id=3D"m_-4003148145577474361_x0000_i=
+1053" src=3D"https://lh3.googleusercontent.com/cSQ0uyPm2WVdKd0MTNbzE-HWI7TM=
+vXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamBrOsTFy5s5NGXu5IwvHnJXIqcJ0r=
+bPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDfOeOgE6Q7Zk_avvTIYc_5VH8Q6ct=
+xMOQlRVmIsXQ"><u></u><u></u></p><table border=3D"0" cellspacing=3D"0" cellp=
+adding=3D"0" style=3D"border-collapse:collapse"><tr style=3D"height:64.5pt"=
+><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:64.5pt;=
+overflow:hidden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></=
+u><u></u></p></td></tr></table></td><td valign=3D"top" style=3D"padding:5.0=
+pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"margin:0cm=
+"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,san=
+s-serif;color:#333333">Micaela Mamini</span></strong><u></u><u></u></p><p s=
+tyle=3D"margin:0cm"><em><span style=3D"font-size:10.0pt;font-family:&quot;A=
+rial&quot;,sans-serif;color:#333333">Commercial Customer Service Specialist=
+</span></em><u></u><u></u></p><p style=3D"margin:0cm"><span style=3D"font-s=
+ize:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Business=
+ Unit <strong><span style=3D"font-family:&quot;Arial&quot;,sans-serif">Medi=
+cal Equipment</span></strong></span><u></u><u></u></p><p style=3D"margin:0c=
+m"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif=
+;color:#333333">Tel. +39 0542 65 4040</span><u></u><u></u></p><p style=3D"m=
+argin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sa=
+ns-serif;color:#333333">Short Code: 4040</span><u></u><u></u></p><p style=
+=3D"margin:0cm"><a href=3D"http://www.cefla.com/" target=3D"_blank" rel=3D"=
+noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,s=
+ans-serif;color:#551a8b">www.cefla.com</span></a><span style=3D"font-size:1=
+0.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333"> | </span><a =
+href=3D"http://www.ceflamedicalequipment.com" target=3D"_blank" rel=3D"nore=
+ferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-=
+serif;color:#551a8b">www.ceflamedicalequipment.com</span></a><u></u><u></u>=
+</p></td></tr><tr style=3D"height:39.0pt"><td colspan=3D"2" valign=3D"top" =
+style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p =
+style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&q=
+uot;Arial&quot;,sans-serif;color:#333333">Monday - Thursday 08:15 - 12:30 a=
+nd 13:30 - 17:15</span></strong><u></u><u></u></p><p style=3D"margin:0cm"><=
+strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-s=
+erif;color:#333333">Friday 08:15 - 12:30 and 13:30 - 16:00</span></strong><=
+u></u><u></u></p></td><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt=
+ 5.0pt;height:39.0pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1m=
+-5000984130389264087v1msonormal">=C2=A0<u></u><u></u></p></td><td valign=3D=
+"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidde=
+n"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u><u></u></p><=
+/td></tr></table><p class=3D"m_-4003148145577474361v1m-5000984130389264087v=
+1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;=
+,sans-serif">=C2=A0<u></u><u></u></span></p></div></div></div><p class=3D"m=
+_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"fon=
+t-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u><=
+/u></span></p></div><p class=3D"m_-4003148145577474361v1m-50009841303892640=
+87v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&qu=
+ot;,sans-serif">=C2=A0<u></u><u></u></span></p></blockquote><div><blockquot=
+e style=3D"border:none;border-left:solid #1010ff 1.5pt;padding:0cm 0cm 0cm =
+5.0pt;margin-left:0cm;margin-right:0cm"><div><p class=3D"m_-400314814557747=
+4361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;fon=
+t-family:&quot;Verdana&quot;,sans-serif">Il giorno lun 20 apr 2026 alle ore=
+ 16:19 Mamini, Micaela &lt;<a href=3D"mailto:micaela.mamini.ext@cefla.it" t=
+arget=3D"_blank" rel=3D"noreferrer">micaela.mamini.ext@cefla.it</a>&gt; ha =
+scritto:<u></u><u></u></span></p></div></blockquote><blockquote style=3D"bo=
+rder:none;border-left:solid windowtext 1.0pt;padding:0cm 0cm 0cm 6.0pt;marg=
+in-left:4.8pt;margin-top:5.0pt;margin-right:0cm;margin-bottom:5.0pt;border-=
+color:currentcolor currentcolor currentcolor #cccccc"><div><div><p class=3D=
+"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"f=
+ont-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Buenas tardes A=
+raceli:<u></u><u></u></span></p></div><div><p class=3D"m_-40031481455774743=
+61v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-=
+family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div=
+><div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"=
+><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif=
+">Espero que est=C3=A9 muy bien.<u></u><u></u></span></p></div><div><p clas=
+s=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u><=
+/u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-50009=
+84130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quo=
+t;Verdana&quot;,sans-serif">Aqu=C3=AD est=C3=A0n=C2=A0los detalles de los b=
+ultos relativo a los pedidos=C2=A026427932+26429243<u></u><u></u></span></p=
+></div><div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1mson=
+ormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans=
+-serif">=C2=A0<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145=
+577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0p=
+t;font-family:&quot;Verdana&quot;,sans-serif">Quedo a disposici=C3=B3n<u></=
+u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-500098=
+4130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot=
+;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><p cla=
+ss=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Saludos,=
+=C2=A0<u></u><u></u></span></p></div><div><div><div><p style=3D"margin:0cm"=
+><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif=
+">=C2=A0<u></u><u></u></span></p><table border=3D"0" cellspacing=3D"0" cell=
+padding=3D"0" style=3D"border-collapse:collapse;border-color:currentcolor">=
+<tr style=3D"height:92.25pt"><td valign=3D"top" style=3D"padding:5.0pt 5.0p=
+t 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"margin:0cm">=C2=
+=A0<u></u><u></u></p><p class=3D"m_-4003148145577474361v1m-5000984130389264=
+087v1msonormal"><img border=3D"0" width=3D"95" height=3D"84" style=3D"width=
+:.9895in;height:.875in" id=3D"m_-4003148145577474361_x0000_i1052" src=3D"ht=
+tps://lh3.googleusercontent.com/cSQ0uyPm2WVdKd0MTNbzE-HWI7TMvXMO2ycNHJuivbK=
+BJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamBrOsTFy5s5NGXu5IwvHnJXIqcJ0rbPmLgRQOUqe-mLh=
+4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDfOeOgE6Q7Zk_avvTIYc_5VH8Q6ctxMOQlRVmIsXQ"><=
+u></u><u></u></p><table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" st=
+yle=3D"border-collapse:collapse;border-color:currentcolor"><tr style=3D"hei=
+ght:64.5pt"><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;hei=
+ght:64.5pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1msonormal">=
+=C2=A0<u></u><u></u></p></td></tr></table></td><td valign=3D"top" style=3D"=
+padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D=
+"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Aria=
+l&quot;,sans-serif;color:#333333">Micaela Mamini</span></strong><u></u><u><=
+/u></p><p style=3D"margin:0cm"><em><span style=3D"font-size:10.0pt;font-fam=
+ily:&quot;Arial&quot;,sans-serif;color:#333333">Commercial Customer Service=
+ Specialist</span></em><u></u><u></u></p><p style=3D"margin:0cm"><span styl=
+e=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#33333=
+3">Business Unit <strong><span style=3D"font-family:&quot;Arial&quot;,sans-=
+serif">Medical Equipment</span></strong></span><u></u><u></u></p><p style=
+=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quo=
+t;,sans-serif;color:#333333">Tel. +39 0542 65 4040</span><u></u><u></u></p>=
+<p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;A=
+rial&quot;,sans-serif;color:#333333">Short Code: 4040</span><u></u><u></u><=
+/p><p style=3D"margin:0cm"><a href=3D"http://www.cefla.com/" target=3D"_bla=
+nk" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Ar=
+ial&quot;,sans-serif;color:#551a8b">www.cefla.com</span></a><span style=3D"=
+font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333"> |=
+ </span><a href=3D"http://www.ceflamedicalequipment.com" target=3D"_blank" =
+rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&=
+quot;,sans-serif;color:#551a8b">www.ceflamedicalequipment.com</span></a><u>=
+</u><u></u></p></td></tr><tr style=3D"height:39.0pt"><td colspan=3D"2" vali=
+gn=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:=
+hidden"><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;fon=
+t-family:&quot;Arial&quot;,sans-serif;color:#333333">Monday - Thursday 08:1=
+5 - 12:30 and 13:30 - 17:15</span></strong><u></u><u></u></p><p style=3D"ma=
+rgin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&q=
+uot;,sans-serif;color:#333333">Friday 08:15 - 12:30 and 13:30 - 16:00</span=
+></strong><u></u><u></u></p></td><td valign=3D"top" style=3D"padding:5.0pt =
+5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p class=3D"m_-40031481455=
+77474361v1m-5000984130389264087v1msonormal">=C2=A0<u></u><u></u></p></td><t=
+d valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;ove=
+rflow:hidden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u><=
+u></u></p></td></tr></table><p class=3D"m_-4003148145577474361v1m-500098413=
+0389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Ve=
+rdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div></div></div><p=
+ class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span s=
+tyle=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0=
+<u></u><u></u></span></p></div><p class=3D"m_-4003148145577474361v1m-500098=
+4130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot=
+;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p><div><blockquote =
+style=3D"border:none;border-left:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.=
+0pt;margin-left:0cm;margin-right:0cm"><div><p class=3D"m_-40031481455774743=
+61v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-=
+family:&quot;Verdana&quot;,sans-serif">Il giorno mer 15 apr 2026 alle ore 1=
+3:06 &lt;<a href=3D"mailto:contabilidad@bucoclinics.com" target=3D"_blank" =
+rel=3D"noreferrer">contabilidad@bucoclinics.com</a>&gt; ha scritto:<u></u><=
+u></u></span></p></div></blockquote><blockquote style=3D"border:none;border=
+-left:solid windowtext 1.0pt;padding:0cm 0cm 0cm 6.0pt;margin-left:4.8pt;ma=
+rgin-top:5.0pt;margin-right:0cm;margin-bottom:5.0pt;border-color:currentcol=
+or currentcolor currentcolor #cccccc"><div><div><div><blockquote style=3D"b=
+order:none;border-left:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin=
+-left:0cm;margin-right:0cm"><p class=3D"m_-4003148145577474361v1m-500098413=
+0389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Ca=
+libri&quot;,sans-serif">Buenas tarde valentina.</span><span style=3D"font-s=
+ize:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span=
+></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal">=
+<span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif"=
+>=C2=A0</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quo=
+t;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v=
+1m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0pt;font-fam=
+ily:&quot;Calibri&quot;,sans-serif">Aqu=C3=AD te adjunto lo que me solicita=
+s.</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sa=
+ns-serif"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-50=
+00984130389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&=
+quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=3D"font-size:10.0pt=
+;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><ul t=
+ype=3D"disc"><li class=3D"m_-4003148145577474361v1m-5000984130389264087v1ms=
+onormal"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sa=
+ns-serif">Vuestra orden N=C2=BA 26422377 de nuestro pedido de fecha 27-02-2=
+026 PAP26/00029</span><span style=3D"font-size:10.0pt;font-family:&quot;Ver=
+dana&quot;,sans-serif"><u></u><u></u></span></li></ul><p class=3D"m_-400314=
+8145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:1=
+1.0pt;font-family:&quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u>=
+</u></span></p><ul type=3D"disc"><li class=3D"m_-4003148145577474361v1m-500=
+0984130389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&q=
+uot;Calibri&quot;,sans-serif">Vuestra orden N=C2=BA 26427932 de nuestro ped=
+ido de fecha 23-03-2026 PAP26/00034</span><span style=3D"font-size:10.0pt;f=
+ont-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></li></ul><=
+p><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-seri=
+f">=C2=A0</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&q=
+uot;,sans-serif"><u></u><u></u></span></p><p><span style=3D"font-size:11.0p=
+t;font-family:&quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=3D"f=
+ont-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u><=
+/span></p><ul type=3D"disc"><li class=3D"m_-4003148145577474361v1m-50009841=
+30389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;C=
+alibri&quot;,sans-serif">Vuestra orden N=C2=BA 26429243 de nuestro pedido d=
+e fecha 26-03-2026 PAP26/00040</span><span style=3D"font-size:10.0pt;font-f=
+amily:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></li></ul><p><sp=
+an style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">=
+=C2=A0</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot=
+;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1=
+m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0pt;font-fami=
+ly:&quot;Calibri&quot;,sans-serif">Estos son los equipos pendientes de reco=
+ger el 30/04/2026</span><span style=3D"font-size:10.0pt;font-family:&quot;V=
+erdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-4003148145=
+577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0p=
+t;font-family:&quot;Calibri&quot;,sans-serif">Un saludo.</span><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u>=
+</u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1m=
+sonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,s=
+ans-serif">=C2=A0</span><span style=3D"font-size:10.0pt;font-family:&quot;V=
+erdana&quot;,sans-serif"><u></u><u></u></span></p><div style=3D"border:none=
+;border-top:solid windowtext 1.0pt;padding:3.0pt 0cm 0cm 0cm;border-color:c=
+urrentcolor"><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1mso=
+normal"><strong><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&q=
+uot;,sans-serif">De:</span></strong><span style=3D"font-size:11.0pt;font-fa=
+mily:&quot;Calibri&quot;,sans-serif"> <a href=3D"mailto:valentina.porfirio@=
+cefla.it" target=3D"_blank" rel=3D"noreferrer">valentina.porfirio@cefla.it<=
+/a> &lt;<a href=3D"mailto:valentina.porfirio@cefla.it" target=3D"_blank" re=
+l=3D"noreferrer">valentina.porfirio@cefla.it</a>&gt; <strong><span style=3D=
+"font-family:&quot;Calibri&quot;,sans-serif">En nombre de </span></strong>M=
+amini, Micaela<br><strong><span style=3D"font-family:&quot;Calibri&quot;,sa=
+ns-serif">Enviado el:</span></strong> martes, 14 de abril de 2026 13:36<br>=
+<strong><span style=3D"font-family:&quot;Calibri&quot;,sans-serif">Para:</s=
+pan></strong> <a href=3D"mailto:contabilidad@bucoclinics.com" target=3D"_bl=
+ank" rel=3D"noreferrer">contabilidad@bucoclinics.com</a><br><strong><span s=
+tyle=3D"font-family:&quot;Calibri&quot;,sans-serif">Asunto:</span></strong>=
+ Re: recogida de pedido</span><span style=3D"font-size:10.0pt;font-family:&=
+quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p></div><p class=3D"m=
+_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"fon=
+t-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u><=
+/u></span></p><div><div><p class=3D"m_-4003148145577474361v1m-5000984130389=
+264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdan=
+a&quot;,sans-serif">Buenas tardes,=C2=A0<u></u><u></u></span></p></div><div=
+><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><spa=
+n style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">por=
+ favor, pueden decirme nuestro numero de pedido?<u></u><u></u></span></p></=
+div><div><div><div><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;=
+font-family:&quot;Verdana&quot;,sans-serif">gracias<u></u><u></u></span></p=
+><table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"border-co=
+llapse:collapse"><tr style=3D"height:92.25pt"><td valign=3D"top" style=3D"p=
+adding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"=
+margin:0cm">Valentina<u></u><u></u></p><p class=3D"m_-4003148145577474361v1=
+m-5000984130389264087v1msonormal"><img border=3D"0" width=3D"95" height=3D"=
+84" style=3D"width:.9895in;height:.875in" id=3D"m_-4003148145577474361_x000=
+0_i1051" src=3D"https://lh3.googleusercontent.com/cSQ0uyPm2WVdKd0MTNbzE-HWI=
+7TMvXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamBrOsTFy5s5NGXu5IwvHnJXIqc=
+J0rbPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDfOeOgE6Q7Zk_avvTIYc_5VH8Q=
+6ctxMOQlRVmIsXQ"><u></u><u></u></p><table border=3D"0" cellspacing=3D"0" ce=
+llpadding=3D"0" style=3D"border-collapse:collapse"><tr style=3D"height:64.5=
+pt"><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:64.5=
+pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u=
+></u><u></u></p></td></tr></table></td><td valign=3D"top" style=3D"padding:=
+5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"margin:=
+0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,=
+sans-serif;color:#333333">Micaela Mamini</span></strong><u></u><u></u></p><=
+p style=3D"margin:0cm"><em><span style=3D"font-size:10.0pt;font-family:&quo=
+t;Arial&quot;,sans-serif;color:#333333">Commercial Customer Service Special=
+ist</span></em><u></u><u></u></p><p style=3D"margin:0cm"><span style=3D"fon=
+t-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Busin=
+ess Unit <strong><span style=3D"font-family:&quot;Arial&quot;,sans-serif">M=
+edical Equipment</span></strong></span><u></u><u></u></p><p style=3D"margin=
+:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-se=
+rif;color:#333333">Tel. +39 0542 65 4040</span><u></u><u></u></p><p style=
+=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quo=
+t;,sans-serif;color:#333333">Short Code: 4040</span><u></u><u></u></p><p st=
+yle=3D"margin:0cm"><a href=3D"http://www.cefla.com/" target=3D"_blank" rel=
+=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quo=
+t;,sans-serif;color:#551a8b">www.cefla.com</span></a><span style=3D"font-si=
+ze:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333"> | </span=
+><a href=3D"http://www.ceflamedicalequipment.com" target=3D"_blank" rel=3D"=
+noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,s=
+ans-serif;color:#551a8b">www.ceflamedicalequipment.com</span></a><u></u><u>=
+</u></p></td></tr><tr style=3D"height:39.0pt"><td colspan=3D"2" valign=3D"t=
+op" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"=
+><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-famil=
+y:&quot;Arial&quot;,sans-serif;color:#333333">Monday - Thursday 08:15 - 12:=
+30 and 13:30 - 17:15</span></strong><u></u><u></u></p><p style=3D"margin:0c=
+m"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sa=
+ns-serif;color:#333333">Friday 08:15 - 12:30 and 13:30 - 16:00</span></stro=
+ng><u></u><u></u></p></td><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5=
+.0pt 5.0pt;height:39.0pt;overflow:hidden"><p class=3D"m_-400314814557747436=
+1v1m-5000984130389264087v1msonormal">=C2=A0<u></u><u></u></p></td><td valig=
+n=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:h=
+idden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u><u></u><=
+/p></td></tr></table><p class=3D"m_-4003148145577474361v1m-5000984130389264=
+087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&q=
+uot;,sans-serif">=C2=A0<u></u><u></u></span></p></div></div></div><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u><=
+/u><u></u></span></p></div><p class=3D"m_-4003148145577474361v1m-5000984130=
+389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Ver=
+dana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></blockquote><div><bl=
+ockquote style=3D"border:none;border-left:solid #1010ff 1.5pt;padding:0cm 0=
+cm 0cm 5.0pt;margin-left:0cm;margin-right:0cm"><div><p class=3D"m_-40031481=
+45577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.=
+0pt;font-family:&quot;Verdana&quot;,sans-serif">Il giorno mar 14 apr 2026 a=
+lle ore 09:55 &lt;<a href=3D"mailto:contabilidad@bucoclinics.com" target=3D=
+"_blank" rel=3D"noreferrer">contabilidad@bucoclinics.com</a>&gt; ha scritto=
+:<u></u><u></u></span></p></div></blockquote><blockquote style=3D"border:no=
+ne;border-left:solid windowtext 1.0pt;padding:0cm 0cm 0cm 6.0pt;margin-left=
+:4.8pt;margin-top:5.0pt;margin-right:0cm;margin-bottom:5.0pt;border-color:c=
+urrentcolor currentcolor currentcolor #cccccc"><div><div><div><blockquote s=
+tyle=3D"border:none;border-left:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.0=
+pt;margin-left:0cm;margin-right:0cm"><p class=3D"m_-4003148145577474361v1m-=
+5000984130389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family=
+:&quot;Calibri&quot;,sans-serif">Buenos d=C3=ADas </span><span style=3D"fon=
+t-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></s=
+pan></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonorma=
+l"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-ser=
+if">Micaela me puedes pasar las medidas y peso del pedido que sale para ult=
+imo de este mes para que me lo puedan tasar el transporte.</span><span styl=
+e=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u=
+></u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1=
+msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,=
+sans-serif">Un saludo.</span><span style=3D"font-size:10.0pt;font-family:&q=
+uot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-40031=
+48145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:=
+11.0pt;font-family:&quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u>=
+</u></span></p><div style=3D"border:none;border-top:solid windowtext 1.0pt;=
+padding:3.0pt 0cm 0cm 0cm;border-color:currentcolor"><p class=3D"m_-4003148=
+145577474361v1m-5000984130389264087v1msonormal"><strong><span style=3D"font=
+-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">De:</span></strong=
+><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif=
+"> Mamini, Micaela &lt;<a href=3D"mailto:micaela.mamini.ext@cefla.it" targe=
+t=3D"_blank" rel=3D"noreferrer">micaela.mamini.ext@cefla.it</a>&gt; <br><st=
+rong><span style=3D"font-family:&quot;Calibri&quot;,sans-serif">Enviado el:=
+</span></strong> viernes, 27 de marzo de 2026 8:49<br><strong><span style=
+=3D"font-family:&quot;Calibri&quot;,sans-serif">Para:</span></strong> <a hr=
+ef=3D"mailto:contabilidad@bucoclinics.com" target=3D"_blank" rel=3D"norefer=
+rer">contabilidad@bucoclinics.com</a><br><strong><span style=3D"font-family=
+:&quot;Calibri&quot;,sans-serif">Asunto:</span></strong> Re: recogida de pe=
+dido</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,=
+sans-serif"><u></u><u></u></span></p></div><p class=3D"m_-40031481455774743=
+61v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-=
+family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p><div>=
+<div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal">=
+<span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"=
+>Buenos dias=C2=A0Araceli y feliz viernes!<u></u><u></u></span></p></div><d=
+iv><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><s=
+pan style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=
+=C2=A0<u></u><u></u></span></p></div><div><p class=3D"m_-400314814557747436=
+1v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-f=
+amily:&quot;Verdana&quot;,sans-serif">Aqu=C3=AD est=C3=A0n los documentos r=
+elativos a esta recogida<u></u><u></u></span></p></div><div><p class=3D"m_-=
+4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-=
+size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u=
+></span></p></div><div><p class=3D"m_-4003148145577474361v1m-50009841303892=
+64087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana=
+&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><p class=3D"m_=
+-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font=
+-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Atentamente,=C2=A0=
+<u></u><u></u></span></p></div><div><div><div><p style=3D"margin:0cm"><span=
+ style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=
+=A0<u></u><u></u></span></p><table border=3D"0" cellspacing=3D"0" cellpaddi=
+ng=3D"0" style=3D"border-collapse:collapse"><tr style=3D"height:92.25pt"><t=
+d valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;ov=
+erflow:hidden"><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p><p class=3D"=
+m_-4003148145577474361v1m-5000984130389264087v1msonormal"><img border=3D"0"=
+ width=3D"95" height=3D"84" style=3D"width:.9895in;height:.875in" id=3D"m_-=
+4003148145577474361_x0000_i1050" src=3D"https://lh3.googleusercontent.com/c=
+SQ0uyPm2WVdKd0MTNbzE-HWI7TMvXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamB=
+rOsTFy5s5NGXu5IwvHnJXIqcJ0rbPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDf=
+OeOgE6Q7Zk_avvTIYc_5VH8Q6ctxMOQlRVmIsXQ"><u></u><u></u></p><table border=3D=
+"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"border-collapse:collapse">=
+<tr style=3D"height:64.5pt"><td valign=3D"top" style=3D"padding:5.0pt 5.0pt=
+ 5.0pt 5.0pt;height:64.5pt;overflow:hidden"><p class=3D"m_-4003148145577474=
+361v1msonormal">=C2=A0<u></u><u></u></p></td></tr></table></td><td valign=
+=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:h=
+idden"><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font=
+-family:&quot;Arial&quot;,sans-serif;color:#333333">Micaela Mamini</span></=
+strong><u></u><u></u></p><p style=3D"margin:0cm"><em><span style=3D"font-si=
+ze:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Commercia=
+l Customer Service Specialist</span></em><u></u><u></u></p><p style=3D"marg=
+in:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-=
+serif;color:#333333">Business Unit <strong><span style=3D"font-family:&quot=
+;Arial&quot;,sans-serif">Medical Equipment</span></strong></span><u></u><u>=
+</u></p><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family=
+:&quot;Arial&quot;,sans-serif;color:#333333">Tel. +39 0542 65 4040</span><u=
+></u><u></u></p><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;fon=
+t-family:&quot;Arial&quot;,sans-serif;color:#333333">Short Code: 4040</span=
+><u></u><u></u></p><p style=3D"margin:0cm"><a href=3D"http://www.cefla.com/=
+" target=3D"_blank" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font=
+-family:&quot;Arial&quot;,sans-serif;color:#551a8b">www.cefla.com</span></a=
+><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;c=
+olor:#333333"> | </span><a href=3D"http://www.ceflamedicalequipment.com" ta=
+rget=3D"_blank" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-fam=
+ily:&quot;Arial&quot;,sans-serif;color:#551a8b">www.ceflamedicalequipment.c=
+om</span></a><u></u><u></u></p></td></tr><tr style=3D"height:39.0pt"><td co=
+lspan=3D"2" valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:=
+39.0pt;overflow:hidden"><p style=3D"margin:0cm"><strong><span style=3D"font=
+-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Monday=
+ - Thursday 08:15 - 12:30 and 13:30 - 17:15</span></strong><u></u><u></u></=
+p><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-fami=
+ly:&quot;Arial&quot;,sans-serif;color:#333333">Friday 08:15 - 12:30 and 13:=
+30 - 16:00</span></strong><u></u><u></u></p></td><td valign=3D"top" style=
+=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal">=C2=A0<u></u>=
+<u></u></p></td><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt=
+;height:39.0pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1msonorm=
+al">=C2=A0<u></u><u></u></p></td></tr></table><p class=3D"m_-40031481455774=
+74361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;fo=
+nt-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></=
+div></div></div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1=
+msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,=
+sans-serif">=C2=A0<u></u><u></u></span></p></div><p class=3D"m_-40031481455=
+77474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt=
+;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p=
+></blockquote><div><blockquote style=3D"border:none;border-left:solid #1010=
+ff 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin-left:0cm;margin-right:0cm"><div><=
+p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span =
+style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Il gi=
+orno gio 26 mar 2026 alle ore 11:50 &lt;<a href=3D"mailto:contabilidad@buco=
+clinics.com" target=3D"_blank" rel=3D"noreferrer">contabilidad@bucoclinics.=
+com</a>&gt; ha scritto:<u></u><u></u></span></p></div></blockquote><blockqu=
+ote style=3D"border:none;border-left:solid windowtext 1.0pt;padding:0cm 0cm=
+ 0cm 6.0pt;margin-left:4.8pt;margin-top:5.0pt;margin-right:0cm;margin-botto=
+m:5.0pt;border-color:currentcolor currentcolor currentcolor #cccccc"><div><=
+div><div><blockquote style=3D"border:none;border-left:solid #1010ff 1.5pt;p=
+adding:0cm 0cm 0cm 5.0pt;margin-left:0cm;margin-right:0cm"><p class=3D"m_-4=
+003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-s=
+ize:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Buenos d=C3=ADas.</s=
+pan><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-se=
+rif"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-5000984=
+130389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;=
+Calibri&quot;,sans-serif">Me confirman la empresa de transportes =C2=A0que =
+se ponen en contacto contigo </span><span style=3D"font-size:10.0pt;font-fa=
+mily:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m=
+_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"fon=
+t-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Un saludo </span>=
+<span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"=
+><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-50009841303=
+89264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Cali=
+bri&quot;,sans-serif">=C2=A0</span><span style=3D"font-size:10.0pt;font-fam=
+ily:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><div style=3D"=
+border:none;border-top:solid windowtext 1.0pt;padding:3.0pt 0cm 0cm 0cm;bor=
+der-color:currentcolor"><p class=3D"m_-4003148145577474361v1m-5000984130389=
+264087v1msonormal"><strong><span style=3D"font-size:11.0pt;font-family:&quo=
+t;Calibri&quot;,sans-serif">De:</span></strong><span style=3D"font-size:11.=
+0pt;font-family:&quot;Calibri&quot;,sans-serif"> Mamini, Micaela &lt;<a hre=
+f=3D"mailto:micaela.mamini.ext@cefla.it" target=3D"_blank" rel=3D"noreferre=
+r">micaela.mamini.ext@cefla.it</a>&gt; <br><strong><span style=3D"font-fami=
+ly:&quot;Calibri&quot;,sans-serif">Enviado el:</span></strong> mi=C3=A9rcol=
+es, 25 de marzo de 2026 16:23<br><strong><span style=3D"font-family:&quot;C=
+alibri&quot;,sans-serif">Para:</span></strong> <a href=3D"mailto:contabilid=
+ad@bucoclinics.com" target=3D"_blank" rel=3D"noreferrer">contabilidad@bucoc=
+linics.com</a><br><strong><span style=3D"font-family:&quot;Calibri&quot;,sa=
+ns-serif">Asunto:</span></strong> Re: recogida de pedido</span><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u>=
+</u></span></p></div><p class=3D"m_-4003148145577474361v1m-5000984130389264=
+087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&q=
+uot;,sans-serif">=C2=A0<u></u><u></u></span></p><div><div><p class=3D"m_-40=
+03148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-si=
+ze:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Buenas tardes Araceli=
+,<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-=
+5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family=
+:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div>=
+<p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span=
+ style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Espe=
+ro que est=C3=A9 muy bien.<u></u><u></u></span></p></div><div><p class=3D"m=
+_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"fon=
+t-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u><=
+/u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-500098413038=
+9264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verda=
+na&quot;,sans-serif">Quedo a la espera de ser contactada por vuestro transp=
+ortador para organizar el env=C3=ADo=C2=A0de vuestro pedido=C2=A0<u></u><u>=
+</u></span></p></div><table border=3D"0" cellspacing=3D"0" cellpadding=3D"0=
+" width=3D"64" style=3D"width:48.0pt;border-collapse:collapse"><tr style=3D=
+"height:14.5pt"><td width=3D"64" valign=3D"bottom" style=3D"width:48.0pt;pa=
+dding:.75pt .75pt 0cm .75pt;height:14.5pt"><p class=3D"m_-40031481455774743=
+61v1m-5000984130389264087v1msonormal" align=3D"right" style=3D"text-align:r=
+ight"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-=
+serif;color:black">26421466</span><u></u><u></u></p></td></tr></table><p cl=
+ass=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span styl=
+e=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><br>Salud=
+os,=C2=A0<u></u><u></u></span></p><div><div><div><p style=3D"margin:0cm"><s=
+pan style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=
+=C2=A0<u></u><u></u></span></p><table border=3D"0" cellspacing=3D"0" cellpa=
+dding=3D"0" style=3D"border-collapse:collapse"><tr style=3D"height:92.25pt"=
+><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt=
+;overflow:hidden"><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><img border=
+=3D"0" width=3D"95" height=3D"84" style=3D"width:.9895in;height:.875in" id=
+=3D"m_-4003148145577474361_x0000_i1049" src=3D"https://lh3.googleuserconten=
+t.com/cSQ0uyPm2WVdKd0MTNbzE-HWI7TMvXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrMcOnO7M=
+wWoPamBrOsTFy5s5NGXu5IwvHnJXIqcJ0rbPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v7ack5I=
+KY8hkDfOeOgE6Q7Zk_avvTIYc_5VH8Q6ctxMOQlRVmIsXQ"><u></u><u></u></p><table bo=
+rder=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"border-collapse:col=
+lapse"><tr style=3D"height:64.5pt"><td valign=3D"top" style=3D"padding:5.0p=
+t 5.0pt 5.0pt 5.0pt;height:64.5pt;overflow:hidden"><p class=3D"m_-400314814=
+5577474361v1msonormal">=C2=A0<u></u><u></u></p></td></tr></table></td><td v=
+align=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overf=
+low:hidden"><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt=
+;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Micaela Mamini</sp=
+an></strong><u></u><u></u></p><p style=3D"margin:0cm"><em><span style=3D"fo=
+nt-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Comm=
+ercial Customer Service Specialist</span></em><u></u><u></u></p><p style=3D=
+"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,=
+sans-serif;color:#333333">Business Unit <strong><span style=3D"font-family:=
+&quot;Arial&quot;,sans-serif">Medical Equipment</span></strong></span><u></=
+u><u></u></p><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-f=
+amily:&quot;Arial&quot;,sans-serif;color:#333333">Tel. +39 0542 65 4040</sp=
+an><u></u><u></u></p><p style=3D"margin:0cm"><span style=3D"font-size:10.0p=
+t;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Short Code: 4040<=
+/span><u></u><u></u></p><p style=3D"margin:0cm"><a href=3D"http://www.cefla=
+.com/" target=3D"_blank" rel=3D"noreferrer"><span style=3D"font-size:10.0pt=
+;font-family:&quot;Arial&quot;,sans-serif;color:#551a8b">www.cefla.com</spa=
+n></a><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-se=
+rif;color:#333333"> | </span><a href=3D"http://www.ceflamedicalequipment.co=
+m" target=3D"_blank" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;fon=
+t-family:&quot;Arial&quot;,sans-serif;color:#551a8b">www.ceflamedicalequipm=
+ent.com</span></a><u></u><u></u></p></td></tr><tr style=3D"height:39.0pt"><=
+td colspan=3D"2" valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;he=
+ight:39.0pt;overflow:hidden"><p style=3D"margin:0cm"><strong><span style=3D=
+"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">M=
+onday - Thursday 08:15 - 12:30 and 13:30 - 17:15</span></strong><u></u><u><=
+/u></p><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font=
+-family:&quot;Arial&quot;,sans-serif;color:#333333">Friday 08:15 - 12:30 an=
+d 13:30 - 16:00</span></strong><u></u><u></u></p></td><td valign=3D"top" st=
+yle=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p cl=
+ass=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal">=C2=A0<u><=
+/u><u></u></p></td><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.=
+0pt;height:39.0pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1mson=
+ormal">=C2=A0<u></u><u></u></p></td></tr></table><p class=3D"m_-40031481455=
+77474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt=
+;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p=
+></div></div></div><p class=3D"m_-4003148145577474361v1m-500098413038926408=
+7v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quo=
+t;,sans-serif">=C2=A0<u></u><u></u></span></p></div><p class=3D"m_-40031481=
+45577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.=
+0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span>=
+</p></blockquote><div><blockquote style=3D"border:none;border-left:solid #1=
+010ff 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin-left:0cm;margin-right:0cm"><di=
+v><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><sp=
+an style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Il=
+ giorno gio 19 mar 2026 alle ore 11:14 Mamini, Micaela &lt;<a href=3D"mailt=
+o:micaela.mamini.ext@cefla.it" target=3D"_blank" rel=3D"noreferrer">micaela=
+.mamini.ext@cefla.it</a>&gt; ha scritto:<u></u><u></u></span></p></div></bl=
+ockquote><blockquote style=3D"border:none;border-left:solid windowtext 1.0p=
+t;padding:0cm 0cm 0cm 6.0pt;margin-left:4.8pt;margin-top:5.0pt;margin-right=
+:0cm;margin-bottom:5.0pt;border-color:currentcolor currentcolor currentcolo=
+r #cccccc"><div><div><p class=3D"m_-4003148145577474361v1m-5000984130389264=
+087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&q=
+uot;,sans-serif">Buenos dias=C2=A0Araceli:<u></u><u></u></span></p></div><d=
+iv><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><s=
+pan style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=
+=C2=A0<u></u><u></u></span></p></div><div><p class=3D"m_-400314814557747436=
+1v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-f=
+amily:&quot;Verdana&quot;,sans-serif">Espero que est=C3=A9 muy bien.<u></u>=
+<u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-50009841=
+30389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;V=
+erdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Aqu=C3=AD=
+=C2=A0esta=C3=A0n los detalles de los bultos del pedido oc=C2=A026421466 li=
+sto el 23/03<u></u><u></u></span></p></div><div><p class=3D"m_-400314814557=
+7474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;=
+font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p>=
+</div><div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msono=
+rmal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-=
+serif">Quedo a disposici=C3=B3n<u></u><u></u></span></p></div><div><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u><=
+/u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-50009=
+84130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quo=
+t;Verdana&quot;,sans-serif">Atentamente,<u></u><u></u></span></p></div><div=
+><div><div><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-fam=
+ily:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p><table b=
+order=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"border-collapse:co=
+llapse"><tr style=3D"height:92.25pt"><td valign=3D"top" style=3D"padding:5.=
+0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"margin:0c=
+m">=C2=A0<u></u><u></u></p><p class=3D"m_-4003148145577474361v1m-5000984130=
+389264087v1msonormal"><img border=3D"0" width=3D"95" height=3D"84" style=3D=
+"width:.9895in;height:.875in" id=3D"m_-4003148145577474361_x0000_i1048" src=
+=3D"https://lh3.googleusercontent.com/cSQ0uyPm2WVdKd0MTNbzE-HWI7TMvXMO2ycNH=
+JuivbKBJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamBrOsTFy5s5NGXu5IwvHnJXIqcJ0rbPmLgRQOU=
+qe-mLh4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDfOeOgE6Q7Zk_avvTIYc_5VH8Q6ctxMOQlRVmI=
+sXQ"><u></u><u></u></p><table border=3D"0" cellspacing=3D"0" cellpadding=3D=
+"0" style=3D"border-collapse:collapse"><tr style=3D"height:64.5pt"><td vali=
+gn=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:64.5pt;overflow:=
+hidden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u><u></u>=
+</p></td></tr></table></td><td valign=3D"top" style=3D"padding:5.0pt 5.0pt =
+5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p style=3D"margin:0cm"><strong=
+><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;c=
+olor:#333333">Micaela Mamini</span></strong><u></u><u></u></p><p style=3D"m=
+argin:0cm"><em><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot=
+;,sans-serif;color:#333333">Commercial Customer Service Specialist</span></=
+em><u></u><u></u></p><p style=3D"margin:0cm"><span style=3D"font-size:10.0p=
+t;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Business Unit <st=
+rong><span style=3D"font-family:&quot;Arial&quot;,sans-serif">Medical Equip=
+ment</span></strong></span><u></u><u></u></p><p style=3D"margin:0cm"><span =
+style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#3=
+33333">Tel. +39 0542 65 4040</span><u></u><u></u></p><p style=3D"margin:0cm=
+"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;=
+color:#333333">Short Code: 4040</span><u></u><u></u></p><p style=3D"margin:=
+0cm"><a href=3D"http://www.cefla.com/" target=3D"_blank" rel=3D"noreferrer"=
+><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;c=
+olor:#551a8b">www.cefla.com</span></a><span style=3D"font-size:10.0pt;font-=
+family:&quot;Arial&quot;,sans-serif;color:#333333"> | </span><a href=3D"htt=
+p://www.ceflamedicalequipment.com" target=3D"_blank" rel=3D"noreferrer"><sp=
+an style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color=
+:#551a8b">www.ceflamedicalequipment.com</span></a><u></u><u></u></p></td></=
+tr><tr style=3D"height:39.0pt"><td colspan=3D"2" valign=3D"top" style=3D"pa=
+dding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p style=3D"ma=
+rgin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;Arial&q=
+uot;,sans-serif;color:#333333">Monday - Thursday 08:15 - 12:30 and 13:30 - =
+17:15</span></strong><u></u><u></u></p><p style=3D"margin:0cm"><strong><spa=
+n style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:=
+#333333">Friday 08:15 - 12:30 and 13:30 - 16:00</span></strong><u></u><u></=
+u></p></td><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;heig=
+ht:39.0pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1m-5000984130=
+389264087v1msonormal">=C2=A0<u></u><u></u></p></td><td valign=3D"top" style=
+=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p class=
+=3D"m_-4003148145577474361v1msonormal">=C2=A0<u></u><u></u></p></td></tr></=
+table><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"=
+><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif=
+">=C2=A0<u></u><u></u></span></p></div></div></div><p class=3D"m_-400314814=
+5577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0=
+pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span><=
+/p></div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonorm=
+al"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-se=
+rif">=C2=A0<u></u><u></u></span></p><div><blockquote style=3D"border:none;b=
+order-left:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin-left:0cm;ma=
+rgin-right:0cm"><div><p class=3D"m_-4003148145577474361v1m-5000984130389264=
+087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&q=
+uot;,sans-serif">Il giorno gio 19 mar 2026 alle ore 09:48 &lt;<a href=3D"ma=
+ilto:contabilidad@bucoclinics.com" target=3D"_blank" rel=3D"noreferrer">con=
+tabilidad@bucoclinics.com</a>&gt; ha scritto:<u></u><u></u></span></p></div=
+></blockquote><blockquote style=3D"border:none;border-left:solid windowtext=
+ 1.0pt;padding:0cm 0cm 0cm 6.0pt;margin-left:4.8pt;margin-top:5.0pt;margin-=
+right:0cm;margin-bottom:5.0pt;border-color:currentcolor currentcolor curren=
+tcolor #cccccc"><div><div><div><blockquote style=3D"border:none;border-left=
+:solid #1010ff 1.5pt;padding:0cm 0cm 0cm 5.0pt;margin-left:0cm;margin-right=
+:0cm"><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"=
+><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif=
+">Buenos d=C3=ADas</span><span style=3D"font-size:10.0pt;font-family:&quot;=
+Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-400314814=
+5577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0=
+pt;font-family:&quot;Calibri&quot;,sans-serif">Micaela la tasaci=C3=B3n que=
+ me has dado es del pedido que tiene que salir el d=C3=ADa 22-04-2026</span=
+><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif=
+"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130=
+389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Cal=
+ibri&quot;,sans-serif">Necesito la que sale el d=C3=ADa 20-03-2026 </span><=
+span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=
+<u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-500098413038=
+9264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Calib=
+ri&quot;,sans-serif">Un saludo </span><span style=3D"font-size:10.0pt;font-=
+family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D=
+"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"f=
+ont-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Araceli caballe=
+ro</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sa=
+ns-serif"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-50=
+00984130389264087v1msonormal"><span style=3D"font-size:11.0pt;font-family:&=
+quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=3D"font-size:10.0pt=
+;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><div =
+style=3D"border:none;border-top:solid windowtext 1.0pt;padding:3.0pt 0cm 0c=
+m 0cm;border-color:currentcolor"><p class=3D"m_-4003148145577474361v1m-5000=
+984130389264087v1msonormal"><strong><span style=3D"font-size:11.0pt;font-fa=
+mily:&quot;Calibri&quot;,sans-serif">De:</span></strong><span style=3D"font=
+-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif"> Mamini, Micaela &=
+lt;<a href=3D"mailto:micaela.mamini.ext@cefla.it" target=3D"_blank" rel=3D"=
+noreferrer">micaela.mamini.ext@cefla.it</a>&gt; <br><strong><span style=3D"=
+font-family:&quot;Calibri&quot;,sans-serif">Enviado el:</span></strong> jue=
+ves, 18 de diciembre de 2025 17:44<br><strong><span style=3D"font-family:&q=
+uot;Calibri&quot;,sans-serif">Para:</span></strong> <a href=3D"mailto:conta=
+bilidad@bucoclinics.com" target=3D"_blank" rel=3D"noreferrer">contabilidad@=
+bucoclinics.com</a><br><strong><span style=3D"font-family:&quot;Calibri&quo=
+t;,sans-serif">Asunto:</span></strong> Re: Modificaci=C3=B3n PEDIDOS</span>=
+<span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"=
+><u></u><u></u></span></p></div><p class=3D"m_-4003148145577474361v1m-50009=
+84130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quo=
+t;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p><div><div><div><=
+p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span =
+style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Estim=
+ado Francisco:<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145=
+577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0p=
+t;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></=
+p></div><div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1mso=
+normal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,san=
+s-serif">Espero que est=C3=A9 muy bien.<u></u><u></u></span></p></div><div>=
+<p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span=
+ style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=
+=A0<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1=
+m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-fami=
+ly:&quot;Verdana&quot;,sans-serif">Aqu=C3=AD est=C3=A1n los pedidos revisad=
+os.<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1=
+m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-fami=
+ly:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><di=
+v><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><sp=
+an style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Po=
+r favor, comprueba bien<u></u><u></u></span></p></div><div><p class=3D"m_-4=
+003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-s=
+ize:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u>=
+</span></p></div><div><p class=3D"m_-4003148145577474361v1m-500098413038926=
+4087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&=
+quot;,sans-serif">Atentamente,=C2=A0<u></u><u></u></span></p></div><div><di=
+v><div><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font=
+-family:Roboto;color:red">La nostra azienda sar=C3=A0 chiusa per festivit=
+=C3=A0 Natalizie dal 23/12/2025 al 06/01/2026 inclusi=C2=A0</span></strong>=
+<span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"=
+><u></u><u></u></span></p><p style=3D"margin:0cm"><strong><span style=3D"fo=
+nt-size:10.0pt;font-family:Roboto;color:red">Our company will be closed for=
+ Christmas holidays from 23/12/2025 till 06/01/2026 included</span></strong=
+><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif=
+"><u></u><u></u></span></p><table border=3D"0" cellspacing=3D"0" cellpaddin=
+g=3D"0" style=3D"border-collapse:collapse"><tr style=3D"height:92.25pt"><td=
+ valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;ove=
+rflow:hidden"><p style=3D"margin:0cm">=C2=A0<u></u><u></u></p><p class=3D"m=
+_-4003148145577474361v1m-5000984130389264087v1msonormal"><img border=3D"0" =
+width=3D"95" height=3D"84" style=3D"width:.9895in;height:.875in" id=3D"m_-4=
+003148145577474361_x0000_i1047" src=3D"https://lh3.googleusercontent.com/cS=
+Q0uyPm2WVdKd0MTNbzE-HWI7TMvXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamBr=
+OsTFy5s5NGXu5IwvHnJXIqcJ0rbPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDfO=
+eOgE6Q7Zk_avvTIYc_5VH8Q6ctxMOQlRVmIsXQ"><u></u><u></u></p><table border=3D"=
+0" cellspacing=3D"0" cellpadding=3D"0" style=3D"border-collapse:collapse"><=
+tr style=3D"height:64.5pt"><td valign=3D"top" style=3D"padding:5.0pt 5.0pt =
+5.0pt 5.0pt;height:64.5pt;overflow:hidden"><p class=3D"m_-40031481455774743=
+61v1msonormal">=C2=A0<u></u><u></u></p></td></tr></table></td><td valign=3D=
+"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidd=
+en"><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-fa=
+mily:&quot;Arial&quot;,sans-serif;color:#333333">Micaela Mamini</span></str=
+ong><u></u><u></u></p><p style=3D"margin:0cm"><em><span style=3D"font-size:=
+10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Customer Ser=
+vice Specialist</span></em><u></u><u></u></p><p style=3D"margin:0cm"><span =
+style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#3=
+33333">Business Unit <strong><span style=3D"font-family:&quot;Arial&quot;,s=
+ans-serif">Medical Equipment</span></strong></span><u></u><u></u></p><p sty=
+le=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&q=
+uot;,sans-serif;color:#333333">Tel. +39 0542 65 4040</span><u></u><u></u></=
+p><p style=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot=
+;Arial&quot;,sans-serif;color:#333333">Short Code: 4040</span><u></u><u></u=
+></p><p style=3D"margin:0cm"><a href=3D"http://www.cefla.com/" target=3D"_b=
+lank" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;=
+Arial&quot;,sans-serif;color:#551a8b">www.cefla.com</span></a><span style=
+=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333=
+"> | </span><a href=3D"http://www.ceflamedicalequipment.com" target=3D"_bla=
+nk" rel=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Ar=
+ial&quot;,sans-serif;color:#551a8b">www.ceflamedicalequipment.com</span></a=
+><u></u><u></u></p></td></tr><tr style=3D"height:39.0pt"><td colspan=3D"2" =
+valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overf=
+low:hidden"><p style=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt=
+;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Monday - Thursday =
+08:15 - 12:30 and 13:30 - 17:15</span></strong><u></u><u></u></p><p style=
+=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;A=
+rial&quot;,sans-serif;color:#333333">Friday 08:15 - 12:30 and 13:30 - 16:00=
+</span></strong><u></u><u></u></p></td><td valign=3D"top" style=3D"padding:=
+5.0pt 5.0pt 5.0pt 5.0pt;height:39.0pt;overflow:hidden"><p class=3D"m_-40031=
+48145577474361v1m-5000984130389264087v1msonormal">=C2=A0<u></u><u></u></p><=
+/td><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:39.0=
+pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1msonormal">=C2=A0<u=
+></u><u></u></p></td></tr></table><p class=3D"m_-4003148145577474361v1m-500=
+0984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&q=
+uot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div></div></=
+div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><=
+span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=
+=C2=A0<u></u><u></u></span></p></div><p class=3D"m_-4003148145577474361v1m-=
+5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family=
+:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p><div><div><=
+p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span =
+style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Il gi=
+orno mar 16 dic 2025 alle ore 18:04 &lt;<a href=3D"mailto:contabilidad@buco=
+clinics.com" target=3D"_blank" rel=3D"noreferrer">contabilidad@bucoclinics.=
+com</a>&gt; ha scritto:<u></u><u></u></span></p></div><blockquote style=3D"=
+border:none;border-left:solid windowtext 1.0pt;padding:0cm 0cm 0cm 6.0pt;ma=
+rgin-left:4.8pt;margin-top:5.0pt;margin-right:0cm;margin-bottom:5.0pt;borde=
+r-color:currentcolor currentcolor currentcolor #cccccc"><div><div><div><p c=
+lass=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span sty=
+le=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Buenas t=
+ardes Micaela.</span><span style=3D"font-size:10.0pt;font-family:&quot;Verd=
+ana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-4003148145577=
+474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0pt;f=
+ont-family:&quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=3D"font=
+-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></sp=
+an></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal=
+"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-seri=
+f">Referente a los pedidos OC 25475618 y OC 25475627. Ha habido un cambio p=
+or el cliente del color de las tapicer=C3=ADas tanto de los equipos como de=
+ los taburetes.</span><span style=3D"font-size:10.0pt;font-family:&quot;Ver=
+dana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-400314814557=
+7474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0pt;=
+font-family:&quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=3D"fon=
+t-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></s=
+pan></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonorma=
+l"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-ser=
+if">Por favor sustituir las siguientes referencias: <strong><span style=3D"=
+font-family:&quot;Calibri&quot;,sans-serif">=C2=A0<span style=3D"color:red"=
+>772Q6121</span></span></strong><span style=3D"color:red"> TAPIZADO A 121 G=
+RIS ANTR.</span></span><span style=3D"font-size:10.0pt;font-family:&quot;Ve=
+rdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-40031481455=
+77474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0pt=
+;font-family:&quot;Calibri&quot;,sans-serif;color:red">=C2=A0=C2=A0=C2=A0=
+=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=
+=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=
+=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=
+=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=
+=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=
+=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=
+=C2=A0=C2=A0 <strong><span style=3D"font-family:&quot;Calibri&quot;,sans-se=
+rif">77301121</span></strong> TAPIZADO TAB. 7 SKAI121 GR. A</span><span sty=
+le=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><=
+u></u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v=
+1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;=
+,sans-serif">=C2=A0</span><span style=3D"font-size:10.0pt;font-family:&quot=
+;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-40031481=
+45577474361v1m-5000984130389264087v1msonormal"><strong><span style=3D"font-=
+size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">Por las siguientes.=
+ REF: 772Q6113 BLUE PACIFIC</span></strong><span style=3D"font-size:10.0pt;=
+font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p cla=
+ss=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><strong><sp=
+an style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">=
+=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=
+=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=
+=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0=C2=A0 REF: 77301113 BLUE PACIFIC=
+</span></strong><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&q=
+uot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-400314814557747436=
+1v1m-5000984130389264087v1msonormal"><strong><span style=3D"font-size:11.0p=
+t;font-family:&quot;Calibri&quot;,sans-serif">=C2=A0</span></strong><span s=
+tyle=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u=
+><u></u></span></p><p class=3D"m_-4003148145577474361v1m-500098413038926408=
+7v1msonormal"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quo=
+t;,sans-serif">Un cordial saludo</span><span style=3D"font-size:10.0pt;font=
+-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=
+=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">=C2=A0</sp=
+an><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-ser=
+if"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-50009841=
+30389264087v1msonormal"><strong><span style=3D"font-size:11.0pt;font-family=
+:&quot;Arial&quot;,sans-serif;color:#000066">Francisco Leiva</span></strong=
+><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif=
+"><u></u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130=
+389264087v1msonormal"><strong><span style=3D"font-size:11.0pt;font-family:&=
+quot;Arial&quot;,sans-serif;color:#000066">=C2=A0</span></strong><span styl=
+e=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u=
+></u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1=
+msonormal"><strong><span style=3D"font-size:11.0pt;font-family:&quot;Arial&=
+quot;,sans-serif;color:#000066">PROYECTOS BUCOLINICS SL</span></strong><spa=
+n style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u>=
+</u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-500098413038926=
+4087v1msonormal"><span style=3D"font-size:8.0pt;font-family:&quot;Arial&quo=
+t;,sans-serif;color:#000066">SOLUCIONES PARA PROFESIONALES</span><span styl=
+e=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u=
+></u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1=
+msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sa=
+ns-serif;color:#000066">_______________________</span><span style=3D"font-s=
+ize:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span=
+></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal">=
+<span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;co=
+lor:#000066">=C2=A0</span><span style=3D"font-size:10.0pt;font-family:&quot=
+;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-40031481=
+45577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:10.=
+0pt;font-family:&quot;Arial&quot;,sans-serif;color:#000066"><a href=3D"http=
+s://www.goog1e.com/maps/search/C%2F+Alcaide+de+los+Donceles+36?entry=3Dgmai=
+l&amp;source=3Dg">C/ Alcaide de los Donceles 36</a>/40</span><span style=3D=
+"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u=
+></span></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1mson=
+ormal"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-s=
+erif;color:#000066">14009 C=C3=B3rdoba</span><span style=3D"font-size:10.0p=
+t;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p c=
+lass=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span sty=
+le=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#0000=
+66">Tel. 957 050 110 / 744 463 997</span><span style=3D"font-size:10.0pt;fo=
+nt-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><u><span styl=
+e=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:blue">=
+<a href=3D"http://www.bucolinics.com/" target=3D"_blank" rel=3D"noreferrer"=
+><span style=3D"color:#0563c1">www.bucolinics.com</span></a></span></u><spa=
+n style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u>=
+</u><u></u></span></p><p class=3D"m_-4003148145577474361v1m-500098413038926=
+4087v1msonormal"><u><span style=3D"font-size:10.0pt;font-family:&quot;Arial=
+&quot;,sans-serif;color:blue"><a href=3D"mailto:info@bucoclinics.com" targe=
+t=3D"_blank" rel=3D"noreferrer"><span style=3D"color:#0563c1">info@bucoclin=
+ics.com</span></a></span></u><span style=3D"font-size:10.0pt;font-family:&q=
+uot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-40031=
+48145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:=
+11.0pt;font-family:&quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u>=
+</u></span></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1m=
+sonormal"><strong><span style=3D"font-size:11.0pt;font-family:&quot;Calibri=
+&quot;,sans-serif">=C2=A0</span></strong><span style=3D"font-size:10.0pt;fo=
+nt-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span></p><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><strong><span=
+ style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif">=C2=
+=A0</span></strong><span style=3D"font-size:10.0pt;font-family:&quot;Verdan=
+a&quot;,sans-serif"><u></u><u></u></span></p><p class=3D"m_-400314814557747=
+4361v1m-5000984130389264087v1msonormal"><span style=3D"font-size:11.0pt;fon=
+t-family:&quot;Calibri&quot;,sans-serif">=C2=A0</span><span style=3D"font-s=
+ize:10.0pt;font-family:&quot;Verdana&quot;,sans-serif"><u></u><u></u></span=
+></p><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal">=
+<span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-serif"=
+>=C2=A0</span><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quo=
+t;,sans-serif"><u></u><u></u></span></p><div style=3D"border:none;border-to=
+p:solid windowtext 1.0pt;padding:3.0pt 0cm 0cm 0cm;border-color:currentcolo=
+r"><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><s=
+trong><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,sans-=
+serif">De:</span></strong><span style=3D"font-size:11.0pt;font-family:&quot=
+;Calibri&quot;,sans-serif"> Mamini, Micaela &lt;<a href=3D"mailto:micaela.m=
+amini.ext@cefla.it" target=3D"_blank" rel=3D"noreferrer">micaela.mamini.ext=
+@cefla.it</a>&gt; <br><strong><span style=3D"font-family:&quot;Calibri&quot=
+;,sans-serif">Enviado el:</span></strong> lunes, 1 de diciembre de 2025 13:=
+42<br><strong><span style=3D"font-family:&quot;Calibri&quot;,sans-serif">Pa=
+ra:</span></strong> <a href=3D"mailto:contabilidad@bucoclinics.com" target=
+=3D"_blank" rel=3D"noreferrer">contabilidad@bucoclinics.com</a><br><strong>=
+<span style=3D"font-family:&quot;Calibri&quot;,sans-serif">Asunto:</span></=
+strong> Re: PEDIDOS</span><span style=3D"font-size:10.0pt;font-family:&quot=
+;Verdana&quot;,sans-serif"><u></u><u></u></span></p></div><p class=3D"m_-40=
+03148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"font-si=
+ze:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u><=
+/span></p><div><div><div><p class=3D"m_-4003148145577474361v1m-500098413038=
+9264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verda=
+na&quot;,sans-serif">Estimados:<u></u><u></u></span></p></div><div><p class=
+=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=
+=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u><=
+/u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-50009=
+84130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quo=
+t;Verdana&quot;,sans-serif">Envi=C3=A9 las confirmaciones esta ma=C3=B1ana.=
+<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-5=
+000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:=
+&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span></p></div><div><=
+p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span =
+style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">Adjun=
+to nuevamente los pedidos.<u></u><u></u></span></p></div><div><p class=3D"m=
+_-4003148145577474361v1m-5000984130389264087v1msonormal"><span style=3D"fon=
+t-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u><=
+/u></span></p></div><div><p class=3D"m_-4003148145577474361v1m-500098413038=
+9264087v1msonormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verda=
+na&quot;,sans-serif">OC 25475618 listo el dia 19/01<u></u><u></u></span></p=
+></div><div><p class=3D"m_-4003148145577474361v1m-5000984130389264087v1mson=
+ormal"><span style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans=
+-serif">OC 25475627 listo el dia 19/12<u></u><u></u></span></p></div><div><=
+p class=3D"m_-4003148145577474361v1m-5000984130389264087v1msonormal"><span =
+style=3D"font-size:10.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=
+=A0<u></u><u></u></span></p></div><div><p class=3D"m_-4003148145577474361v1=
+m-5000984130389264087v1msonormal"><span style=3D"font-size:10.0pt;font-fami=
+ly:&quot;Verdana&quot;,sans-serif">Atentamente,=C2=A0<u></u><u></u></span><=
+/p></div><div><div><div><p style=3D"margin:0cm"><span style=3D"font-size:10=
+.0pt;font-family:&quot;Verdana&quot;,sans-serif">=C2=A0<u></u><u></u></span=
+></p><table border=3D"0" cellspacing=3D"0" cellpadding=3D"0" style=3D"borde=
+r-collapse:collapse"><tr style=3D"height:92.25pt"><td valign=3D"top" style=
+=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p styl=
+e=3D"margin:0cm"><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&=
+quot;,sans-serif">=C2=A0</span><u></u><u></u></p><p class=3D"m_-40031481455=
+77474361v1m-5000984130389264087v1msonormal"><img border=3D"0" width=3D"95" =
+height=3D"84" style=3D"width:.9895in;height:.875in" id=3D"m_-40031481455774=
+74361_x0000_i1046" src=3D"https://lh3.googleusercontent.com/cSQ0uyPm2WVdKd0=
+MTNbzE-HWI7TMvXMO2ycNHJuivbKBJmMJ8WMIldUUmXlAfrMcOnO7MwWoPamBrOsTFy5s5NGXu5=
+IwvHnJXIqcJ0rbPmLgRQOUqe-mLh4nKUplE-BQ3hVx5ha48v7ack5IKY8hkDfOeOgE6Q7Zk_avv=
+TIYc_5VH8Q6ctxMOQlRVmIsXQ"><u></u><u></u></p><table border=3D"0" cellspacin=
+g=3D"0" cellpadding=3D"0" style=3D"border-collapse:collapse"><tr style=3D"h=
+eight:64.5pt"><td valign=3D"top" style=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;h=
+eight:64.5pt;overflow:hidden"><p class=3D"m_-4003148145577474361v1msonormal=
+">=C2=A0<u></u><u></u></p></td></tr></table></td><td valign=3D"top" style=
+=3D"padding:5.0pt 5.0pt 5.0pt 5.0pt;height:92.25pt;overflow:hidden"><p styl=
+e=3D"margin:0cm"><strong><span style=3D"font-size:10.0pt;font-family:&quot;=
+Arial&quot;,sans-serif;color:#333333">Micaela Mamini</span></strong><u></u>=
+<u></u></p><p style=3D"margin:0cm"><em><span style=3D"font-size:10.0pt;font=
+-family:&quot;Arial&quot;,sans-serif;color:#333333">Customer Service Specia=
+list</span></em><u></u><u></u></p><p style=3D"margin:0cm"><span style=3D"fo=
+nt-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333">Busi=
+ness Unit <strong><span style=3D"font-family:&quot;Arial&quot;,sans-serif">=
+Medical Equipment</span></strong></span><u></u><u></u></p><p style=3D"margi=
+n:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quot;,sans-s=
+erif;color:#333333">Tel. +39 0542 65 4040</span><u></u><u></u></p><p style=
+=3D"margin:0cm"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quo=
+t;,sans-serif;color:#333333">Short Code: 4040</span><u></u><u></u></p><p st=
+yle=3D"margin:0cm"><span style=3D"font-size:11.0pt;font-family:&quot;Calibr=
+i&quot;,sans-serif"><a href=3D"http://www.cefla.com/" target=3D"_blank" rel=
+=3D"noreferrer"><span style=3D"font-size:10.0pt;font-family:&quot;Arial&quo=
+t;,sans-serif;color:#551a8b">www.cefla.com</span></a></span><span style=3D"=
+font-size:10.0pt;font-family:&quot;Arial&quot;,sans-serif;color:#333333"> |=
+ </span><span style=3D"font-size:11.0pt;font-family:&quot;Calibri&quot;,san=
+s-serif"><a href=3D"http://www.ceflamedicalequipment.com" target=3D"_blank"=
+ rel=3D"noreferrer"></a></span></p></td></tr></table></div></div></div></di=
+v></div></div></div></div></blockquote></div></div></blockquote></div></div=
+></div></blockquote></div></blockquote></div></div></div></div></blockquote=
+></div></div></div></div></blockquote></div></div></div></div></blockquote>=
+</div></blockquote></div></div></div></div></blockquote></div></blockquote>=
+</div></div></div></div></div></div></div></div></div></div></div></div></d=
+iv></div></div>
+
+--000000000000418c4706519cc398--

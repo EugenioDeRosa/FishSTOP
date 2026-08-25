@@ -1,0 +1,442 @@
+Received: from GVX0PF5391DB7D1.eurprd01.prod.exchangelabs.com
+ (2603:10a6:158:401::84d) by AS4PR01MB10132.eurprd01.prod.exchangelabs.com
+ with HTTPS; Tue, 21 Jul 2026 00:44:31 +0000
+ARC-Seal: i=3; a=rsa-sha256; s=arcselector10001; d=microsoft.com; cv=pass;
+ b=kPYSPWUtf5jiqhaaovM585osM77KKuQZz9D2OiypiP/3aQ23Jx5go0WkqFtppgpJMX0uSZ3wl3UZA/1Gy/CgKYuRxukoiXvLxzmHhIfmc9rxR81MsVPRYffYQ92cAwjPUpaGJhEqd+r4HuXKcmUsjrtvslb76mqfMKhblm/zmmbyOLbWgG9Wy73QnCAgc5JHZPpc5zbr1KK6vGlKuTD2ArFsp5wGnE6kgirTI6/zMf8Kv7+jyFWI2YIE8atkBgqYvnT3kXSJB7VQbdq613OtPUNrZ1EBDfd3u92v7TPKQUAGGkAnQtjO7FIMiRsgq0ZyDeDWuGh1FyAd4SVfmsURGg==
+ARC-Message-Signature: i=3; a=rsa-sha256; c=relaxed/relaxed; d=microsoft.com;
+ s=arcselector10001;
+ h=From:Date:Subject:Message-ID:Content-Type:MIME-Version:X-MS-Exchange-AntiSpam-MessageData-ChunkCount:X-MS-Exchange-AntiSpam-MessageData-0:X-MS-Exchange-AntiSpam-MessageData-1;
+ bh=bxKHlshzX1jMFnGaLzdCfd/RfO+vEpRvJPKPdd6st4o=;
+ b=Fya+zM9+nqpJgY2sNlojj8KmMEy/PAe25hHsADO8ZcvcGaAIoJXKq7MEFkyt4/eS9Vi/TRglzpPNoko2vxrQWDALA+atlGGcbJRROayvo2BHl5T1PmxJiEBDMZbJv3NPgqo58LI+MIUD7ueDe2ROvoFvcAh6vtqDhNwX8yctsLlL2ckZF8mGsAlkdyR2KbmomKpjGDiCXUW37BdoLbcKgnYwT/VsnKRdLvXxCZum1laeHH8CvIqBxGV8OG/4u38FTFRK7GE1zNrfLiTNYxijzPQiwUhaI4eoClShfrbHrVPOzWnrhMbzl/X7p5xQyNAqnhjCMFH9x/rMC2BD/obY/g==
+ARC-Authentication-Results: i=3; mx.microsoft.com 1; spf=pass (sender ip is
+ 209.85.128.69) smtp.rcpttodomain=cefla.onmicrosoft.com
+ smtp.mailfrom=cefla.it; dmarc=pass (p=none sp=none pct=100) action=none
+ header.from=cefla.it; dkim=none (message not signed); arc=pass (0 oda=0
+ ltdi=1)
+Received: from DU2PR04CA0323.eurprd04.prod.outlook.com (2603:10a6:10:2b5::28)
+ by GVX0PF5391DB7D1.eurprd01.prod.exchangelabs.com (2603:10a6:158:401::84d)
+ with Microsoft SMTP Server (version=TLS1_2,
+ cipher=TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384) id 15.21.223.18; Tue, 21 Jul
+ 2026 00:44:26 +0000
+Received: from DU6PEPF00009527.eurprd02.prod.outlook.com
+ (2603:10a6:10:2b5:cafe::7a) by DU2PR04CA0323.outlook.office365.com
+ (2603:10a6:10:2b5::28) with Microsoft SMTP Server (version=TLS1_3,
+ cipher=TLS_AES_256_GCM_SHA384) id 15.21.223.16 via Frontend Transport; Tue,
+ 21 Jul 2026 00:44:26 +0000
+Authentication-Results: spf=pass (sender IP is 209.85.128.69)
+ smtp.mailfrom=cefla.it; dkim=none (message not signed)
+ header.d=none;dmarc=pass action=none header.from=cefla.it;compauth=pass
+ reason=100
+Received-SPF: Pass (protection.outlook.com: domain of cefla.it designates
+ 209.85.128.69 as permitted sender) receiver=protection.outlook.com;
+ client-ip=209.85.128.69; helo=mail-wm1-f69.google.com; pr=C
+Received: from mail-wm1-f69.google.com (209.85.128.69) by
+ DU6PEPF00009527.mail.protection.outlook.com (10.167.8.8) with Microsoft SMTP
+ Server (version=TLS1_3, cipher=TLS_AES_256_GCM_SHA384) id 15.21.245.5 via
+ Frontend Transport; Tue, 21 Jul 2026 00:44:26 +0000
+Received: by mail-wm1-f69.google.com with SMTP id 5b1f17b1804b1-4926fa2cb17so30230255e9.1
+        for <roberto.bondi@cefla.onmicrosoft.com>; Mon, 20 Jul 2026 17:44:26 -0700 (PDT)
+ARC-Seal: i=2; a=rsa-sha256; t=1784594665; cv=pass;
+        d=google.com; s=arc-20260327;
+        b=YRVyHpxLVSQy7ct5G9yZl0pevaNPjtA9Vhio4qyVziWitAbE1Y3s/+VK2sFPLQZ/UX
+         IBtUy46Gi9QeTXb5qXLsGFfmxGqzrHJGZOBr+PcdJOEz5aXN32EuCJg+nVYB4OHdy7v9
+         vCjEYSByBw4LvCaTx7sjN8KLTfLO8MAtEo8+0PfUyhSF5J7B3AGcI4K02nuIkGFdxm/2
+         sdigsiv5S1XoMttRPbxmlSbvEK+CXls+MizfH8AM+B9FHJQVGfzOpuVmSVJUQUWHeztC
+         Tcu1aaXc9afSya8kETrVwDj3QUeaAi6Rp6rLmhW6yfLXWGmj0yIaH9vb/K+SCC7JSs6c
+         RCgg==
+ARC-Message-Signature: i=2; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=content-language:thread-index:mime-version:message-id:date:subject
+         :to:from;
+        bh=bxKHlshzX1jMFnGaLzdCfd/RfO+vEpRvJPKPdd6st4o=;
+        fh=Xel3LowVoE1lQkBqIWLeIsDwAPQG0F4+BJ6tUD6ZHmI=;
+        b=ewAh2LCaxcTlqOWa2UUm5a7UWEv7wdjClpyl1BOjDF6lSCLC8sCS3QGnIczuhBXqvu
+         87trIklOHedNkxP/QbyjIPrp4KMVdjxo2uiBdmQfp01BGLHC8rJ7a5i4KtOcf3/moV8F
+         vU5OOhB0hmDGLS/fvX/3UEfTIguxHON83S0OZlb2DkZ0ChXTa0LC3ftmfla559g5xUgt
+         7PZoJUal/tZbvk8ioM67svk31wf2/gOWeahSNUCUFpJ0ZZUD8StQRC8J+Hu0IahzwRFD
+         IKwZkjCoDEMtcpKvotcf5BGA3lKcGxSuGe/wolCXQEOf5g5IY2BUVGKTtrdX4gneedJv
+         epyQ==;
+        dara=google.com
+ARC-Authentication-Results: i=2; mx.google.com;
+       spf=softfail (google.com: domain of transitioning roberto.bondi@cefla.it does not designate 119.2.43.115 as permitted sender) smtp.mailfrom=roberto.bondi@cefla.it;
+       dmarc=fail (p=NONE sp=NONE dis=NONE) header.from=cefla.it
+X-Google-DKIM-Signature: v=1; a=rsa-sha256; c=relaxed/relaxed;
+        d=1e100.net; s=20251104; t=1784594665; x=1785199465;
+        h=content-language:thread-index:content-type:mime-version:message-id
+         :date:subject:to:from:x-gm-gg:x-gm-message-state
+         :x-original-authentication-results:from:to:cc:subject:date
+         :message-id:reply-to:content-type;
+        bh=bxKHlshzX1jMFnGaLzdCfd/RfO+vEpRvJPKPdd6st4o=;
+        b=Gp0B3RnSb83WCwHj0eBGrLzuWwfINh6faypKQ8zVNktc38bwp2inscHGnchuVw/I74
+         IHuFCXSGLNxfUaXqANncyrLRj5zcLDIDv/335vQaupZgCS7IQQAqCxKFzR4G8up/hK6L
+         nvLZJsSgPeqBygLRPudmW0gBaAUUfmCtJsMoYI0/zFMFsaoK1tHrREnBJ1ga2YETXDjf
+         4b7vyXKzApga5kSFiD6QrPPoSacvLX/DXppJX403mKVtoIH3IO7FGGQOUV8LveK2k5gc
+         N+6hvCFlMO8w7riwWiD5HsiwOoguqZj7pe+HU5YUL5ujnUg/6g5nRcYxLU/OR1916Fvz
+         VF4w==
+X-Original-Authentication-Results: mx.google.com;
+       spf=softfail (google.com: domain of transitioning roberto.bondi@cefla.it does not designate 119.2.43.115 as permitted sender) smtp.mailfrom=roberto.bondi@cefla.it;
+       dmarc=fail (p=NONE sp=NONE dis=NONE) header.from=cefla.it
+X-Forwarded-Encrypted: i=2; AHgh+RpuD+lOYx0uQ9us+AC8F34k5hys1r2+OdJuuaz+1z/zqCeX99XNZeD/LKOMufMFsAU++2roAvQMB49XiRPW@cefla.onmicrosoft.com
+X-Gm-Message-State: AOJu0Yw9/150r+yVSmQ2PdzlvFM9hVEPt6An5oI7ltnYEjjTWn1KN31L
+	vMhXl7yLKiNQgTP3s3V9VeGDJER9JlmOxUsF+FHjVM4BzOWj07CpNmgkR55ngIkC2BHLHTyGHtz
+	dD+4mqnaMtCFRhgV3zbuKwefhWbaZSdHGxvOjWHqLz90gIVPXdT1+5mYjtHgARCKVGJN1IQINRz
+	l+mva6Zo5OzIyhtztW2WCjh1+23TVkdkXmMHkW4Sk=
+X-Gm-Gg: AfdE7clVc/Ja4cdcqf0Hy+8NT3A1Y0/qzfHnhs6onhQctZYP78BL07o9K2ts2co09o5
+	ILefG8guSjuyIJEq7kxQz5YDECtnSbCqsKknCwCV6xPdZTy49FUoOZJbIyDd/CaKa0fRKp7u9Fx
+	hCBwSm+XE23n9kuG9E5K8WORJl5d1vvFq7lvu2pVhYqIlKnGWS4tvPTgfAVwXlBfUQj7d/XVMGE
+	hqg4sFxBjWubyESOotsKmyPec0LHyEBNMItvDrel+iUAd/nY9+HBj+V4jkh2Cs0pWVH0faKVf9P
+	lVuf6gKHFTE9mqVAWti70a1Kab47liPTD/JYHecZLaG+VIrRHW2XoVlD/lam1/JTMtjUs3PpsA=
+	=
+X-Received: by 2002:a05:600c:19d3:b0:492:714d:8c4 with SMTP id 5b1f17b1804b1-4954a339287mr163118255e9.11.1784594665694;
+        Mon, 20 Jul 2026 17:44:25 -0700 (PDT)
+X-Received: by 2002:a05:600c:19d3:b0:492:714d:8c4 with SMTP id 5b1f17b1804b1-4954a339287mr163117935e9.11.1784594664648;
+        Mon, 20 Jul 2026 17:44:24 -0700 (PDT)
+ARC-Seal: i=1; a=rsa-sha256; t=1784594664; cv=none;
+        d=google.com; s=arc-20260327;
+        b=OnDs1EqrMD94AmREbybKqTmq95Bsgc5hDQ685QpYS+0wyy7Q5WHepCWJibIf06VH4n
+         1b1onzrRNCs1v7WQPPA0LcwPlktJgfmX7lp5Oe5Sfpmb2qoS+OTS+aRVyy6KFU+L3Xoh
+         /up38Z8lxdkQqIEA4dlMX4809qAR6NrEq4UOe21OnfvFnqo9ugvWrD88XmIwC1nW21sI
+         Rvr6YsEk1EkTGyuNhew6r5Z4yhMPV9YoIp/NsC6OuQLEVaVaSreGttXqXSG8MW78x00M
+         1j+gX7mjLqtE6teKoORFQjFf1ZxQxfAd2zNYIuvtI12MLCJ3aPemshRCoIzbVSJ2ojrj
+         gXBQ==
+ARC-Message-Signature: i=1; a=rsa-sha256; c=relaxed/relaxed; d=google.com; s=arc-20260327;
+        h=content-language:thread-index:mime-version:message-id:date:subject
+         :to:from;
+        bh=bxKHlshzX1jMFnGaLzdCfd/RfO+vEpRvJPKPdd6st4o=;
+        fh=6lurGIww24KZJhCsHruBEF+0llvJ01J2eumVJSW+qZ0=;
+        b=osGVEu+tOmeXnEfd730FkTw0eHpx2km9pG9bOd1mZjMth7oRhi9aUSYfZs7ypOXj6J
+         hJHzuzHevcx+pIaEKcBFSjlnjZ9vW+EvT5c9+Vraizlz2mlBbVnM8N59c2g9MsqomBm8
+         GGf8F6FBwHTevAg2MvnOMdg8YgveTgvSUWELmtASryGlwXWDop+CsZlFJzDC/sUTFRm/
+         JHiJh40n+7zpE8m9wN3KodAYRAi3nGNJMjfYRIBZzEiHcQkv0rofwkGyFx5t+09F09vB
+         VoqF5B/3RGFxwJSuOLLmZ2uS4iNTo1ClTvmoAEbc0OvOsszi+0ibAHQYEL90Ff7fwUtU
+         tzVQ==;
+        dara=google.com
+ARC-Authentication-Results: i=1; mx.google.com;
+       spf=softfail (google.com: domain of transitioning roberto.bondi@cefla.it does not designate 119.2.43.115 as permitted sender) smtp.mailfrom=roberto.bondi@cefla.it;
+       dmarc=fail (p=NONE sp=NONE dis=NONE) header.from=cefla.it
+Return-Path: roberto.bondi@cefla.it
+Received: from [119.2.43.115] ([119.2.43.115])
+        by mx.google.com with ESMTP id 5b1f17b1804b1-49565372dd2si26418785e9.3.2026.07.20.17.44.18
+        for <roberto.bondi@cefla.it>;
+        Mon, 20 Jul 2026 17:44:24 -0700 (PDT)
+Received-SPF: softfail (google.com: domain of transitioning roberto.bondi@cefla.it does not designate 119.2.43.115 as permitted sender) client-ip=119.2.43.115;
+Authentication-Results-Original: mx.google.com;       spf=softfail
+ (google.com: domain of transitioning roberto.bondi@cefla.it does not
+ designate 119.2.43.115 as permitted sender)
+ smtp.mailfrom=roberto.bondi@cefla.it;       dmarc=fail (p=NONE sp=NONE
+ dis=NONE) header.from=cefla.it
+From: <roberto.bondi@cefla.it>
+To: <roberto.bondi@cefla.it>
+Subject: Violazione dei dati personali a causa di presunte attivita dannose.
+Date: Tue, 21 Jul 2026 13:36:15 +0600
+Message-ID: <002a01dd18e4$07f18f6d$20a9aa86$@cefla.it>
+Content-Type: multipart/alternative;
+	boundary="----=_NextPart_000_0027_01DD18E4.07F1870D"
+X-Mailer: Microsoft Outlook 16.0
+Thread-Index: Acfko3qbm826nv0afko3qbm826nv0a==
+Content-Language: en-us
+X-Gm-Original-To: roberto.bondi@cefla.it
+X-MS-Exchange-Organization-ExpirationStartTime: 21 Jul 2026 00:44:26.2482
+ (UTC)
+X-MS-Exchange-Organization-ExpirationStartTimeReason: OriginalSubmit
+X-MS-Exchange-Organization-ExpirationInterval: 1:00:00:00.0000000
+X-MS-Exchange-Organization-ExpirationIntervalReason: OriginalSubmit
+X-MS-Exchange-Organization-Network-Message-Id: 3672908b-adb7-4419-f140-08dee6c13734
+X-EOPAttributedMessage: 0
+X-EOPTenantAttributedMessage: f602a280-2b4d-4b52-b0f3-fac61b324e55:0
+X-MS-Exchange-Organization-MessageDirectionality: Incoming
+X-MS-PublicTrafficType: Email
+X-MS-TrafficTypeDiagnostic: DU6PEPF00009527:EE_|GVX0PF5391DB7D1:EE_|AS4PR01MB10132:EE_
+X-MS-Exchange-Organization-AuthSource: DU6PEPF00009527.eurprd02.prod.outlook.com
+X-MS-Exchange-Organization-AuthAs: Anonymous
+X-MS-Office365-Filtering-Correlation-Id: 3672908b-adb7-4419-f140-08dee6c13734
+X-MS-Exchange-AtpMessageProperties: SA|SL
+X-MS-Exchange-Organization-SCL: -1
+X-Microsoft-Antispam: BCL:0;ARA:13230040|704162011799003|3089299003|43022699015|8129299003|55112099003|57112099003|5063699009|11063799006|18003699003|4133799003|8096899003|19002099009|10067099003|35030500025;
+X-Forefront-Antispam-Report: CIP:209.85.128.69;CTRY:US;LANG:it;SCL:-1;SRV:;IPV:NLI;SFV:SKA;H:mail-wm1-f69.google.com;PTR:mail-wm1-f69.google.com;CAT:NONE;SFS:(13230040)(704162011799003)(3089299003)(43022699015)(8129299003)(55112099003)(57112099003)(5063699009)(11063799006)(18003699003)(4133799003)(8096899003)(19002099009)(10067099003)(35030500025);DIR:INB;
+X-MS-Exchange-CrossTenant-OriginalArrivalTime: 21 Jul 2026 00:44:26.2048
+ (UTC)
+X-MS-Exchange-CrossTenant-Network-Message-Id: 3672908b-adb7-4419-f140-08dee6c13734
+X-MS-Exchange-CrossTenant-Id: f602a280-2b4d-4b52-b0f3-fac61b324e55
+X-MS-Exchange-CrossTenant-AuthSource: DU6PEPF00009527.eurprd02.prod.outlook.com
+X-MS-Exchange-CrossTenant-AuthAs: Anonymous
+X-MS-Exchange-CrossTenant-FromEntityHeader: Internet
+X-MS-Exchange-Transport-CrossTenantHeadersStamped: GVX0PF5391DB7D1
+X-MS-Exchange-Transport-EndToEndLatency: 00:00:04.9483494
+X-MS-Exchange-Processed-By-BccFoldering: 15.21.0223.005
+X-Microsoft-Antispam-Mailbox-Delivery:
+	ucf:0;jmr:0;auth:0;dest:I;ENG:(910005)(944506478)(944626604)(920097)(930201)(20251009189)(140003);
+X-Microsoft-Antispam-Message-Info:
+	=?Windows-1252?Q?xgdRA1Qsv4Rt833Je2gjnncOsjcVwE4u3ha0RT9dfKq8R/lszUL0VhDB?=
+ =?Windows-1252?Q?QJRbggRg1kDzu55M9e/Ba0T5HpkTKjA0uXut8FgsbLgqc17LQ+NGysQM?=
+ =?Windows-1252?Q?54h9MhZogULknnFKI5vOAuYAFS7N9EXh75BM7cwzrAvkVQp24nkTWvJZ?=
+ =?Windows-1252?Q?LaPr0Qtoqvp+uQrrYyOWWhWxpx6BtEx8KhI3nB4dtO0a62nUCAPQF5h8?=
+ =?Windows-1252?Q?JdVZ7P06MVzm8F6jdLYCL6gum+KO9LYkO6Q8GL5SRXkhq3a0LkM5Pv+F?=
+ =?Windows-1252?Q?0Yl2o29/RhjRhOab6rTX5miVZ087x3l0isxm9CvY6oDJscrSla2VtN0O?=
+ =?Windows-1252?Q?y6k9LIr8vkRWcEH5sKg0tFoksH6FDRt2XFqgZNoTeOAp5DGDDPc+pkXa?=
+ =?Windows-1252?Q?5Wq5RZ+sjKyld1PQd5vWmx2TpQiV+YDqdQfj786x317q8Xy1+mSsyIgR?=
+ =?Windows-1252?Q?yEQ9sGq6VDGzbZOc231aYu1hqNtmtTvc+KzOz456hyGirUxg5yOmvqKb?=
+ =?Windows-1252?Q?50tRmNC9APrQXpqiUBXZLYI8rKKAVSJQIlnfx9xAJY0BtpcP2HuuXBpU?=
+ =?Windows-1252?Q?7PKsDONWg1tkV+zLo5wk3WPJ4WVqp9gA/ePlTEk7eKrSMGiwjv6RIkqU?=
+ =?Windows-1252?Q?YAs7ZfjOK7m8V7Aou8PVdEsNMAj+3EMPVkQt6YydTR9g1f91F688VTEK?=
+ =?Windows-1252?Q?2O2jpZQJtnne+fmQ9Yym7SZ+cNoSzwvzddSvq2lsjvPC6sa1LT4/7ur0?=
+ =?Windows-1252?Q?qj8yo8+lJaMPIOrjy5Z8uV2Hk0O/UYWIBRttFyllLjm0Ik73V7wYCPue?=
+ =?Windows-1252?Q?Po8/rSXHzMcWBNmXDriRh2uxXqVBluWP0lshPoscmpon4vackkwEJL6y?=
+ =?Windows-1252?Q?k89rtljR2+hy8O9DvVDi0Pg2AocFcUQz2ei4P0eb+hI+/H5jVvr8ubQz?=
+ =?Windows-1252?Q?zdOxK2qQ5KNtApKM79l7ygV0dPB7lolKh5SSb8y9VwORtSlJcKn4NW0s?=
+ =?Windows-1252?Q?Qsul+7dkkmUpFlqmSP9brEt8Nl19652FAF3mzd1s9wstSfAaF/sp3q19?=
+ =?Windows-1252?Q?uMgkLkApjN74bLiB6552tWvCYEylWirwjp7DJIsECHVO6rWwK7ue+idQ?=
+ =?Windows-1252?Q?Hz2uB8l7asfBKI+7Nq+jmby9OfRrKeRxSUH0AG+fk2WTjj7fvM8R1EvE?=
+ =?Windows-1252?Q?DmjCyCXguxQxuPyNJSfUrGov8Qm/42PtDjAny4icd6Lv3btScdWXvJhD?=
+ =?Windows-1252?Q?t/136pAeNkY6HSmYsId9yKFVdeP7JusALn5FQ/ANwgOUV2oUzTq0as6B?=
+ =?Windows-1252?Q?ElHClB52bFCwLY89dYqrP7j/RK+h8hnVS9LcD8Pk9cYT+NB+Nf0N7BuT?=
+ =?Windows-1252?Q?X7ZX5et5U+IYwTqSRrNrTli16Ef3QWa0s8PqHupPmR3c2/M9f460XhWF?=
+ =?Windows-1252?Q?tK4EYIojFEPFqyWOyxweAuzvsq6V8NAdz3jlUGg6t7Z3Q0VkL6i1175c?=
+ =?Windows-1252?Q?lYjqvTN/+eIWmfgSl/0COqTm3yURR0MjDN/p6FLk09ZFSjFLsVdbsu7M?=
+ =?Windows-1252?Q?HCtxGrNIs5AK7J/fVGwXxQ/RqE6E+VF5ar8VL4bMEmMXE8w4RhjmvFM/?=
+ =?Windows-1252?Q?68HbbJVP5h6x0J4Nf0ir6p6784OOC5wlp4rPYBfx7mQBWt9Ztgk942YW?=
+ =?Windows-1252?Q?XCH4DuKcAxYhXMn46G1vjRC9YIQj1zjz81LaIcrrZDpOLrTobHBpL405?=
+ =?Windows-1252?Q?ITFL2lgM2pUtyBrfotw/wPCpFjD99zqbQh6tEglc2cpv3N6Ug9qc8SQ7?=
+ =?Windows-1252?Q?oYLCnD76MRe88UHW434qn5YSBo5Eidggd4KhCWEIR83zkD6RVO0ZV7I+?=
+ =?Windows-1252?Q?wgxm019Yv4/1tS0QxFCdWfnzHbwHjmQfL/I=3D?=
+MIME-Version: 1.0
+
+------=_NextPart_000_0027_01DD18E4.07F1870D
+Content-Type: text/plain; charset="iso-8859-2"
+Content-Transfer-Encoding: quoted-printable
+
+Ehila!
+
+Sono un hacker professionista e sono riuscito ad hackerare il tuo sistema o=
+perativo.
+Attualmente ho l'accesso completo al tuo account.
+Inoltre, ho monitorato di nascosto tutte le tue attivita e ti ho osservato =
+per diversi mesi.
+
+Il punto e che il tuo computer e stato infettato da spyware dannosi dal mom=
+ento che in precedenza hai visitato un sito con contenuti porno.
+
+Lascia che ti spieghi che cosa comporta tutto questo.
+Grazie ai virus Trojan, posso ottenere l'accesso al tuo computer o a qualsi=
+asi altro tuo dispositivo.
+Cio significa che posso vedere assolutamente tutto sul tuo schermo e attiva=
+re la videocamera e il microfono in qualsiasi momento senza la tua autorizz=
+azione.
+In aggiunta, posso anche accedere e vedere i tuoi dati riservati insieme al=
+le e-mail e ai messaggi di chat.
+
+Forse ti starai chiedendo perch=E9 il tuo antivirus non intercetta il mio s=
+oftware dannoso.
+Lascia che te lo spieghi: uso un software basato su driver che aggiorna le =
+sue firme ogni quattro ore,
+motivo per cui il tuo antivirus non e in grado di rilevare la sua presenza.
+
+Ho realizzato una compilation di video, che sulla sinistra mostra le scene =
+in cui ti stai masturbando felicemente,
+mentre sulla destra presenta il video che stavi guardando in quel preciso m=
+omento.
+
+Non devo fare altro che condividere questo materiale con tutti gli indirizz=
+i e-mail e i contatti
+di messenger delle persone con cui sei in comunicazione sul tuo dispositivo=
+ o PC.
+Inoltre, posso anche rendere pubbliche tutte le tue e-mail e la cronologia =
+della chat.
+
+Credo che tu voglia assolutamente evitare che accada.
+Ecco cosa devi fare - trasferire l'equivalente in Bitcoin di 950EUR sul mio=
+ conto Bitcoin
+(e un'operazione abbastanza semplice e nel caso in cui non sappia come eseg=
+uirla puoi dare un'occhiata online).
+
+Ecco i dati del mio conto Bitcoin (Bitcoin wallet): 1Ar5U22ayhYd36rfrJ5RHJa=
+7AT3CScCZqX
+
+Una volta che l'importo richiesto sara trasferito sul mio conto, procedero =
+con l'eliminazione di tutti quei video e spariro dalla tua vita definitivam=
+ente.
+Gentilmente assicurati di completare il trasferimento di cui sopra entro 50=
+ ore (piu di 2 giorni).
+Ricevero una notifica subito dopo che avrai aperto questa e-mail e da quel =
+momento iniziera il conto alla rovescia.
+
+Fidati di me, sono molto attento, calcolatore e non commetto mai errori.
+Se scopro che hai condiviso questo messaggio con altre persone, rendero imm=
+ediatamente pubblici i tuoi video privati.
+
+Buona fortuna!
+________________________________
+
+Questa email e qualsiasi allegato sono riservati e potrebbero anche essere =
+confidenziali. Qualora non foste il destinatario, ed aveste ricevuto questo=
+ messaggio per errore, siete pregati di informare immediatamente il mittent=
+e (via email) e di distruggere questa email e gli allegati dal vostro siste=
+ma.
+Qualsiasi uso, distribuzione, riproduzione o rivelazione da parte di terzi =
+diversi dal destinatario e' severamente vietata per legge. Grazie
+
+This email and any attachments are confidential and may also be privileged.=
+ If you are not the intended recipient, and have received this message in e=
+rror, please immediately notify the sender (by email) and delete this email=
+ and any attachments from your system.
+You are hereby notified that any use, distribution, reproduction or disclos=
+ure by any person other than the intended recipient is strictly prohibited.=
+ Thank you
+
+------=_NextPart_000_0027_01DD18E4.07F1870D
+Content-Type: text/html; charset="iso-8859-2"
+Content-Transfer-Encoding: quoted-printable
+
+<html xmlns:v=3D"urn:schemas-microsoft-com:vml" xmlns:o=3D"urn:schemas-micr=
+osoft-com:office:office" xmlns:w=3D"urn:schemas-microsoft-com:office:word" =
+xmlns:m=3D"http://schemas.microsoft.com/office/2004/12/omml" xmlns=3D"http:=
+//www.w3.org/TR/REC-html40"><head>
+<meta http-equiv=3D"Content-Type" content=3D"text/html; charset=3Diso-8859-=
+2">
+<meta name=3D"Generator" content=3D"Microsoft Word 15 (filtered medium)">
+<style><!--
+/* Font Definitions */
+@font-face
+	{font-family:"Cambria Math";
+	panose-1:2 4 5 3 5 4 6 3 2 4;}
+@font-face
+	{font-family:Calibri;
+	panose-1:2 15 5 2 2 2 4 3 2 4;}
+/* Style Definitions */
+p.MsoNormal, li.MsoNormal, div.MsoNormal
+	{margin:0in;
+	margin-bottom:.0001pt;
+	font-size:11.0pt;
+	font-family:"Calibri",sans-serif;}
+a:link, span.MsoHyperlink
+	{mso-style-priority:99;
+	color:#0563C1;
+	text-decoration:underline;}
+a:visited, span.MsoHyperlinkFollowed
+	{mso-style-priority:99;
+	color:#954F72;
+	text-decoration:underline;}
+span.EmailStyle17
+	{mso-style-type:personal-compose;
+	font-family:"Calibri",sans-serif;
+	color:windowtext;}
+.MsoChpDefault
+	{mso-style-type:export-only;
+	font-family:"Calibri",sans-serif;}
+@page WordSection1
+	{size:8.5in 11.0in;
+	margin:1.0in 1.0in 1.0in 1.0in;}
+div.WordSection1
+	{page:WordSection1;}
+--></style><!--[if gte mso 9]><xml>
+<o:shapedefaults v:ext=3D"edit" spidmax=3D"1026" />
+</xml><![endif]--><!--[if gte mso 9]><xml>
+<o:shapelayout v:ext=3D"edit">
+<o:idmap v:ext=3D"edit" data=3D"1" />
+</o:shapelayout></xml><![endif]-->
+</head>
+<body lang=3D"EN-US" link=3D"#0563C1" vlink=3D"#954F72">
+<div class=3D"WordSection1">
+<p class=3D"MsoNormal">Ehil&agrave;!<br>
+<br>
+Sono un hacker professionista e sono riuscito ad hackerare il tuo sistema o=
+perativo.
+<br>
+Attualmente ho l&#8217;accesso completo al tuo account. <br>
+Inoltre, ho monitorato di nascosto tutte le tue attivit&agrave; e ti ho oss=
+ervato per diversi mesi.
+<br>
+<br>
+Il punto &egrave; che il tuo computer &egrave; stato infettato da spyware d=
+annosi dal momento che in precedenza hai visitato un sito con contenuti por=
+no.<br>
+<br>
+Lascia che ti spieghi che cosa comporta tutto questo. <br>
+Grazie ai virus Trojan, posso ottenere l&#8217;accesso al tuo computer o a =
+qualsiasi altro tuo dispositivo.
+<br>
+Ci&ograve; significa che posso vedere assolutamente tutto sul tuo schermo e=
+ attivare la videocamera e il microfono in qualsiasi momento senza la tua a=
+utorizzazione.
+<br>
+In aggiunta, posso anche accedere e vedere i tuoi dati riservati insieme al=
+le e-mail e ai messaggi di chat.<br>
+<br>
+Forse ti starai chiedendo perch=E9 il tuo antivirus non intercetta il mio s=
+oftware dannoso.
+<br>
+Lascia che te lo spieghi: uso un software basato su driver che aggiorna le =
+sue firme ogni quattro ore,
+<br>
+motivo per cui il tuo antivirus non &egrave; in grado di rilevare la sua pr=
+esenza.<br>
+<br>
+Ho realizzato una compilation di video, che sulla sinistra mostra le scene =
+in cui ti stai masturbando felicemente,
+<br>
+mentre sulla destra presenta il video che stavi guardando in quel preciso m=
+omento.<br>
+<br>
+Non devo fare altro che condividere questo materiale con tutti gli indirizz=
+i e-mail e i contatti
+<br>
+di messenger delle persone con cui sei in comunicazione sul tuo dispositivo=
+ o PC.
+<br>
+Inoltre, posso anche rendere pubbliche tutte le tue e-mail e la cronologia =
+della chat.<br>
+<br>
+Credo che tu voglia assolutamente evitare che accada. <br>
+Ecco cosa devi fare &#8211; trasferire l&#8217;equivalente in Bitcoin di 95=
+0&#8364; sul mio conto Bitcoin
+<br>
+(&egrave; un&#8217;operazione abbastanza semplice e nel caso in cui non sap=
+pia come eseguirla puoi dare un&#8217;occhiata online).<br>
+<br>
+Ecco i dati del mio conto Bitcoin (Bitcoin wallet): 1Ar5U22ayhYd36rfrJ5RHJa=
+7AT3CScCZqX
+<br>
+<br>
+Una volta che l&#8217;importo richiesto sar&agrave; trasferito sul mio cont=
+o, proceder&ograve; con l&#8217;eliminazione di tutti quei video e sparir&o=
+grave; dalla tua vita definitivamente.
+<br>
+Gentilmente assicurati di completare il trasferimento di cui sopra entro 50=
+ ore (pi&ugrave; di 2 giorni).
+<br>
+Ricever&ograve; una notifica subito dopo che avrai aperto questa e-mail e d=
+a quel momento inizier&agrave; il conto alla rovescia.<br>
+<br>
+Fidati di me, sono molto attento, calcolatore e non commetto mai errori.<br=
+>
+Se scopro che hai condiviso questo messaggio con altre persone, render&ogra=
+ve; immediatamente pubblici i tuoi video privati.<br>
+<br>
+Buona fortuna!<o:p></o:p></p>
+</div>
+<hr style=3D"border:none;border-top:1px solid #e0e0e0;margin:20px 0;">
+<div style=3D"font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;=
+ font-size: 11px; color: #555555; line-height: 1.4; font-style: italic;">
+<p style=3D"margin-bottom: 10px;">Questa email e qualsiasi allegato sono ri=
+servati e potrebbero anche essere confidenziali. Qualora non foste il desti=
+natario, ed aveste ricevuto questo messaggio per errore, siete pregati di i=
+nformare immediatamente il mittente
+ (via email) e di distruggere questa email e gli allegati dal vostro sistem=
+a.<br>
+<strong>Qualsiasi uso, distribuzione, riproduzione o rivelazione da parte d=
+i terzi diversi dal destinatario e' severamente vietata per legge. Grazie</=
+strong>
+</p>
+<p>This email and any attachments are confidential and may also be privileg=
+ed. If you are not the intended recipient, and have received this message i=
+n error, please immediately notify the sender (by email) and delete this em=
+ail and any attachments from your
+ system.<br>
+<strong>You are hereby notified that any use, distribution, reproduction or=
+ disclosure by any person other than the intended recipient is strictly pro=
+hibited. Thank you</strong>
+</p>
+</div>
+</body>
+</html>
+
+------=_NextPart_000_0027_01DD18E4.07F1870D--

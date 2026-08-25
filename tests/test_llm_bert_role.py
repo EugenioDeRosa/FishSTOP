@@ -1,0 +1,95 @@
+import inspect
+
+from src.analyzer import llm_context_analyzer
+from src.analyzer.llm_context_analyzer import (
+    apply_email_risk_policy,
+    build_fast_email_prompt,
+    format_email_risk_analysis,
+)
+
+
+def test_bert_is_not_passed_to_phi4_semantic_analysis():
+    soc = {
+        "from_": "sales@example.com",
+        "to": "customer@example.net",
+        "subject": "Service improvement discussion",
+        "body_clean": "Gentile Chiara, vorrei condividere come alcuni clienti stanno migliorando il servizio post-vendita. Resto disponibile per un confronto in uno slot comodo.",
+        "body_source": "text/plain",
+        "auth_results": {
+            "SPF": {"status": "pass"},
+            "DKIM": {"status": "none"},
+            "DMARC": {"status": "none"},
+        },
+        "arc_auth_results": {},
+        "dkim_signature_present": False,
+        "reply_to_mismatch": False,
+        "return_path_domain_mismatch": False,
+        "display_name_spoofing": None,
+        "bert_ai_result": "phishing",
+        "links": [],
+        "link_reputation": {},
+        "lookalike_alerts": [],
+        "flags": [
+            {"level": "MEDIUM", "field": "DKIM", "message": "DKIM NONE - signature validation should be reviewed"},
+            {"level": "MEDIUM", "field": "DMARC", "message": "DMARC NONE"},
+        ],
+        "attachments": [],
+    }
+
+    prompt = build_fast_email_prompt(soc)
+
+    assert "BERT" not in prompt
+    assert "SUBJECT: Service improvement discussion" in prompt
+    assert "phishing" not in prompt.lower()
+
+
+def test_phi4_instructions_exclude_bert_and_the_final_verdict():
+    prompt_source = llm_context_analyzer.TASK_INSTRUCTIONS
+
+    assert "BERT" not in prompt_source
+    assert "no verdict or technical checks" in prompt_source
+    assert "link or urgency alone is neutral" in prompt_source.lower()
+
+
+def test_hosted_prompt_anonymizes_personal_data():
+    prompt = build_fast_email_prompt(
+        {
+            "subject": "Contatta mario@example.com",
+            "body_clean": "Invia il bonifico a IT60X0542811101000000123456 oppure chiama +39 333 1234567.",
+            "links": [],
+            "attachments": [],
+        },
+        anonymize=True,
+    )
+
+    assert "mario@example.com" not in prompt
+    assert "IT60X0542811101000000123456" not in prompt
+    assert "+39 333 1234567" not in prompt
+    assert "[EMAIL ADDRESS]" in prompt
+    assert "[IBAN]" in prompt
+
+
+def test_bert_is_reported_after_intent_analysis_as_support_or_contrary_evidence():
+    phishing = apply_email_risk_policy(
+        {"auth_results": {}, "bert_ai_result": "phishing"},
+        {
+            "action": "provide_credentials",
+            "channel": "reply",
+            "signals": ["credentials"],
+            "summary": "The email body requests credentials by reply, a strong phishing pattern.",
+        },
+    )
+    legitimate = apply_email_risk_policy(
+        {"auth_results": {}, "bert_ai_result": "phishing"},
+        {
+            "action": "info",
+            "channel": "none",
+            "signals": [],
+            "summary": "The subject and body provide routine information without requesting risky action.",
+        },
+    )
+
+    assert "BERT classified the content as phishing" in phishing["corroboration"]["details"]
+    assert "BERT classified the content as phishing" in legitimate["corroboration"]["caveats"]
+    assert "BERT classified the content as phishing" in format_email_risk_analysis(phishing)
+    assert legitimate["final_verdict"] == "legitimate"
