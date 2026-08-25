@@ -30,18 +30,20 @@ def latest_release() -> dict[str, Any] | None:
         return None
 
 
-def installer_for(release: dict[str, Any] | None, platform: str) -> dict[str, Any] | None:
+def installer_for(release: dict[str, Any] | None, platform: str, architecture: str | None = None) -> dict[str, Any] | None:
     if not release:
         return None
     extensions = (".dmg",) if platform == "macos" else (".msi", ".exe")
-    return next(
-        (
-            asset
-            for asset in release.get("assets", [])
-            if str(asset.get("name", "")).lower().endswith(extensions)
-        ),
-        None,
-    )
+    candidates = [
+        asset
+        for asset in release.get("assets", [])
+        if str(asset.get("name", "")).lower().endswith(extensions)
+    ]
+    if platform != "macos" or architecture is None:
+        return candidates[0] if candidates else None
+    markers = ("aarch64", "arm64") if architecture == "apple-silicon" else ("x86_64", "x64", "intel")
+    matching = next((asset for asset in candidates if any(marker in str(asset.get("name", "")).lower() for marker in markers)), None)
+    return matching or (candidates[0] if len(candidates) == 1 else None)
 
 
 def download_card(platform: str, title: str, description: str, asset: dict[str, Any] | None, version: str | None) -> None:
@@ -96,9 +98,11 @@ if release:
 else:
     st.markdown("<p class='release-status'>Gli installer appariranno qui appena sarà pubblicata la prima release desktop.</p>", unsafe_allow_html=True)
 
-mac, windows = st.columns(2, gap="medium")
-with mac:
-    download_card("macOS", "FishSTOP per Mac", "Per Mac con Apple Silicon e processore Intel.", installer_for(release, "macos"), version)
+mac_arm, mac_intel, windows = st.columns(3, gap="medium")
+with mac_arm:
+    download_card("macOS · Apple Silicon", "FishSTOP per Mac", "Per Mac M1, M2, M3 e successivi.", installer_for(release, "macos", "apple-silicon"), version)
+with mac_intel:
+    download_card("macOS · Intel", "FishSTOP per Mac", "Per Mac con processore Intel.", installer_for(release, "macos", "intel"), version)
 with windows:
     download_card("Windows", "FishSTOP per Windows", "Installer per PC Windows a 64 bit.", installer_for(release, "windows"), version)
 
