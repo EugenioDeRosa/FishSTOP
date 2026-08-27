@@ -58,7 +58,7 @@ st.markdown(
     """
     <style>
       :root { --ink:#0b1220; --muted:#64748b; --line:#e5eaf1; --canvas:#f7f9fc; --blue:#2563eb; --teal:#0f9f8f; --aqua:#dff8f3; }
-      html { scroll-behavior:smooth; } html,body,[class*="css"] { font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",sans-serif; }
+      html,body,[class*="css"] { font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Inter",sans-serif; }
       .stApp { background:var(--canvas); color:var(--ink); } [data-testid="stHeader"] { height:0; background:transparent; }
       #MainMenu,footer,[data-testid="stToolbar"] { display:none; }
       [data-testid="stMainBlockContainer"] { max-width:1180px; padding:1.35rem 1.5rem 3rem; }
@@ -70,8 +70,8 @@ st.markdown(
       .eyebrow { display:inline-flex; align-items:center; gap:.5rem; margin:0 0 1.25rem; color:var(--teal); font-size:.73rem; font-weight:760; letter-spacing:.13em; text-transform:uppercase; }
       .eyebrow::before { content:""; width:.48rem; height:.48rem; border-radius:999px; background:var(--teal); box-shadow:0 0 0 5px rgba(15,159,143,.11); }
       .hero h1 { max-width:880px; margin:0; color:var(--ink); font-size:clamp(3.55rem,8.1vw,7.3rem)!important; font-weight:720; line-height:.93; letter-spacing:-.078em; }
-      .hero h1 em { color:var(--teal); font-style:normal; } .hero-link { color:inherit; text-decoration:none; border-bottom:2px solid rgba(15,159,143,.25); transition:border-color .2s ease,color .2s ease; } .hero-link:hover,.hero-link:focus-visible { color:#08796d; border-color:currentColor; outline:none; } .hero-copy { max-width:630px; margin:1.7rem 0 0; color:var(--muted); font-size:1.15rem; line-height:1.65; letter-spacing:-.012em; }
-      .download-section { border-top:1px solid var(--line); padding-top:2.15rem; scroll-margin-top:2rem; } .download-kicker { margin:0 0 .45rem; color:var(--blue); font-size:.73rem; font-weight:760; letter-spacing:.13em; text-transform:uppercase; }
+      .hero h1 em { color:var(--teal); font-style:normal; } .hero-copy { max-width:630px; margin:1.7rem 0 0; color:var(--muted); font-size:1.15rem; line-height:1.65; letter-spacing:-.012em; }
+      .download-section { border-top:1px solid var(--line); padding-top:2.15rem; } .download-kicker { margin:0 0 .45rem; color:var(--blue); font-size:.73rem; font-weight:760; letter-spacing:.13em; text-transform:uppercase; }
       .download-section h3 { margin:0; color:var(--ink); font-size:clamp(2rem,4vw,3rem); line-height:1; letter-spacing:-.062em; } .release-status { margin:.85rem 0 1.8rem; color:var(--muted); font-size:.9rem; } .release-status strong { color:var(--ink); font-weight:700; }
       [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] { min-height:278px; padding:1.45rem; border:1px solid var(--line); border-radius:22px; background:rgba(255,255,255,.84); box-shadow:0 2px 5px rgba(15,23,42,.018),0 14px 32px rgba(15,23,42,.035); transition:transform .22s ease,box-shadow .22s ease,border-color .22s ease; }
       [data-testid="stHorizontalBlock"] > [data-testid="stColumn"]:hover { transform:translateY(-4px); border-color:#cdd8e7; box-shadow:0 20px 42px rgba(15,23,42,.08); }
@@ -86,8 +86,8 @@ st.markdown(
       @media(prefers-reduced-motion:reduce) { * { transition:none!important; } }
     </style>
     <nav class="nav"><p class="wordmark"><span class="fish">Fish</span><span class="stop">Stop</span></p><p class="nav-note">Email security · desktop</p></nav>
-    <section class="hero"><p class="eyebrow">Local-first email security</p><h1>Capire un’email<br>prima che conti <em><a class="hero-link" href="#download">troppo.</a></em></h1><p class="hero-copy">FishStop analizza file email, link e allegati sul tuo dispositivo. Una lettura chiara dei segnali che meritano attenzione, senza inviare il contenuto a un server.</p></section>
-    <section id="download" class="download-section"><p class="download-kicker">Desktop edition</p><h3>Scarica FishStop.</h3></section>
+    <section class="hero"><p class="eyebrow">Local-first email security</p><h1>Capire un’email<br>prima che conti <em>troppo.</em></h1><p class="hero-copy">FishStop analizza file email, link e allegati sul tuo dispositivo. Una lettura chiara dei segnali che meritano attenzione, senza inviare il contenuto a un server.</p></section>
+    <section class="download-section"><p class="download-kicker">Desktop edition</p><h3>Scarica FishStop.</h3></section>
     """,
     unsafe_allow_html=True,
 )
