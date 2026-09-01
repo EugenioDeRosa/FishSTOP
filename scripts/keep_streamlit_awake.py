@@ -15,7 +15,9 @@ APP_URL = os.environ.get(
     "https://fishstop-eml.streamlit.app/",
 )
 WAKE_BUTTON = "Yes, get this app back up!"
-APP_HEADING = "Investigate a suspicious email"
+# This class belongs to the public download page and is independent from its
+# marketing copy, which can change without making the app unavailable.
+APP_READY_SELECTOR = "section.download-section"
 FAILURE_SCREENSHOT = Path("artifacts/keep-awake-failure.png")
 
 
@@ -33,12 +35,7 @@ def wait_until_loaded(page, timeout_seconds: int = 180) -> bool:
                 wake_requested = True
 
             for frame in page.frames:
-                heading = frame.get_by_role(
-                    "heading",
-                    name=APP_HEADING,
-                    exact=True,
-                )
-                if heading.is_visible():
+                if frame.locator(APP_READY_SELECTOR).is_visible():
                     return wake_requested
         except PlaywrightError:
             # Streamlit replaces frames while moving from the sleep page
@@ -47,7 +44,10 @@ def wait_until_loaded(page, timeout_seconds: int = 180) -> bool:
 
         page.wait_for_timeout(1_000)
 
-    raise RuntimeError("FishSTOP did not finish loading within 180 seconds.")
+    raise RuntimeError(
+        "FishSTOP did not finish loading within 180 seconds "
+        f"(url={page.url!r}, title={page.title()!r})."
+    )
 
 
 def main() -> None:
