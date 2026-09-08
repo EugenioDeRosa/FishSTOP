@@ -12,6 +12,17 @@ La landing legge automaticamente l'ultima release pubblica della repository
 Quando una release contiene un file `.dmg` per macOS o `.msi`/`.exe` per
 Windows, il pulsante di download viene aggiornato senza modificare Streamlit.
 
+## Pagine pubbliche OAuth
+
+La landing include le pagine pubbliche utilizzate dal consenso OAuth:
+
+- [Privacy Policy](https://fishstop-eml.streamlit.app/?page=privacy)
+- [Terms of Service](https://fishstop-eml.streamlit.app/?page=terms)
+
+Entrambe descrivono l'accesso read-only alla casella e il confine di
+elaborazione locale dell'app desktop; i relativi collegamenti sono disponibili
+anche nel footer della home page.
+
 ## Avvio locale della pagina
 
 ```bash
