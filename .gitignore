@@ -7,3 +7,6 @@ data/custom_dataset.csv
 models/saved_models/
 models/
 data/training_sources/
+
+# Bozze locali della tesi: non fanno parte del software pubblicato
+/*.docx
